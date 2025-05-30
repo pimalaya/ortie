@@ -1,0 +1,83 @@
+{
+  "nodes": {
+    "fenix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "rust-analyzer-src": "rust-analyzer-src"
+      },
+      "locked": {
+        "lastModified": 1749105720,
+        "narHash": "sha256-R3mjXc+LF74COXMDfJLuKEUPliXqOqe0wgErgTOFovI=",
+        "owner": "nix-community",
+        "repo": "fenix",
+        "rev": "fd217600040e0e7c7ea844af027f3dc1f4b35e6c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "fenix",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1749103594,
+        "narHash": "sha256-LHjxa6LUhSnfk9lfBeKD9/0OQjtUjqhil3ixCepnp28=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "ee4fe06d52f1a39ae89be75397192b34b439247d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "staging-next",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "pimalaya": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1749107118,
+        "narHash": "sha256-cqLMpwUars+8CtOqmXO5W7GsBRgXC+OqQ9piQGRmmi8=",
+        "owner": "pimalaya",
+        "repo": "nix",
+        "rev": "4622a9b0a0d700d7c770762a94b7320ef2774c6f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pimalaya",
+        "repo": "nix",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "fenix": "fenix",
+        "nixpkgs": "nixpkgs",
+        "pimalaya": "pimalaya"
+      }
+    },
+    "rust-analyzer-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1749033758,
+        "narHash": "sha256-Ie003Weeg3Lsly9QuFJtw8W1JXnxoYD3FeV9KIxE+Ss=",
+        "owner": "rust-lang",
+        "repo": "rust-analyzer",
+        "rev": "55b733103efa59f3504e308629b59d49da69bd9a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "rust-lang",
+        "ref": "nightly",
+        "repo": "rust-analyzer",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

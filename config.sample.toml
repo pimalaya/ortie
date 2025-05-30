@@ -1,0 +1,65 @@
+# The account name should be unique.
+#
+[accounts.example]
+
+# Make this current account the default one to use when no account is
+# specified in the CLI with the --account argument.
+#
+default = true
+
+# The client credentials
+#
+client-id = "15d6e8a7-50cc-4df6-a60d-0904d280ede0"
+#client-secret.raw = "46a5eac3-7e51-40bd-a486-0f8a39564993"
+#client-secret.command = "pass show example"
+#client-secret.keyring = "example"
+
+# Endpoints, given by your OAuth provider.
+#
+endpoints.authorization = ""
+endpoints.token = ""
+#endpoints.redirection = "http://localhost"
+
+# Access token scopes
+#
+scopes = []
+
+# TLS configuration
+#
+#tls = "native-tls"
+#tls = "rustls-aws"
+#tls = "rustls-ring"
+
+# Enables Proof Key for Code Exchange (rfc7636)
+#
+pkce = false
+
+# Automatically refreshes expired access token when using `ortie token
+# show` command.
+#
+auto-refresh = false
+
+# Access token storage
+#
+storage.read.command = ["pass", "show", "ortie/example"]
+storage.write.command = ["pass", "insert", "-e", "ortie/example"]
+#storage.read.keyring = "ortie-example"
+#storage.write.keyring = "ortie-example"
+
+# Hooks
+#
+#on-issue-access-token.success.command = []
+#on-issue-access-token.success.notify.summary = "Ortie"
+#on-issue-access-token.success.notify.body = "Issued access token (expires in $EXPIRES_IN)"
+#
+#on-issue-access-token.error.command = []
+#on-issue-access-token.error.notify.summary = "Ortie"
+#on-issue-access-token.error.notify.body = "[$ERROR] Issue access token error\n$ERROR_DESCRIPTION"
+#
+#on-refresh-access-token.success.command = []
+#on-refresh-access-token.success.notify.summary = "Ortie"
+#on-refresh-access-token.success.notify.body = "Refreshed access token (expires in $EXPIRES_IN)"
+#
+#on-refresh-access-token.error.command = []
+#on-refresh-access-token.error.notify.summary = "Ortie"
+#on-refresh-access-token.error.notify.body = "[$ERROR] Refresh access token error\n$ERROR_DESCRIPTION"
