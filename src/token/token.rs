@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Subcommand;
-use pimalaya_tui::terminal::cli::printer::Printer;
+use pimalaya_toolbox::terminal::printer::Printer;
 
 use crate::account::Account;
 

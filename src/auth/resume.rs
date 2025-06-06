@@ -16,7 +16,7 @@ use io_oauth::v2_0::authorization_code_grant::{
 };
 use io_stream::runtimes::std::handle;
 use log::debug;
-use pimalaya_tui::terminal::cli::printer::{Message, Printer};
+use pimalaya_toolbox::terminal::printer::{Message, Printer};
 use secrecy::ExposeSecret;
 use serde::{
     de::value::{Error, StrDeserializer},

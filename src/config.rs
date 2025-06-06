@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use pimalaya_toolbox::terminal::config::TomlConfig;
 use serde::{Deserialize, Serialize};
 
 use crate::account::Account;
@@ -12,21 +13,21 @@ pub struct Config {
     pub accounts: HashMap<String, Account>,
 }
 
-impl pimalaya_tui::terminal::config::TomlConfig for Config {
-    type TomlAccountConfig = Account;
+impl TomlConfig for Config {
+    type Account = Account;
 
     fn project_name() -> &'static str {
         env!("CARGO_PKG_NAME")
     }
 
-    fn get_default_account_config(&self) -> Option<(String, Self::TomlAccountConfig)> {
+    fn find_default_account(&self) -> Option<(String, Self::Account)> {
         self.accounts
             .iter()
             .find(|(_, account)| account.default)
             .map(|(name, account)| (name.to_owned(), account.clone()))
     }
 
-    fn get_account_config(&self, name: &str) -> Option<(String, Self::TomlAccountConfig)> {
+    fn find_account(&self, name: &str) -> Option<(String, Self::Account)> {
         self.accounts
             .get(name)
             .map(|account| (name.to_owned(), account.clone()))

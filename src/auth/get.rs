@@ -14,7 +14,7 @@ use io_oauth::v2_0::authorization_code_grant::{
     pkce::{PkceCodeChallenge, PkceCodeVerifier},
     state::State,
 };
-use pimalaya_tui::terminal::cli::printer::Printer;
+use pimalaya_toolbox::terminal::printer::Printer;
 use serde::{
     de::value::{Error, StrDeserializer, StringDeserializer},
     Deserialize, Serialize, Serializer,

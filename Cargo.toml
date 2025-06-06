@@ -36,16 +36,15 @@ notify = ["dep:notify-rust"]
 vendored = ["native-tls?/vendored", "notify-rust?/d_vendored", "io-keyring?/vendored"]
 
 [build-dependencies]
-pimalaya-tui = { version = "0.3", default-features = false, features = ["build-envs"] }
+pimalaya-toolbox = { version = "0.0.1", default-features = false, features = ["build"] }
 
 [dependencies]
 anyhow = "1"
 base64 = "0.22"
-clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
+clap = { version = "4.4", features = ["derive", "wrap_help"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
 dirs = "6.0"
-env_logger = "0.11"
 http = "1"
 humantime = "2.2"
 io-keyring = { version = "0.0.1", default-features = false, features = ["serde", "std"], optional = true }
@@ -56,7 +55,7 @@ log = "0.4"
 native-tls = { version = "0.2", optional = true }
 notify-rust = { version = "4.11", default-features = false, features = ["dbus"], optional = true }
 open = "5.3"
-pimalaya-tui = { version = "0.3", default-features = false, features = ["cli", "config", "path"] }
+pimalaya-toolbox = { version = "0.0.1", default-features = false, features = ["terminal"] }
 rustls = { version = "0.23", default-features = false, features = ["logging", "std", "tls12"], optional = true }
 rustls-platform-verifier = { version = "0.5", optional = true }
 secrecy = { version = "0.10", features = ["serde"] }
@@ -64,21 +63,5 @@ serde = { version = "1", features = ["derive"] }
 shellexpand = "3.1"
 url = "2.5"
 
-# [patch.crates-io]
-# io-http.git = "https://github.com/pimalaya/io-http"
-# io-http.path = "../http"
-
-# io-keyring.git = "https://github.com/pimalaya/io-keyring"
-# io-keyring.path = "../keyring"
-
-# io-oauth.git = "https://github.com/pimalaya/io-oauth"
-# io-oauth.path = "../oauth"
-
-# io-process.git = "https://github.com/pimalaya/io-process"
-# io-process.path = "../process"
-
-# io-stream.git = "https://github.com/pimalaya/io-stream"
-# io-stream.path = "../stream"
-
-# pimalaya-tui.git = "https://github.com/pimalaya/tui"
-# pimalaya-tui.path = "../tui"
+[patch.crates-io]
+pimalaya-toolbox.git = "https://github.com/pimalaya/toolbox"

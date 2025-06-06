@@ -4,8 +4,8 @@ use anyhow::Result;
 use clap::{value_parser, CommandFactory, Parser};
 use clap_complete::Shell;
 use log::debug;
-use pimalaya_tui::terminal::cli::{
-    arg::path_parser,
+use pimalaya_toolbox::terminal::{
+    cli::path_parser,
     printer::{Message, Printer},
 };
 use serde::{Serialize, Serializer};

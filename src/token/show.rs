@@ -6,7 +6,7 @@ use http::{header::HOST, Request};
 use io_oauth::v2_0::{RefreshAccessToken, RefreshAccessTokenParams};
 use io_stream::runtimes::std::handle;
 use log::debug;
-use pimalaya_tui::terminal::cli::printer::Printer;
+use pimalaya_toolbox::terminal::printer::Printer;
 use secrecy::ExposeSecret;
 use serde::Serialize;
 

@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::Parser;
 use humantime::format_duration;
 use io_oauth::v2_0::IssueAccessTokenSuccessParams;
-use pimalaya_tui::terminal::cli::printer::Printer;
+use pimalaya_toolbox::terminal::printer::Printer;
 use serde::Serialize;
 
 use crate::account::Account;

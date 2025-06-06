@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use clap_mangen::Man;
 use log::info;
-use pimalaya_tui::terminal::cli::{arg::path_parser, printer::Printer};
+use pimalaya_toolbox::terminal::{cli::path_parser, printer::Printer};
 
 use crate::cli::Cli;
 
