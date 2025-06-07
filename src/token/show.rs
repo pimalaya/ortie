@@ -1,16 +1,20 @@
 use std::fmt;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
+use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
 use clap::Parser;
-use http::{header::HOST, Request};
+use http::{
+    header::{AUTHORIZATION, HOST},
+    Request,
+};
 use io_oauth::v2_0::{RefreshAccessToken, RefreshAccessTokenParams};
 use io_stream::runtimes::std::handle;
 use log::debug;
-use pimalaya_toolbox::terminal::printer::Printer;
+use pimalaya_toolbox::{stream::Stream, terminal::printer::Printer};
 use secrecy::ExposeSecret;
 use serde::Serialize;
 
-use crate::{account::Account, stream::Stream};
+use crate::account::Account;
 
 /// Show access token.
 #[derive(Debug, Parser)]
@@ -26,9 +30,28 @@ impl ShowToken {
         if self.auto_refresh || account.auto_refresh {
             if let Some(refresh_token) = &token.refresh_token {
                 if let Some(0) = &token.expires_in {
-                    let (host, mut stream) =
-                        Stream::connect(&account.endpoints.token, &account.tls)?;
-                    let request = Request::post(account.endpoints.token.path()).header(HOST, host);
+                    let token_endpoint = &account.endpoints.token;
+
+                    let Some(host) = account.endpoints.token.host_str() else {
+                        bail!("Missing token endpoint host name in {token_endpoint}");
+                    };
+
+                    let Some(port) = account.endpoints.token.port_or_known_default() else {
+                        bail!("Missing token endpoint port in {token_endpoint}");
+                    };
+
+                    let mut stream = Stream::connect(host, port, &account.tls)?;
+
+                    let mut request = Request::post(account.endpoints.token.path())
+                        .header(HOST, format!("{host}:{port}"));
+
+                    if let Some(secret) = account.client_secret {
+                        let secret = secret.get()?;
+                        let creds = format!("{}:{}", account.client_id, secret.expose_secret());
+                        let digest = BASE64_URL_SAFE_NO_PAD.encode(creds);
+                        request = request.header(AUTHORIZATION, format!("Basic {digest}"));
+                    }
+
                     let params =
                         RefreshAccessTokenParams::new(account.client_id, refresh_token.clone());
                     let mut send = RefreshAccessToken::new(request, params)?;

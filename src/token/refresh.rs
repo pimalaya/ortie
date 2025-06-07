@@ -11,10 +11,13 @@ use humantime::format_duration;
 use io_oauth::v2_0::{RefreshAccessToken, RefreshAccessTokenParams};
 use io_stream::runtimes::std::handle;
 use log::debug;
-use pimalaya_toolbox::terminal::printer::{Message, Printer};
+use pimalaya_toolbox::{
+    stream::Stream,
+    terminal::printer::{Message, Printer},
+};
 use secrecy::ExposeSecret;
 
-use crate::{account::Account, stream::Stream};
+use crate::account::Account;
 
 /// Refresh access token.
 #[derive(Debug, Parser)]
@@ -28,9 +31,20 @@ impl RefreshToken {
             bail!("Missing refresh token");
         };
 
-        let (host, mut stream) = Stream::connect(&account.endpoints.token, &account.tls)?;
+        let token_endpoint = &account.endpoints.token;
 
-        let mut request = Request::post(account.endpoints.token.path()).header(HOST, host);
+        let Some(host) = account.endpoints.token.host_str() else {
+            bail!("Missing token endpoint host name in {token_endpoint}");
+        };
+
+        let Some(port) = account.endpoints.token.port_or_known_default() else {
+            bail!("Missing token endpoint port in {token_endpoint}");
+        };
+
+        let mut stream = Stream::connect(host, port, &account.tls)?;
+
+        let mut request =
+            Request::post(account.endpoints.token.path()).header(HOST, format!("{host}:{port}"));
 
         if let Some(secret) = account.client_secret {
             let secret = secret.get()?;

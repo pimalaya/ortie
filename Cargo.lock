@@ -904,8 +904,6 @@ dependencies = [
 [[package]]
 name = "io-http"
 version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4dbee4c992f69a0ddd9af0d982a5079a99eb338f0f4b9e58dedeebb6ebc2163"
 dependencies = [
  "http",
  "httparse",
@@ -917,8 +915,6 @@ dependencies = [
 [[package]]
 name = "io-keyring"
 version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0199f5d3e9af737a93bd4fe96450be4f5b877b0bb546121667e90ee9f9a74fae"
 dependencies = [
  "keyring",
  "log",
@@ -930,8 +926,6 @@ dependencies = [
 [[package]]
 name = "io-oauth"
 version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85ad2861f3a8bcea2e001145a602b433f6d63eb1f15a723dcdf62f404652e0d7"
 dependencies = [
  "base64",
  "http",
@@ -949,8 +943,6 @@ dependencies = [
 [[package]]
 name = "io-process"
 version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a9049895dadec76f8d894543c963969b7bdbcf5c1e256225fb165fe888be897"
 dependencies = [
  "dirs",
  "log",
@@ -961,8 +953,6 @@ dependencies = [
 [[package]]
 name = "io-stream"
 version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c7977f04a7087cf4f904a2ad81c4b5a3706bcd91418f00a97c789de6db6a8e8"
 dependencies = [
  "log",
 ]
@@ -1444,8 +1434,6 @@ dependencies = [
  "anyhow",
  "base64",
  "clap",
- "clap_complete",
- "clap_mangen",
  "dirs",
  "http",
  "humantime",
@@ -1454,12 +1442,9 @@ dependencies = [
  "io-process",
  "io-stream",
  "log",
- "native-tls",
  "notify-rust",
  "open",
  "pimalaya-toolbox",
- "rustls",
- "rustls-platform-verifier",
  "secrecy",
  "serde",
  "shellexpand",
@@ -1487,20 +1472,26 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 [[package]]
 name = "pimalaya-toolbox"
 version = "0.0.1"
-source = "git+https://github.com/pimalaya/toolbox#4a1f3e8b391f888393cc5da0c97ae31fdca3a828"
 dependencies = [
  "anyhow",
  "clap",
+ "clap_complete",
+ "clap_mangen",
  "dirs",
  "env_logger",
  "git2",
+ "io-keyring",
+ "io-process",
  "log",
+ "native-tls",
+ "rustls",
+ "rustls-platform-verifier",
+ "secrecy",
  "serde",
  "serde-toml-merge",
  "serde_json",
  "shellexpand",
  "toml",
- "toml_edit",
 ]
 
 [[package]]

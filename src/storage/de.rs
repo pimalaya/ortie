@@ -13,7 +13,7 @@ pub type Entry = ();
 pub type Command = ();
 
 #[allow(unused)]
-use crate::feat;
+use pimalaya_toolbox::feat;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]

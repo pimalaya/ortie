@@ -1,20 +1,20 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use pimalaya_toolbox::{
+    config::TomlConfig,
     long_version,
     terminal::{
-        cli::{AccountFlag, ConfigPathsFlag, JsonFlag, LogFlags},
-        config::TomlConfig,
+        clap::{
+            args::{AccountArg, ConfigPathsArg, JsonFlag, LogFlags},
+            commands::{CompletionCommand, ManualCommand},
+        },
         printer::Printer,
     },
 };
 
-use crate::{
-    auth::Auth, completion::GenerateCompletionScripts, config::Config, manual::GenerateManuals,
-    token::Token,
-};
+use crate::{auth::Auth, config::Config, token::Token};
 
 #[derive(Parser, Debug)]
 #[command(name = env!("CARGO_PKG_NAME"))]
@@ -25,9 +25,9 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Ortie,
     #[command(flatten)]
-    pub config: ConfigPathsFlag,
+    pub config: ConfigPathsArg,
     #[command(flatten)]
-    pub account: AccountFlag,
+    pub account: AccountArg,
     #[command(flatten)]
     pub json: JsonFlag,
     #[command(flatten)]
@@ -41,9 +41,9 @@ pub enum Ortie {
     #[command(arg_required_else_help = true, subcommand)]
     Token(Token),
     #[command(arg_required_else_help = true, alias = "mans")]
-    Manuals(GenerateManuals),
+    Manuals(ManualCommand),
     #[command(arg_required_else_help = true)]
-    Completions(GenerateCompletionScripts),
+    Completions(CompletionCommand),
 }
 
 impl Ortie {
@@ -64,8 +64,8 @@ impl Ortie {
                 let (_, account) = config.get_account(account_name)?;
                 cmd.execute(printer, account)
             }
-            Self::Manuals(cmd) => cmd.execute(printer),
-            Self::Completions(cmd) => cmd.execute(printer),
+            Self::Manuals(cmd) => cmd.execute(printer, Cli::command()),
+            Self::Completions(cmd) => cmd.execute(printer, Cli::command()),
         }
     }
 }

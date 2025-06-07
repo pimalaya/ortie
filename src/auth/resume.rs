@@ -1,6 +1,6 @@
 use std::{borrow::Cow, time::Duration};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
 use clap::Parser;
 use http::{
@@ -16,7 +16,10 @@ use io_oauth::v2_0::authorization_code_grant::{
 };
 use io_stream::runtimes::std::handle;
 use log::debug;
-use pimalaya_toolbox::terminal::printer::{Message, Printer};
+use pimalaya_toolbox::{
+    stream::Stream,
+    terminal::printer::{Message, Printer},
+};
 use secrecy::ExposeSecret;
 use serde::{
     de::value::{Error, StrDeserializer},
@@ -24,7 +27,7 @@ use serde::{
 };
 use url::Url;
 
-use crate::{account::Account, stream::Stream};
+use crate::account::Account;
 
 #[derive(Debug, Parser)]
 pub struct ResumeAuthorization {
@@ -65,8 +68,20 @@ impl ResumeAuthorization {
             return Err(err);
         };
 
-        let (host, mut stream) = Stream::connect(&account.endpoints.token, &account.tls)?;
-        let mut request = Request::post(account.endpoints.token.path()).header(HOST, host);
+        let token_endpoint = &account.endpoints.token;
+
+        let Some(host) = account.endpoints.token.host_str() else {
+            bail!("Missing token endpoint host name in {token_endpoint}");
+        };
+
+        let Some(port) = account.endpoints.token.port_or_known_default() else {
+            bail!("Missing token endpoint port in {token_endpoint}");
+        };
+
+        let mut stream = Stream::connect(host, port, &account.tls)?;
+
+        let mut request =
+            Request::post(account.endpoints.token.path()).header(HOST, format!("{host}:{port}"));
 
         if let Some(secret) = account.client_secret {
             let secret = secret.get()?;

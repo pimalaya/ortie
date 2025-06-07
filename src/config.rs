@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use pimalaya_toolbox::terminal::config::TomlConfig;
+use pimalaya_toolbox::config::TomlConfig;
 use serde::{Deserialize, Serialize};
 
 use crate::account::Account;

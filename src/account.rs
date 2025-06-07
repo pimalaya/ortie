@@ -2,9 +2,10 @@
 //!
 //! Module dedicated to account configuration.
 
+use pimalaya_toolbox::{secret::Secret, stream::Tls};
 use serde::{Deserialize, Serialize};
 
-use crate::{endpoint::Endpoints, hook::Hooks, secret::Secret, storage::Storages, stream::Tls};
+use crate::{endpoint::Endpoints, hook::Hooks, storage::Storages};
 
 /// The account configuration.
 #[derive(Clone, Debug, Serialize, Deserialize)]

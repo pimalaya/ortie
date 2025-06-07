@@ -1,5 +1,7 @@
 #[allow(unused)]
 use anyhow::Result;
+#[allow(unused)]
+use pimalaya_toolbox::feat;
 use serde::Deserialize;
 
 #[cfg(feature = "notify")]
@@ -11,9 +13,6 @@ use io_process::Command;
 pub type NotifyHook = ();
 #[cfg(not(feature = "command"))]
 pub type Command = ();
-
-#[allow(unused)]
-use crate::feat;
 
 #[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]
