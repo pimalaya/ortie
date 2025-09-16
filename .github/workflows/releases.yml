@@ -13,4 +13,4 @@ jobs:
     secrets: inherit
     with:
       project: ortie
-      nixpkgs: nixpkgs-unstable
+      nixpkgs: staging-next
