@@ -42,6 +42,10 @@ rustPlatform.buildRustPackage rec {
 
   buildInputs = lib.optional stdenv.hostPlatform.isDarwin apple-sdk;
 
+  configureFlags = lib.optionals (!stdenv.buildPlatform.canExecute stdenv.hostPlatform) [
+    "ac_cv_openssl_xts_duplicate_keys=yes"
+  ];
+
   # unit tests only
   doCheck = false;
   auditable = false;
