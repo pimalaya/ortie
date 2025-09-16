@@ -1,7 +1,7 @@
 [package]
 name = "ortie"
-description = "CLI to manage OAuth access tokens"
-version = "0.1.0"
+description = "CLI to manage OAuth 2.0 access tokens"
+version = "0.0.1"
 authors = ["soywod <clement.douin@posteo.net>"]
 rust-version = "1.87"
 edition = "2021"
@@ -17,7 +17,7 @@ features = ["rustls-ring", "command"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["rustls-ring", "command"]
+default = ["rustls-ring"]
 
 # TLS
 #
@@ -45,10 +45,10 @@ clap = { version = "4.4", features = ["derive", "wrap_help"] }
 dirs = "6.0"
 http = "1"
 humantime = "2.2"
-io-keyring = { version = "0.0.1", default-features = false, features = ["serde", "std"], optional = true }
-io-oauth = { version = "0.0.1", default-features = false, features = ["oauth2", "pkce"] }
-io-process = { version = "0.0.1", default-features = false, features = ["expand", "serde", "std"], optional = true }
-io-stream = { version = "0.0.1", default-features = false, features = ["std"] }
+io-keyring = { version = "0.0.2", default-features = false, features = ["serde", "std"], optional = true }
+io-oauth = { version = "0.0.2", default-features = false, features = ["oauth2", "pkce"] }
+io-process = { version = "0.0.2", default-features = false, features = ["expand", "serde", "std"], optional = true }
+io-stream = { version = "0.0.2", default-features = false, features = ["std"] }
 log = "0.4"
 notify-rust = { version = "4.11", default-features = false, features = ["dbus"], optional = true }
 open = "5.3"
@@ -57,17 +57,3 @@ secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 shellexpand = "3.1"
 url = "2.5"
-
-[patch.crates-io]
-# io-http.git = "https://github.com/pimalaya/io-http"
-# io-keyring.git = "https://github.com/pimalaya/io-keyring"
-# io-oauth.git = "https://github.com/pimalaya/io-oauth"
-# io-process.git = "https://github.com/pimalaya/io-process"
-# io-stream.git = "https://github.com/pimalaya/io-stream"
-# pimalaya-toolbox.git = "https://github.com/pimalaya/toolbox"
-io-http.path = "../http"
-io-keyring.path = "../keyring"
-io-oauth.path = "../oauth"
-io-process.path = "../process"
-io-stream.path = "../stream"
-pimalaya-toolbox.path = "../toolbox"

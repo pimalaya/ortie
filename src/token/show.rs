@@ -1,96 +1,56 @@
+// This file is part of Ortie, a CLI to manage OAuth 2.0 access
+// tokens.
+//
+// Copyright (C) 2025 soywod <clement.douin@posteo.net>
+//
+// This program is free software: you can redistribute it and/or
+// modify it under the terms of the GNU Affero General Public License
+// as published by the Free Software Foundation, either version 3 of
+// the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public
+// License along with this program. If not, see
+// <https://www.gnu.org/licenses/>.
+
 use std::fmt;
 
-use anyhow::{anyhow, bail, Result};
-use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
+use anyhow::Result;
 use clap::Parser;
-use http::{
-    header::{AUTHORIZATION, HOST},
-    Request,
-};
-use io_oauth::v2_0::{RefreshAccessToken, RefreshAccessTokenParams};
-use io_stream::runtimes::std::handle;
-use log::debug;
-use pimalaya_toolbox::{stream::Stream, terminal::printer::Printer};
+use pimalaya_toolbox::terminal::printer::Printer;
 use secrecy::ExposeSecret;
 use serde::Serialize;
 
 use crate::account::Account;
 
-/// Show access token.
+use super::refresh::RefreshTokenCommand;
+
+/// Display the raw access token.
+///
+/// This command allows you to see your access token. It can easily be
+/// piped to other applications.
 #[derive(Debug, Parser)]
-pub struct ShowToken {
+pub struct ShowTokenCommand {
+    /// Automatically refresh the access token when expired.
+    ///
+    /// This option insures you that you get a fresh access token. See
+    /// also the `auto-refresh` config option.
     #[arg(long, short = 'r')]
     pub auto_refresh: bool,
 }
 
-impl ShowToken {
+impl ShowTokenCommand {
     pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
         let mut token = account.storage.read()?;
 
         if self.auto_refresh || account.auto_refresh {
-            if let Some(refresh_token) = &token.refresh_token {
-                if let Some(0) = &token.expires_in {
-                    let token_endpoint = &account.endpoints.token;
-
-                    let Some(host) = account.endpoints.token.host_str() else {
-                        bail!("Missing token endpoint host name in {token_endpoint}");
-                    };
-
-                    let Some(port) = account.endpoints.token.port_or_known_default() else {
-                        bail!("Missing token endpoint port in {token_endpoint}");
-                    };
-
-                    let mut stream = Stream::connect(host, port, &account.tls)?;
-
-                    let mut request = Request::post(account.endpoints.token.path())
-                        .header(HOST, format!("{host}:{port}"));
-
-                    if let Some(secret) = account.client_secret {
-                        let secret = secret.get()?;
-                        let creds = format!("{}:{}", account.client_id, secret.expose_secret());
-                        let digest = BASE64_URL_SAFE_NO_PAD.encode(creds);
-                        request = request.header(AUTHORIZATION, format!("Basic {digest}"));
-                    }
-
-                    let params =
-                        RefreshAccessTokenParams::new(account.client_id, refresh_token.clone());
-                    let mut send = RefreshAccessToken::new(request, params)?;
-                    let mut arg = None;
-
-                    let res = loop {
-                        match send.resume(arg.take()) {
-                            Err(io) => arg = Some(handle(&mut stream, io)?),
-                            Ok(Ok(res)) => break res,
-                            Ok(Err(err2)) => {
-                                let err = "Parse refresh token response error";
-                                return Err(anyhow!(err2).context(err));
-                            }
-                        }
-                    };
-
-                    match res {
-                        Ok(res) => {
-                            account.storage.write(&res)?;
-
-                            debug!("execute refresh access token success hook");
-                            account.on_refresh_access_token.execute_success(&res);
-
-                            token = res;
-                        }
-                        Err(res) => {
-                            debug!("execute refresh access token error hook");
-                            account.on_refresh_access_token.execute_error(&res);
-
-                            let err = anyhow!("Refresh access token error (code {:?})", res.error);
-
-                            return Err(match (res.error_description, res.error_uri) {
-                                (None, None) => err,
-                                (Some(desc), None) => anyhow!("{desc}").context(err),
-                                (None, Some(uri)) => anyhow!("{uri}").context(err),
-                                (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
-                            });
-                        }
-                    }
+            if let Some(refresh_token) = token.refresh_token {
+                if let Some(0) = token.expires_in {
+                    token = RefreshTokenCommand::refresh(account, refresh_token)?;
                 }
             }
         }

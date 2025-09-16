@@ -2,10 +2,10 @@ name: Releases
 
 on:
   push:
-    tags:
-      - v*
+    # tags:
+    #   - v*
     branches:
-      - master
+      - toolbox
 
 jobs:
   release:
@@ -13,4 +13,4 @@ jobs:
     secrets: inherit
     with:
       project: ortie
-      nixpkgs: staging-next
+      nixpkgs: nixpkgs-unstable

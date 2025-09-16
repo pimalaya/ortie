@@ -1,3 +1,22 @@
+// This file is part of Ortie, a CLI to manage OAuth 2.0 access
+// tokens.
+//
+// Copyright (C) 2025 soywod <clement.douin@posteo.net>
+//
+// This program is free software: you can redistribute it and/or
+// modify it under the terms of the GNU Affero General Public License
+// as published by the Free Software Foundation, either version 3 of
+// the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public
+// License along with this program. If not, see
+// <https://www.gnu.org/licenses/>.
+
 #[cfg(feature = "command")]
 use std::{
     io::{pipe, Write},
@@ -8,14 +27,21 @@ use std::{
 use anyhow::{anyhow, bail, Context, Result};
 #[cfg(feature = "keyring")]
 use io_keyring::{
-    coroutines::{Read as ReadEntry, Write as WriteEntry},
+    coroutines::{
+        read::{ReadSecret, ReadSecretResult},
+        write::{WriteSecret, WriteSecretResult},
+    },
+    entry::KeyringEntry,
     runtimes::std::handle as handle_keyring,
-    Entry,
 };
-use io_oauth::v2_0::IssueAccessTokenSuccessParams;
+use io_oauth::v2_0::issue_access_token::IssueAccessTokenSuccessParams;
 #[cfg(feature = "command")]
 use io_process::{
-    coroutines::SpawnThenWaitWithOutput, runtimes::std::handle as handle_process, Command,
+    command::Command,
+    coroutines::spawn_then_wait_with_output::{
+        SpawnThenWaitWithOutput, SpawnThenWaitWithOutputResult,
+    },
+    runtimes::std::handle as handle_process,
 };
 #[cfg(feature = "keyring")]
 use secrecy::ExposeSecret;
@@ -37,7 +63,7 @@ pub enum Storage {
     #[cfg(feature = "command")]
     Command(Command),
     #[cfg(feature = "keyring")]
-    Keyring(Entry),
+    Keyring(KeyringEntry),
 }
 
 impl Storages {
@@ -55,8 +81,12 @@ impl Storages {
                     stderr,
                 } = loop {
                     match spawn.resume(arg.take()) {
-                        Ok(output) => break output,
-                        Err(io) => arg = Some(handle_process(io)?),
+                        SpawnThenWaitWithOutputResult::Ok(output) => break output,
+                        SpawnThenWaitWithOutputResult::Io(io) => arg = Some(handle_process(io)?),
+                        SpawnThenWaitWithOutputResult::Err(err2) => {
+                            let err = "Spawn command to read OAuth 2.0 access token error";
+                            return Err(anyhow!("{err2}").context(err));
+                        }
                     }
                 };
 
@@ -73,15 +103,20 @@ impl Storages {
 
                 Ok(res)
             }
+
             #[cfg(feature = "keyring")]
             Storage::Keyring(entry) => {
-                let mut read = ReadEntry::new(entry.clone());
+                let mut read = ReadSecret::new(entry.clone());
                 let mut arg = None;
 
                 let secret = loop {
                     match read.resume(arg.take()) {
-                        Ok(secret) => break secret,
-                        Err(io) => arg = Some(handle_keyring(io)?),
+                        ReadSecretResult::Ok(output) => break output,
+                        ReadSecretResult::Io(io) => arg = Some(handle_keyring(io)?),
+                        ReadSecretResult::Err(err2) => {
+                            let err = "Read keyring to get OAuth 2.0 access token error";
+                            return Err(anyhow!("{err2}").context(err));
+                        }
                     }
                 };
 
@@ -119,8 +154,12 @@ impl Storages {
                     stderr,
                 } = loop {
                     match spawn.resume(arg.take()) {
-                        Ok(output) => break output,
-                        Err(io) => arg = Some(handle_process(io)?),
+                        SpawnThenWaitWithOutputResult::Ok(output) => break output,
+                        SpawnThenWaitWithOutputResult::Io(io) => arg = Some(handle_process(io)?),
+                        SpawnThenWaitWithOutputResult::Err(err2) => {
+                            let err = "Spawn command to save OAuth 2.0 access token error";
+                            return Err(anyhow!("{err2}").context(err));
+                        }
                     }
                 };
 
@@ -141,11 +180,18 @@ impl Storages {
             #[cfg(feature = "keyring")]
             Storage::Keyring(entry) => {
                 let json = String::try_from(res)?;
-                let mut write = WriteEntry::new(entry.clone(), json);
+                let mut write = WriteSecret::new(entry.clone(), json);
                 let mut arg = None;
 
-                while let Err(io) = write.resume(arg.take()) {
-                    arg = Some(handle_keyring(io)?)
+                loop {
+                    match write.resume(arg.take()) {
+                        WriteSecretResult::Ok(()) => break,
+                        WriteSecretResult::Io(io) => arg = Some(handle_keyring(io)?),
+                        WriteSecretResult::Err(err2) => {
+                            let err = "Read keyring to get OAuth 2.0 access token error";
+                            return Err(anyhow!("{err2}").context(err));
+                        }
+                    }
                 }
 
                 Ok(())
