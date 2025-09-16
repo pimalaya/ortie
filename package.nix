@@ -43,7 +43,9 @@ rustPlatform.buildRustPackage rec {
   buildInputs = lib.optional stdenv.hostPlatform.isDarwin apple-sdk;
 
   configureFlags = lib.optionals (!stdenv.buildPlatform.canExecute stdenv.hostPlatform) [
-    "ac_cv_openssl_xts_duplicate_keys=yes"
+    "kyua_cv_getopt_plus=yes"
+    "kyua_cv_attribute_noreturn=yes"
+    "kyua_cv_getcwd_works=yes"
   ];
 
   # unit tests only
