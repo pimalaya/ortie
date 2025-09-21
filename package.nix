@@ -42,6 +42,12 @@ rustPlatform.buildRustPackage rec {
 
   buildInputs = lib.optional stdenv.hostPlatform.isDarwin apple-sdk;
 
+  configureFlags = lib.optionals (!stdenv.buildPlatform.canExecute stdenv.hostPlatform) [
+    "kyua_cv_getopt_plus=yes"
+    "kyua_cv_attribute_noreturn=yes"
+    "kyua_cv_getcwd_works=yes"
+  ];
+
   # unit tests only
   doCheck = false;
   auditable = false;

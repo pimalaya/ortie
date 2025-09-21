@@ -1,12 +1,10 @@
 {
-  description = "CLI to manage contacts";
+  description = "CLI to manage OAuth 2.0 access tokens";
 
   inputs = {
-    # https://nixpk.gs/pr-tracker.html?pr=407444
-    # nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
-    nixpkgs.url = "github:nixos/nixpkgs/staging-next";
+    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     fenix = {
-      url = "github:nix-community/fenix";
+      url = "github:nix-community/fenix/monthly";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     pimalaya = {

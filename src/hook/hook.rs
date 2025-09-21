@@ -1,16 +1,38 @@
+// This file is part of Ortie, a CLI to manage OAuth 2.0 access
+// tokens.
+//
+// Copyright (C) 2025 soywod <clement.douin@posteo.net>
+//
+// This program is free software: you can redistribute it and/or
+// modify it under the terms of the GNU Affero General Public License
+// as published by the Free Software Foundation, either version 3 of
+// the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public
+// License along with this program. If not, see
+// <https://www.gnu.org/licenses/>.
+
 #[cfg(feature = "command")]
 use std::process::Output;
 #[cfg(feature = "notify")]
 use std::{borrow::Cow, time::Duration};
 
 #[allow(unused)]
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 #[cfg(feature = "notify")]
 use humantime::format_duration;
-use io_oauth::v2_0::{IssueAccessTokenErrorParams, IssueAccessTokenSuccessParams};
+use io_oauth::v2_0::issue_access_token::{
+    IssueAccessTokenErrorParams, IssueAccessTokenSuccessParams,
+};
 #[cfg(feature = "command")]
 use io_process::{
-    coroutines::SpawnThenWaitWithOutput, runtimes::std::handle as handle_process, Command,
+    command::Command, coroutines::spawn_then_wait_with_output::SpawnThenWaitWithOutput,
+    runtimes::std::handle as handle_process,
 };
 use log::trace;
 #[cfg(feature = "notify")]
@@ -170,6 +192,8 @@ impl Hooks {
 
     #[cfg(feature = "command")]
     pub fn execute_command(&self, cmd: Command) -> Result<()> {
+        use io_process::coroutines::spawn_then_wait_with_output::SpawnThenWaitWithOutputResult;
+
         let mut spawn = SpawnThenWaitWithOutput::new(cmd);
         let mut arg = None;
 
@@ -179,8 +203,12 @@ impl Hooks {
             stderr,
         } = loop {
             match spawn.resume(arg.take()) {
-                Ok(output) => break output,
-                Err(io) => arg = Some(handle_process(io)?),
+                SpawnThenWaitWithOutputResult::Ok(output) => break output,
+                SpawnThenWaitWithOutputResult::Io(io) => arg = Some(handle_process(io)?),
+                SpawnThenWaitWithOutputResult::Err(err2) => {
+                    let err = "Spawn command to read OAuth 2.0 access token error";
+                    return Err(anyhow!("{err2}").context(err));
+                }
             }
         };
 

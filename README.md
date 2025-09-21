@@ -1,6 +1,6 @@
 # 🔑 Ortie [![Matrix](https://img.shields.io/matrix/pimalaya:matrix.org?color=success&label=chat)](https://matrix.to/#/#pimalaya:matrix.org)
 
-CLI to manage OAuth access tokens
+CLI to manage OAuth 2.0 access tokens
 
 ## Table of contents
 
@@ -19,8 +19,8 @@ CLI to manage OAuth access tokens
 ## Features
 
 - **OAuth 2.0** support:
-  - Authorization Code Grant <sup>[rfc6749#4.1](https://datatracker.ietf.org/doc/html/rfc6749#section-4.1)</sup>
-  - Refreshing an access token <sup>[rfc6749#6](https://datatracker.ietf.org/doc/html/rfc6749#section-6)</sup>
+  - Authorization Code Grant <sup>[rfc6749 #4.1](https://datatracker.ietf.org/doc/html/rfc6749#section-4.1)</sup>
+  - Refreshing an access token <sup>[rfc6749 #6](https://datatracker.ietf.org/doc/html/rfc6749#section-6)</sup>
 - **PKCE** support <sup>[rfc7636](https://datatracker.ietf.org/doc/html/rfc7636)<sup>
 - Native TLS support via [native-tls](https://crates.io/crates/native-tls) crate (requires `native-tls` feature)
 - Rust TLS support via [rustls](https://crates.io/crates/rustls) crate with:
@@ -139,7 +139,7 @@ cargo install --locked --git https://github.com/pimalaya/ortie.git
 
 The wizard is not yet available (it should come soon), so the only way to configure Ortie CLI is to copy the [sample config file](https://github.com/pimalaya/ortie/blob/master/config.sample.toml), to store it either at `~/.config/ortie.toml` or `~/.ortierc` then to customize it by commenting or uncommenting the options you need.
 
-You will also need a registered application. This depends on your OAuth provider. You can either use an existing application (public registration like Thunderbird) or register your own application. The first option is definitely simpler.
+You will also need a registered application. This depends on your OAuth 2.0 provider. You can either use an existing application (public registration like Thunderbird) or register your own application. The first option is definitely simpler.
 
 *See public Thunderbird application credentials for various providers at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).*
 
