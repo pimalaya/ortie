@@ -17,7 +17,7 @@ features = ["rustls-ring", "command"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["rustls-ring"]
+default = ["command", "rustls-ring"]
 
 # TLS
 #
@@ -36,7 +36,7 @@ notify = ["dep:notify-rust"]
 vendored = ["pimalaya-toolbox/vendored", "notify-rust?/d_vendored", "io-keyring?/vendored"]
 
 [build-dependencies]
-pimalaya-toolbox = { version = "0.0.1", default-features = false, features = ["build"] }
+pimalaya-toolbox = { version = "0.0.2", default-features = false, features = ["build"] }
 
 [dependencies]
 anyhow = "1"
@@ -52,8 +52,15 @@ io-stream = { version = "0.0.2", default-features = false, features = ["std"] }
 log = "0.4"
 notify-rust = { version = "4.11", default-features = false, features = ["dbus"], optional = true }
 open = "5.3"
-pimalaya-toolbox = { version = "0.0.1", default-features = false, features = ["config", "secret", "stream", "terminal"] }
+pimalaya-toolbox = { version = "0.0.2", default-features = false, features = ["config", "secret", "stream", "terminal"] }
 secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 shellexpand = "3.1"
 url = "2.5"
+
+[patch.crates-io]
+io-keyring.git = "https://github.com/pimalaya/io-keyring"
+io-oauth.git = "https://github.com/pimalaya/io-oauth"
+io-process.git = "https://github.com/pimalaya/io-process"
+io-stream.git = "https://github.com/pimalaya/io-stream"
+pimalaya-toolbox.git = "https://github.com/pimalaya/toolbox"

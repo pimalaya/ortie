@@ -24,16 +24,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1758294315,
-        "narHash": "sha256-H+C4c+jKCZpSJHODHFaY6b2ciB3Hv00V5QKA7yUVtis=",
+        "lastModified": 1736437047,
+        "narHash": "sha256-JJBziecfU+56SUNxeJlDIgixJN5WYuADd+/TVd5sQos=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "90ade7da38aa49c2e2693a04a44662a0e61530e9",
+        "rev": "f17b95775191ea44bc426831235d87affb10faba",
         "type": "github"
       },
       "original": {
         "owner": "nixos",
-        "ref": "nixpkgs-unstable",
+        "ref": "staging-next",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -41,11 +41,11 @@
     "pimalaya": {
       "flake": false,
       "locked": {
-        "lastModified": 1753881197,
-        "narHash": "sha256-6n1Erv4Yn1Y6tRfGR6spQ1gzEuZWtCkoCjoZMaIlzbU=",
+        "lastModified": 1761265599,
+        "narHash": "sha256-+x3b2C5tyOY2oz4KrjpM6fPC4vsh7/S2NV8Rb1B7iWc=",
         "owner": "pimalaya",
         "repo": "nix",
-        "rev": "40a36ef1f74408d49ae012e3fcf68e9dfcc18c6c",
+        "rev": "04b167328d7394e12f5aea57e8bc0c3d1b878bf0",
         "type": "github"
       },
       "original": {
