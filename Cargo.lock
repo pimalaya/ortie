@@ -335,9 +335,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.41"
+version = "1.2.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac9fe6cdbb24b6ade63616c0a0688e45bb56732262c158df3c0c4bea4ca47cb7"
+checksum = "81bbf3b3619004ad9bd139f62a9ab5cfe467f307455a0d307b0cf58bf070feaa"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -445,9 +445,9 @@ checksum = "a1d728cc89cf3aee9ff92b05e62b19ee65a02b5702cff7d5a377e32c6ae29d8d"
 
 [[package]]
 name = "clap_mangen"
-version = "0.2.30"
+version = "0.2.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "263c8214a8e0cb8129f3c62036c50e9c6e15c7bd364c42e0437c492b9293f778"
+checksum = "439ea63a92086df93893164221ad4f24142086d535b3a0957b9b9bea2dc86301"
 dependencies = [
  "clap",
  "roff",
@@ -1122,9 +1122,9 @@ dependencies = [
 
 [[package]]
 name = "io-http"
-version = "0.0.2"
+version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e35f5a45bae89b9f916da60196562047ed6e753834331eb8c05fe866823508e"
+checksum = "9f3017243d5fabf47fddb13be88acfeaaaf8d872670aca223344cf987eea96ad"
 dependencies = [
  "http",
  "httparse",
@@ -1137,7 +1137,8 @@ dependencies = [
 [[package]]
 name = "io-keyring"
 version = "0.0.2"
-source = "git+https://github.com/pimalaya/io-keyring#1aa4b8804a03ac4d65181d0eb269bfeb5d91b052"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3e1feea114b3f8b1249b50db70e6fb880c92360a0eedd1351bc1ad696ae29bb"
 dependencies = [
  "keyring",
  "log",
@@ -1148,8 +1149,9 @@ dependencies = [
 
 [[package]]
 name = "io-oauth"
-version = "0.0.2"
-source = "git+https://github.com/pimalaya/io-oauth#d75d1885e3f10c3d6c2eb6c46619c16ade4d1711"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce22f7886e33f5eade04ff42a0fb56b8dbacd53db12bffaa7d7fb6d187c29e94"
 dependencies = [
  "base64",
  "http",
@@ -1168,7 +1170,8 @@ dependencies = [
 [[package]]
 name = "io-process"
 version = "0.0.2"
-source = "git+https://github.com/pimalaya/io-process#763ebff10a7178d3fe0598b41a60bb847e828877"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54362e497536be1b10ad35a790838e89ce30d5095a66f12f5315154cf5041d03"
 dependencies = [
  "dirs",
  "log",
@@ -1180,7 +1183,8 @@ dependencies = [
 [[package]]
 name = "io-stream"
 version = "0.0.2"
-source = "git+https://github.com/pimalaya/io-stream#4b3c614814d1b5943dec1239cee918a59e351dd7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28001902240f3f1c95cd165933ec130068e82c1b0118157bbf20f8be0054041f"
 dependencies = [
  "log",
  "thiserror 2.0.17",
@@ -1687,7 +1691,7 @@ dependencies = [
 
 [[package]]
 name = "ortie"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -1730,7 +1734,8 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "pimalaya-toolbox"
 version = "0.0.2"
-source = "git+https://github.com/pimalaya/toolbox#a3e743b6b5777d66a667986200e70068523a4577"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50e587c04d1fb9bff14df5d6fc414f21ffe59a3988e177e402448392ac8fe841"
 dependencies = [
  "anyhow",
  "clap",
@@ -1858,9 +1863,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.101"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89ae43fd86e4158d6db51ad8e2b80f313af9cc74f5c0e03ccb87de09998732de"
+checksum = "5ee95bc4ef87b8d5ba32e8b7714ccc834865276eab0aed5c9958d00ec45f49e8"
 dependencies = [
  "unicode-ident",
 ]
@@ -2029,9 +2034,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.33"
+version = "0.23.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "751e04a496ca00bb97a5e043158d23d66b5aabf2e1d5aa2a0aaebb1aafe6f82c"
+checksum = "6a9586e9ee2b4f8fab52a0048ca7334d7024eef48e2cb9407e3497bb7cab7fa7"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -2359,9 +2364,9 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "syn"
-version = "2.0.107"
+version = "2.0.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a26dbd934e5451d21ef060c018dae56fc073894c5a7896f882928a76e6d081b"
+checksum = "da58917d35242480a05c2897064da0a80589a2a0476c9a3f2fdc83b53502e917"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -73,12 +73,12 @@ rustPlatform.buildRustPackage rec {
       installShellCompletion "$out"/share/completions/ortie.{bash,fish,zsh}
     '';
 
-  meta = rec {
+  meta = {
     description = "CLI to manage OAuth access tokens";
     mainProgram = "ortie";
     homepage = "https://github.com/pimalaya/ortie";
-    changelog = "${homepage}/blob/v${version}/CHANGELOG.md";
-    license = lib.licenses.mit;
+    changelog = "https://github.com/pimalaya/ortie/blob/v${version}/CHANGELOG.md";
+    license = lib.licenses.agpl3Only;
     maintainers = with lib.maintainers; [ soywod ];
   };
 }

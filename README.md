@@ -119,20 +119,82 @@ With scope: https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.off
 
 ## Installation
 
-The project is still experimental, it has not been released yet.
-
 ### Pre-built binary
 
-Ortie CLI can be installed with a pre-built binary. Find the latest [releases](https://github.com/pimalaya/ortie/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. You should find a pre-built binary matching your OS.
+Ortie CLI can be installed with the installer:
 
-*MacOS aarch64 and Windows i686 builds are broken, please use the next installation method until the first release.*
+*As root:*
 
-### Cargo (git)
+```
+curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | sudo sh
+```
 
-Ortie CLI can also be installed with [cargo](https://doc.rust-lang.org/cargo/):
+*As a regular user:*
+
+```
+curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | PREFIX=~/.local sh
+```
+
+These commands install the latest binary from the GitHub [releases](https://github.com/pimalaya/ortie/releases) section.
+
+If you want a more up-to-date version than the latest release, check out the [releases](https://github.com/pimalaya/ortie/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. You should find a pre-built binary matching your OS. These pre-built binaries are built from the `master` branch, using default features.
+
+### Cargo
+
+Ortie CLI can be installed with [cargo](https://doc.rust-lang.org/cargo/):
+
+```
+cargo install ortie
+```
+
+*With only Vdir support:*
+
+```
+cargo install ortie --no-default-features --features vdir
+```
+
+You can also use the git repository for a more up-to-date (but less stable) version:
 
 ```
 cargo install --locked --git https://github.com/pimalaya/ortie.git
+```
+
+### Nix
+
+Ortie CLI can be installed with [Nix](https://serokell.io/blog/what-is-nix):
+
+```
+nix-env -i ortie
+```
+
+You can also use the git repository for a more up-to-date (but less stable) version:
+
+```
+nix-env -if https://github.com/pimalaya/ortie/archive/master.tar.gz
+```
+
+*Or, from within the source tree checkout:*
+
+```
+nix-env -if .
+```
+
+If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
+
+```
+nix profile install ortie
+```
+
+*Or, from within the source tree checkout:*
+
+```
+nix profile install
+```
+
+*You can also run Ortie directly without installing it:*
+
+```
+nix run ortie
 ```
 
 ## Configuration
@@ -148,6 +210,7 @@ You will also need a registered application. This depends on your OAuth 2.0 prov
 ```toml
 endpoints.authorization = "https://accounts.google.com/o/oauth2/auth"
 endpoints.token = "https://www.googleapis.com/oauth2/v3/token"
+scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com"] # choose the right scope for your usage
 ```
 
 Using public Thunderbird application:
@@ -155,6 +218,7 @@ Using public Thunderbird application:
 ```toml
 client-id = "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com"
 client-secret.raw = "kSmqreRr0qwBWJgbf5Y-PjSU"
+enpoints.redirection = "http://localhost"
 ```
 
 Using your [own application](https://developers.google.com/identity/protocols/oauth2):
