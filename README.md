@@ -1,19 +1,18 @@
-# 🔑 Ortie [![Matrix](https://img.shields.io/matrix/pimalaya:matrix.org?color=success&label=chat)](https://matrix.to/#/#pimalaya:matrix.org)
+# 🔑 Ortie [![Releases](https://img.shields.io/github/v/release/pimalaya/ortie?color=success)](https://github.com/pimalaya/ortie/releases/latest) [![Repology](https://img.shields.io/repology/repositories/ortie?color=success)]("https://repology.org/project/ortie/versions) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-CLI to manage OAuth 2.0 access tokens
+CLI to manage OAuth tokens
 
 ## Table of contents
 
 - [Features](#features)
-- [Usage](#usage)
-  - [Request new access token](#request-new-access-token)
-  - [Refresh access token](#refresh-access-token)
-  - [Show access token](#show-access-token)
 - [Installation](#installation)
 - [Configuration](#configuration)
   - [Google](#google)
   - [Microsoft](#microsoft)
-- [FAQ](#faq)
+- [Usage](#usage)
+  - [Request new access token](#request-new-access-token)
+  - [Refresh access token](#refresh-access-token)
+  - [Show access token](#show-access-token)
 - [Alternatives](#alternatives)
 - [Sponsoring](#sponsoring)
 
@@ -33,90 +32,6 @@ CLI to manage OAuth 2.0 access tokens
 - **JSON** support with `--json`
 
 *Ortie CLI is written in [Rust](https://www.rust-lang.org/), and relies on [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to enable or disable functionalities. Default features can be found in the `features` section of the [`Cargo.toml`](https://github.com/pimalaya/ortie/blob/master/Cargo.toml#L18), or on [docs.rs](https://docs.rs/crate/ortie/latest/features).*
-
-## Usage
-
-### Request new access token
-
-```
-$ ortie auth get
-
-Created authorization request with:
- - state: RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4
- - pkce: oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6
-
-Sending authorization request to your browser…
-Spawning fake HTTP redirection server…
-Waiting for redirection…
-```
-
-Go to your browser, follow the instructions, then you should see:
-
-```
-Authorization succeeded!
-```
-
-Go back to your terminal, you should see:
-
-```
-Continue authorization process…
-Access token successfully issued (expires in 1h)
-```
-
-In case the redirections fails, for example:
-
-```
-$ ortie auth get
-
-Created authorization request with:
- - state: RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4
- - pkce: oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6
-
-Sending authorization request to your browser…
-Spawn fake HTTP redirection server…
-Error: Permission denied (os error 13)
-```
-
-Go to your browser, follow the instructions, then copy the URL you are redirected to (it should fail since the fake HTTP redirection server did not start).
-
-Go back to your terminal, and complete the authorization flow:
-
-```
-ortie auth resume \
-  --state RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4 \
-  --pkce oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6 \
-  https://localhost/?code=M.C521_BAY.2.U&state=RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4
-```
-
-### Refresh access token
-
-```
-$ ortie token refresh
-
-Access token successfully refreshed (expires in 1h)
-```
-
-### Show access token
-
-```
-$ ortie token show
-
-EwA4BOl3BAAUcDnR9grBJokeAHaUV8R3+rVHX+IAAQfw9oZLztQS8bo8NvyWmbs…
-```
-
-The `--auto-refresh` argument (as well as the config option `auto-refresh = true`) automatically refreshes expired tokens.
-
-You can also inspect token metadata:
-
-```
-$ ortie token inspect
-
-Token type: bearer
-Issued: 22h 51m 1s ago
-Expires in: 52m 38s
-With refresh token: true
-With scope: https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send
-```
 
 ## Installation
 
@@ -146,12 +61,6 @@ Ortie CLI can be installed with [cargo](https://doc.rust-lang.org/cargo/):
 
 ```
 cargo install ortie
-```
-
-*With only Vdir support:*
-
-```
-cargo install ortie --no-default-features --features vdir
 ```
 
 You can also use the git repository for a more up-to-date (but less stable) version:
@@ -250,7 +159,89 @@ client-id = "<your-client-id>"
 client-secret = "<your-client-secret>"
 ```
 
-## FAQ
+## Usage
+
+### Request new access token
+
+```
+$ ortie auth get
+
+Created authorization request with:
+ - state: RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4
+ - pkce: oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6
+
+Sending authorization request to your browser…
+Spawning fake HTTP redirection server…
+Waiting for redirection…
+```
+
+Go to your browser, follow the instructions, then you should see:
+
+```
+Authorization succeeded!
+```
+
+Go back to your terminal, you should see:
+
+```
+Continue authorization process…
+Access token successfully issued (expires in 1h)
+```
+
+In case the redirections fails, for example:
+
+```
+$ ortie auth get
+
+Created authorization request with:
+ - state: RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4
+ - pkce: oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6
+
+Sending authorization request to your browser…
+Spawn fake HTTP redirection server…
+Error: Permission denied (os error 13)
+```
+
+Go to your browser, follow the instructions, then copy the URL you are redirected to (it should fail since the fake HTTP redirection server did not start).
+
+Go back to your terminal, and complete the authorization flow:
+
+```
+ortie auth resume \
+  --state RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4 \
+  --pkce oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6 \
+  https://localhost/?code=M.C521_BAY.2.U&state=RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4
+```
+
+### Refresh access token
+
+```
+$ ortie token refresh
+
+Access token successfully refreshed (expires in 1h)
+```
+
+### Show access token
+
+```
+$ ortie token show
+
+EwA4BOl3BAAUcDnR9grBJokeAHaUV8R3+rVHX+IAAQfw9oZLztQS8bo8NvyWmbs…
+```
+
+The `--auto-refresh` argument (as well as the config option `auto-refresh = true`) automatically refreshes expired tokens.
+
+You can also inspect token metadata:
+
+```
+$ ortie token inspect
+
+Token type: bearer
+Issued: 22h 51m 1s ago
+Expires in: 52m 38s
+With refresh token: true
+With scope: https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send
+```
 
 ## Alternatives
 

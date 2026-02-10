@@ -4,6 +4,7 @@
 {
   lib,
   pkg-config,
+  buildPackages,
   rustPlatform,
   fetchFromGitHub,
   stdenv,
@@ -11,8 +12,8 @@
   installShellFiles,
   installShellCompletions ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
   installManPages ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
-  withNoDefaultFeatures ? false,
-  withFeatures ? [ ],
+  buildNoDefaultFeatures ? false,
+  buildFeatures ? [ ],
 }:
 
 let
@@ -22,7 +23,12 @@ let
 in
 
 rustPlatform.buildRustPackage rec {
-  inherit cargoHash version;
+  inherit
+    cargoHash
+    version
+    buildNoDefaultFeatures
+    buildFeatures
+    ;
 
   pname = "ortie";
 
@@ -33,44 +39,42 @@ rustPlatform.buildRustPackage rec {
     rev = "v${version}";
   };
 
-  buildNoDefaultFeatures = withNoDefaultFeatures;
-  buildFeatures = withFeatures;
-
   nativeBuildInputs = [
     pkg-config
-  ] ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
+  ]
+  ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
 
   buildInputs = lib.optional stdenv.hostPlatform.isDarwin apple-sdk;
 
-  configureFlags = lib.optionals (!stdenv.buildPlatform.canExecute stdenv.hostPlatform) [
-    "kyua_cv_getopt_plus=yes"
-    "kyua_cv_attribute_noreturn=yes"
-    "kyua_cv_getcwd_works=yes"
-  ];
+  # configureFlags = lib.optionals (!stdenv.buildPlatform.canExecute stdenv.hostPlatform) [
+  #   "kyua_cv_getopt_plus=yes"
+  #   "kyua_cv_attribute_noreturn=yes"
+  #   "kyua_cv_getcwd_works=yes"
+  # ];
 
-  # unit tests only
   doCheck = false;
-  auditable = false;
 
   postInstall =
+    let
+      emulator = stdenv.hostPlatform.emulator buildPackages;
+      exe = stdenv.hostPlatform.extensions.executable;
+    in
+    lib.optionalString (lib.hasInfix "wine" emulator) ''
+      export WINEPREFIX="''${WINEPREFIX:-$(mktemp -d)}"
+      mkdir -p $WINEPREFIX
     ''
+    + ''
       mkdir -p $out/share/{completions,man}
-    ''
-    + lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
-      "$out"/bin/ortie man "$out"/share/man
+      ${emulator} "$out"/bin/ortie${exe} manuals "$out"/share/man
+      ${emulator} "$out"/bin/ortie${exe} completions -d "$out"/share/completions bash elvish fish powershell zsh
     ''
     + lib.optionalString installManPages ''
       installManPage "$out"/share/man/*
     ''
-    + lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
-      "$out"/bin/ortie completion bash > "$out"/share/completions/ortie.bash
-      "$out"/bin/ortie completion elvish > "$out"/share/completions/ortie.elvish
-      "$out"/bin/ortie completion fish > "$out"/share/completions/ortie.fish
-      "$out"/bin/ortie completion powershell > "$out"/share/completions/ortie.powershell
-      "$out"/bin/ortie completion zsh > "$out"/share/completions/ortie.zsh
-    ''
     + lib.optionalString installShellCompletions ''
-      installShellCompletion "$out"/share/completions/ortie.{bash,fish,zsh}
+      installShellCompletion --bash "$out"/share/completions/ortie.bash
+      installShellCompletion --fish "$out"/share/completions/ortie.fish
+      installShellCompletion --zsh "$out"/share/completions/_ortie
     '';
 
   meta = {

@@ -3,11 +3,10 @@
   ...
 }@args:
 
-let
-  args' = removeAttrs args [ "pimalaya" ];
-  default = {
+pimalaya.mkDefault (
+  {
     src = ./.;
-    version = "0.1.0";
+    version = "1.0.0";
     mkPackage = (
       {
         lib,
@@ -15,19 +14,18 @@ let
         rustPlatform,
         defaultFeatures,
         features,
-        ...
+        buildPackages,
       }:
 
       pkgs.callPackage ./package.nix {
-        inherit lib rustPlatform;
-        apple-sdk = pkgs.apple-sdk_15;
+        inherit lib rustPlatform buildPackages;
+        apple-sdk = pkgs.apple-sdk;
         installShellCompletions = false;
         installManPages = false;
-        withNoDefaultFeatures = !defaultFeatures;
-        withFeatures = lib.splitString "," features;
+        buildNoDefaultFeatures = !defaultFeatures;
+        buildFeatures = lib.splitString "," features;
       }
     );
-  };
-in
-
-pimalaya.mkDefault (default // args')
+  }
+  // removeAttrs args [ "pimalaya" ]
+)

@@ -1,5 +1,5 @@
 {
-  description = "CLI to manage OAuth 2.0 access tokens";
+  description = "CLI to manage OAuth tokens";
 
   inputs = {
     nixpkgs = {

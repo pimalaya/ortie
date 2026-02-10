@@ -1,7 +1,6 @@
-// This file is part of Ortie, a CLI to manage OAuth 2.0 access
-// tokens.
+// This file is part of Ortie, a CLI to manage OAuth tokens.
 //
-// Copyright (C) 2025 soywod <clement.douin@posteo.net>
+// Copyright (C) 2025-2026 Clément DOUIN <pimalaya.org@posteo.net>
 //
 // This program is free software: you can redistribute it and/or
 // modify it under the terms of the GNU Affero General Public License
@@ -42,7 +41,7 @@ use crate::{auth::AuthCommand, config::Config, token::TokenCommand};
 #[command(propagate_version = true, infer_subcommands = true)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Ortie,
+    pub command: OrtieCommand,
     #[command(flatten)]
     pub config: ConfigPathsArg,
     #[command(flatten)]
@@ -54,7 +53,7 @@ pub struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
-pub enum Ortie {
+pub enum OrtieCommand {
     #[command(arg_required_else_help = true, subcommand)]
     Auth(AuthCommand),
     #[command(arg_required_else_help = true, subcommand)]
@@ -65,7 +64,7 @@ pub enum Ortie {
     Completions(CompletionCommand),
 }
 
-impl Ortie {
+impl OrtieCommand {
     pub fn execute(
         self,
         printer: &mut impl Printer,
