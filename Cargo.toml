@@ -57,3 +57,6 @@ secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 shellexpand = "3.1"
 url = "2.5"
+
+[patch.crates-io]
+io-oauth.git = "https://github.com/pimalaya/io-oauth"
