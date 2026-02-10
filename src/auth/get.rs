@@ -19,7 +19,7 @@
 
 use std::{
     borrow::Cow,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt,
     io::{stdout, BufRead, BufReader, IsTerminal, Write},
     net::{Shutdown, TcpListener},
@@ -65,7 +65,7 @@ impl GetAuthorizationCommand {
             None
         };
 
-        let request_params = AuthorizationRequestParams {
+        let auth_req_params = AuthorizationRequestParams {
             client_id: account.client_id.as_str().into(),
             redirect_uri: account
                 .endpoints
@@ -75,13 +75,30 @@ impl GetAuthorizationCommand {
             scope: HashSet::from_iter(account.scopes.iter().map(Into::into)),
             state: Some(Cow::Borrowed(&state)),
             pkce_code_challenge: pkce_code_challenge.as_ref().map(Cow::Borrowed),
-        };
+        }
+        .to_form_url_encoded_string();
 
-        let mut uri = account.endpoints.authorization.clone();
-        uri.set_query(Some(&request_params.to_form_url_encoded_string()));
+        // first collect user's auth request query params
+        let auth_uri = account.endpoints.authorization.clone();
+        let auth_req_user_params: HashMap<_, _> = auth_uri.query_pairs().collect();
+
+        // then collect auth request query params
+        let mut auth_uri = account.endpoints.authorization.clone();
+        auth_uri.set_query(Some(&auth_req_params));
+        let mut auth_req_params: HashMap<_, _> = auth_uri.query_pairs().collect();
+
+        // finally merge defaults with user's overrides
+        auth_req_params.extend(auth_req_user_params);
+
+        // rebuild the final auth URI with merged query params
+        let mut auth_uri = account.endpoints.authorization.clone();
+        let mut q = auth_uri.query_pairs_mut();
+        q.clear();
+        q.extend_pairs(auth_req_params);
+        let auth_uri = q.finish();
 
         let authorization_uri = AuthorizationUri {
-            authorization_uri: &uri,
+            authorization_uri: &auth_uri,
             state: &state,
             pkce_code_verifier: pkce_code_challenge
                 .as_ref()
@@ -96,11 +113,11 @@ impl GetAuthorizationCommand {
         println!("{authorization_uri}");
 
         if interactive {
-            if let Err(err) = open::that(uri.as_str()) {
+            if let Err(err) = open::that(auth_uri.as_str()) {
                 println!("Cannot open your browser ({err})");
 
                 let msg = "Click on the link to manually start the authorization process";
-                println!("{msg}: {uri}");
+                println!("{msg}: {auth_uri}");
             }
         }
 
