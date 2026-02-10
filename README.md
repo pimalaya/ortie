@@ -14,6 +14,7 @@ CLI to manage OAuth 2.0 access tokens
   - [Google](#google)
   - [Microsoft](#microsoft)
 - [FAQ](#faq)
+- [Alternatives](#alternatives)
 - [Sponsoring](#sponsoring)
 
 ## Features
@@ -261,11 +262,11 @@ client-secret = "<your-client-secret>"
 
 [![nlnet](https://nlnet.nl/logo/banner-160x60.png)](https://nlnet.nl/)
 
-Special thanks to the [NLnet foundation](https://nlnet.nl/) and the [European Commission](https://www.ngi.eu/) that helped the project to receive financial support from various programs:
+Special thanks to the [NLnet foundation](https://nlnet.nl/) and the [European Commission](https://www.ngi.eu/) that have been financially supporting the project for years:
 
-- [NGI Assure](https://nlnet.nl/project/Ortie/) in 2022
-- [NGI Zero Entrust](https://nlnet.nl/project/Pimalaya/) in 2023
-- [NGI Zero Core](https://nlnet.nl/project/Pimalaya-PIM/) in 2024 *(still ongoing)*
+- 2022: [NGI Assure](https://nlnet.nl/project/Himalaya/)
+- 2023: [NGI Zero Entrust](https://nlnet.nl/project/Pimalaya/)
+- 2024: [NGI Zero Core](https://nlnet.nl/project/Pimalaya-PIM/) *(still ongoing in 2026)*
 
 If you appreciate the project, feel free to donate using one of the following providers:
 
