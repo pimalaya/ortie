@@ -15,6 +15,7 @@ let
         rustPlatform,
         defaultFeatures,
         features,
+        ...
       }:
 
       pkgs.callPackage ./package.nix {
