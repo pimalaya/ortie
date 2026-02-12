@@ -1,5 +1,3 @@
-# The account name should be unique.
-#
 [accounts.example]
 
 # Make this current account the default one to use when no account is

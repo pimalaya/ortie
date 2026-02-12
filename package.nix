@@ -15,7 +15,6 @@
   pkg-config,
   rustPlatform,
   stdenv,
-  ...
 }:
 
 let
@@ -32,15 +31,15 @@ let
   emulator = stdenv.hostPlatform.emulator buildPackages;
   exe = stdenv.hostPlatform.extensions.executable;
 
-  # notify and native-tls features are part of default cargo features
-  hasNotifyFeature = !buildNoDefaultFeatures || builtins.elem "notify" buildFeatures;
+  # native-tls and notify features are part of default cargo features
   hasNativeTlsFeature = !buildNoDefaultFeatures || builtins.elem "native-tls" buildFeatures;
+  hasNotifyFeature = !buildNoDefaultFeatures || builtins.elem "notify" buildFeatures;
 
-  # required for D-Bus on Linux AArch64
   dbus' = dbus.overrideAttrs (old: {
     env = (old.env or { }) // {
       NIX_CFLAGS_COMPILE =
         (old.env.NIX_CFLAGS_COMPILE or "")
+        # required for D-Bus on Linux AArch64
         + lib.optionalString (isLinux && isAarch64) " -mno-outline-atomics";
     };
   });
@@ -59,13 +58,13 @@ rustPlatform.buildRustPackage {
   };
 
   env = {
-    # required for OpenSSL not to use vendors (mostly for Windows)
+    # OpenSSL should not be provided by vendors, not even on Windows
     OPENSSL_NO_VENDOR = "1";
   };
 
   nativeBuildInputs =
     [ ]
-    ++ lib.optional (hasNotifyFeature || hasNativeTlsFeature) pkg-config
+    ++ lib.optional (hasNativeTlsFeature || hasNotifyFeature) pkg-config
     ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
 
   buildInputs =
@@ -76,7 +75,7 @@ rustPlatform.buildRustPackage {
 
   buildFeatures =
     buildFeatures
-    # the vendored feature is only required for D-Bus on Windows
+    # D-Bus is provided by vendors on Windows
     ++ lib.optional (hasNotifyFeature && isWindows) "vendored";
 
   doCheck = false;

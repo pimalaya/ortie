@@ -14,6 +14,8 @@ CLI to manage OAuth tokens
   - [Refresh access token](#refresh-access-token)
   - [Show access token](#show-access-token)
 - [Alternatives](#alternatives)
+- [FAQ](#faq)
+- [Social](#social)
 - [Sponsoring](#sponsoring)
 
 ## Features
@@ -122,7 +124,7 @@ You will also need a registered application. This depends on your OAuth 2.0 prov
 ### Google
 
 ```toml
-endpoints.authorization = "https://accounts.google.com/o/oauth2/auth"
+endpoints.authorization = "https://accounts.google.com/o/oauth2/auth?access_type=offline"
 endpoints.token = "https://www.googleapis.com/oauth2/v3/token"
 scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com"] # choose the right scope for your usage
 ```
@@ -252,6 +254,29 @@ With scope: https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.off
 - [pizauth](https://github.com/ltratt/pizauth): daemon-oriented alternative
 - [oama](https://github.com/pdobsan/oama): haskell alternative
 - [mutt_oauth2.py](https://gitlab.com/muttmua/mutt/-/blob/master/contrib/mutt_oauth2.py): python script alternative
+
+## FAQ
+
+### How to debug Ortie CLI?
+
+The simplest way is to use `--debug` and/or `--trace` arguments.
+
+The advanced way is based on environment variables:
+
+- `RUST_LOG=<level>`: determines the log level filter, can be one of `off`, `error`, `warn`, `info`, `debug` and `trace`.
+- `RUST_BACKTRACE=1`: enables the full error backtrace, which include source lines where the error originated from.
+
+Logs are written to the `stderr`, which means that you can redirect them easily to a file:
+
+```
+ortie server start --debug 2>/tmp/ortie.log
+```
+
+## Social
+
+- Chat on [Matrix](https://matrix.to/#/#pimalaya:matrix.org)
+- News on [Mastodon](https://fosstodon.org/@pimalaya) or [RSS](https://fosstodon.org/@pimalaya.rss)
+- Mail at [pimalaya.org@posteo.net](mailto:pimalaya.org@posteo.net)
 
 ## Sponsoring
 
