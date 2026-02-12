@@ -3,6 +3,7 @@
 
 {
   apple-sdk,
+  aws-lc,
   buildFeatures ? [ ],
   buildNoDefaultFeatures ? false,
   buildPackages,
@@ -36,8 +37,8 @@ let
 
   # notify feature is part of default cargo features
   hasNotifyFeature = !buildNoDefaultFeatures || builtins.elem "notify" buildFeatures;
-  #hasNativeTlsFeature = builtins.elem "native-tls" buildFeatures;
   hasNativeTlsFeature = !buildNoDefaultFeatures || builtins.elem "native-tls" buildFeatures;
+  hasAwsLcFeature = !buildNoDefaultFeatures || builtins.elem "rustls-aws" buildFeatures;
 
   # statically link dbus via cargo (vendored)
   dbusFromCargo = hasNotifyFeature && isWindows && isx86_64;
@@ -79,7 +80,8 @@ rustPlatform.buildRustPackage {
     [ ]
     ++ lib.optional isDarwin apple-sdk
     ++ lib.optional dbusFromNix dbus'
-    ++ lib.optional hasNativeTlsFeature openssl;
+    ++ lib.optional hasNativeTlsFeature openssl
+    ++ lib.optional hasAwsLcFeature aws-lc;
 
   buildFeatures = buildFeatures ++ lib.optional dbusFromCargo "vendored";
 
