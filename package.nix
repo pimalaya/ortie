@@ -2,33 +2,57 @@
 # This file aims to be a replacement for the nixpkgs derivation.
 
 {
+  apple-sdk,
+  buildFeatures ? [ ],
+  buildNoDefaultFeatures ? false,
+  buildPackages,
+  dbus,
+  fetchFromGitHub,
+  installManPages ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
+  installShellCompletions ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
+  installShellFiles,
   lib,
   pkg-config,
-  buildPackages,
   rustPlatform,
-  fetchFromGitHub,
   stdenv,
-  apple-sdk,
-  installShellFiles,
-  installShellCompletions ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
-  installManPages ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
-  buildNoDefaultFeatures ? false,
-  buildFeatures ? [ ],
 }:
 
 let
   version = "0.1.0";
   hash = "";
   cargoHash = "";
-in
 
-rustPlatform.buildRustPackage rec {
-  inherit
-    cargoHash
-    version
-    buildNoDefaultFeatures
-    buildFeatures
+  inherit (stdenv.hostPlatform)
+    isLinux
+    isWindows
+    isx86_64
+    isAarch64
+    isDarwin
     ;
+
+  emulator = stdenv.hostPlatform.emulator buildPackages;
+  exe = stdenv.hostPlatform.extensions.executable;
+
+  # notify feature is part of default cargo features
+  hasNotifyFeature = !buildNoDefaultFeatures || builtins.elem "notify" buildFeatures;
+
+  # statically link dbus via cargo (vendored)
+  dbusFromCargo = hasNotifyFeature && isWindows && isx86_64;
+  # statically link dbus via nixpkgs
+  dbusFromNix = hasNotifyFeature && !(isWindows && isx86_64);
+
+  # needed for building dbus on aarch64-linux
+  dbus' = dbus.overrideAttrs (old: {
+    env = (old.env or { }) // {
+      NIX_CFLAGS_COMPILE =
+        (old.env.NIX_CFLAGS_COMPILE or "")
+        + lib.optionalString (isLinux && isAarch64) " -mno-outline-atomics";
+    };
+  });
+
+in
+rustPlatform.buildRustPackage {
+  inherit cargoHash version buildNoDefaultFeatures;
 
   pname = "ortie";
 
@@ -39,26 +63,22 @@ rustPlatform.buildRustPackage rec {
     rev = "v${version}";
   };
 
-  nativeBuildInputs = [
-    pkg-config
-  ]
-  ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
+  env = lib.optionalAttrs (isLinux && isAarch64) {
+    NIX_CFLAGS_COMPILE = "-mno-outline-atomics";
+  };
 
-  buildInputs = lib.optional stdenv.hostPlatform.isDarwin apple-sdk;
+  nativeBuildInputs =
+    [ ]
+    ++ lib.optional hasNotifyFeature pkg-config
+    ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
 
-  # configureFlags = lib.optionals (!stdenv.buildPlatform.canExecute stdenv.hostPlatform) [
-  #   "kyua_cv_getopt_plus=yes"
-  #   "kyua_cv_attribute_noreturn=yes"
-  #   "kyua_cv_getcwd_works=yes"
-  # ];
+  buildInputs = lib.optional isDarwin apple-sdk ++ lib.optional dbusFromNix dbus';
+
+  buildFeatures = buildFeatures ++ lib.optional dbusFromCargo "vendored";
 
   doCheck = false;
 
   postInstall =
-    let
-      emulator = stdenv.hostPlatform.emulator buildPackages;
-      exe = stdenv.hostPlatform.extensions.executable;
-    in
     lib.optionalString (lib.hasInfix "wine" emulator) ''
       export WINEPREFIX="''${WINEPREFIX:-$(mktemp -d)}"
       mkdir -p $WINEPREFIX
@@ -72,17 +92,18 @@ rustPlatform.buildRustPackage rec {
       installManPage "$out"/share/man/*
     ''
     + lib.optionalString installShellCompletions ''
-      installShellCompletion --bash "$out"/share/completions/ortie.bash
-      installShellCompletion --fish "$out"/share/completions/ortie.fish
-      installShellCompletion --zsh "$out"/share/completions/_ortie
+      installShellCompletion --cmd ortie \
+        --bash "$out"/share/completions/ortie.bash \
+        --fish "$out"/share/completions/ortie.fish \
+        --zsh "$out"/share/completions/_ortie
     '';
 
   meta = {
-    description = "CLI to manage OAuth access tokens";
+    description = "CLI to manage OAuth tokens";
     mainProgram = "ortie";
     homepage = "https://github.com/pimalaya/ortie";
     changelog = "https://github.com/pimalaya/ortie/blob/v${version}/CHANGELOG.md";
-    license = lib.licenses.agpl3Only;
+    license = lib.licenses.agpl3Plus;
     maintainers = with lib.maintainers; [ soywod ];
   };
 }

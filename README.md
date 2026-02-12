@@ -109,7 +109,11 @@ nix run ortie
 
 ## Configuration
 
-The wizard is not yet available (it should come soon), so the only way to configure Ortie CLI is to copy the [sample config file](https://github.com/pimalaya/ortie/blob/master/config.sample.toml), to store it either at `~/.config/ortie.toml` or `~/.ortierc` then to customize it by commenting or uncommenting the options you need.
+The wizard is not yet available (it should come soon), meanwhile you can manually edit your own configuration from scratch:
+
+- Copy the content of the documented [`./config.sample.toml`](./config.sample.toml)
+- Paste it into a new file `~/.config/ortie/config.toml`
+- Edit, then comment or uncomment the options you want
 
 You will also need a registered application. This depends on your OAuth 2.0 provider. You can either use an existing application (public registration like Thunderbird) or register your own application. The first option is definitely simpler.
 
