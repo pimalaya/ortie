@@ -2,7 +2,6 @@
 # This file aims to be a replacement for the nixpkgs derivation.
 
 {
-  apple-sdk,
   buildFeatures ? [ ],
   buildNoDefaultFeatures ? false,
   buildPackages,
@@ -26,31 +25,24 @@ let
   inherit (stdenv.hostPlatform)
     isLinux
     isWindows
-    isx86_64
     isAarch64
-    isDarwin
     ;
 
   emulator = stdenv.hostPlatform.emulator buildPackages;
   exe = stdenv.hostPlatform.extensions.executable;
 
-  # notify feature is part of default cargo features
+  # notify and native-tls features are part of default cargo features
   hasNotifyFeature = !buildNoDefaultFeatures || builtins.elem "notify" buildFeatures;
   hasNativeTlsFeature = !buildNoDefaultFeatures || builtins.elem "native-tls" buildFeatures;
 
-  # statically link dbus via cargo (vendored)
-  dbusFromCargo = hasNotifyFeature && isWindows && isx86_64;
-  # statically link dbus via nixpkgs
-  dbusFromNix = hasNotifyFeature && !(isWindows && isx86_64);
-
-  # needed for building dbus on aarch64-linux
-  # dbus' = dbus.overrideAttrs (old: {
-  #   env = (old.env or { }) // {
-  #     NIX_CFLAGS_COMPILE =
-  #       (old.env.NIX_CFLAGS_COMPILE or "")
-  #       + lib.optionalString (isLinux && isAarch64) " -mno-outline-atomics";
-  #   };
-  # });
+  # required for D-Bus on Linux AArch64
+  dbus' = dbus.overrideAttrs (old: {
+    env = (old.env or { }) // {
+      NIX_CFLAGS_COMPILE =
+        (old.env.NIX_CFLAGS_COMPILE or "")
+        + lib.optionalString (isLinux && isAarch64) " -mno-outline-atomics";
+    };
+  });
 
 in
 rustPlatform.buildRustPackage {
@@ -66,9 +58,9 @@ rustPlatform.buildRustPackage {
   };
 
   env = {
+    # required for OpenSSL not to use vendors (mostly for Windows)
     OPENSSL_NO_VENDOR = "1";
-  }
-  // lib.optionalAttrs (isLinux && isAarch64) { NIX_CFLAGS_COMPILE = "-mno-outline-atomics"; };
+  };
 
   nativeBuildInputs =
     [ ]
@@ -77,11 +69,14 @@ rustPlatform.buildRustPackage {
 
   buildInputs =
     [ ]
-    ++ lib.optional isDarwin apple-sdk
-    ++ lib.optional dbusFromNix dbus
-    ++ lib.optional hasNativeTlsFeature openssl;
+    ++ lib.optional hasNativeTlsFeature openssl
+    # D-Bus is provided by vendors on Windows
+    ++ lib.optional (hasNotifyFeature && !isWindows) dbus';
 
-  buildFeatures = buildFeatures ++ lib.optional dbusFromCargo "vendored";
+  buildFeatures =
+    buildFeatures
+    # the vendored feature is only required for D-Bus on Windows
+    ++ lib.optional (hasNotifyFeature && isWindows) "vendored";
 
   doCheck = false;
 
