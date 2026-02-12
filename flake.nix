@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs = {
-      url = "github:nixos/nixpkgs/staging-next";
+      url = "github:nixos/nixpkgs";
     };
     fenix = {
       url = "github:nix-community/fenix/monthly";
