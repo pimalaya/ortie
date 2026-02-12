@@ -65,9 +65,14 @@ rustPlatform.buildRustPackage {
     rev = "v${version}";
   };
 
-  env = lib.optionalAttrs (isLinux && isAarch64) {
-    NIX_CFLAGS_COMPILE = "-mno-outline-atomics";
-  };
+  env =
+    { }
+    // lib.optionalAttrs (isLinux && isAarch64) {
+      NIX_CFLAGS_COMPILE = "-mno-outline-atomics";
+    }
+    // lib.optionalAttrs (isWindows && isx86_64) {
+      OPENSSL_NO_VENDOR = "1";
+    };
 
   nativeBuildInputs =
     [ ]
