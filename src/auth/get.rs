@@ -24,7 +24,7 @@ use std::{
     net::{Shutdown, TcpListener},
 };
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
 use clap::Parser;
 use io_oauth::v2_0::authorization_code_grant::{
@@ -64,13 +64,11 @@ impl GetAuthorizationCommand {
             None
         };
 
+        let redirect_uri = account.endpoints.redirection()?;
+
         let auth_req_params = AuthorizationRequestParams {
             client_id: account.client_id.as_str().into(),
-            redirect_uri: account
-                .endpoints
-                .redirection
-                .as_ref()
-                .map(|uri| uri.as_str().into()),
+            redirect_uri: Some(Cow::from(redirect_uri.as_str())),
             scope: HashSet::from_iter(account.scopes.iter().map(Into::into)),
             state: Some(Cow::Borrowed(&state)),
             pkce_code_challenge: pkce_code_challenge.as_ref().map(Cow::Borrowed),
@@ -121,19 +119,30 @@ impl GetAuthorizationCommand {
         }
 
         println!("Spawn fake HTTP redirection server…");
-        let scheme = account.endpoints.redirection_scheme();
-        let host = account.endpoints.redirection_host();
-        let port = account.endpoints.redirection_port();
+
+        let scheme = redirect_uri.scheme();
+
+        let Some(host) = redirect_uri.host_str() else {
+            bail!("Missing host in redirect URI: {redirect_uri}");
+        };
+
+        let Some(port) = redirect_uri.port_or_known_default() else {
+            bail!("Missing port in redirect URI: {redirect_uri}");
+        };
+
         let listener = TcpListener::bind((host, port))?;
 
         println!("Wait for redirection…");
         let (mut stream, _) = listener.accept()?;
+
         println!("Continue authorization process…");
         let mut reader = BufReader::new(&mut stream);
         let mut request_line = String::new();
         reader.read_line(&mut request_line)?;
 
         let redirected_path = request_line.split_whitespace().nth(1).unwrap();
+        println!("redirected_path: {redirected_path:?}");
+
         let redirected_uri: Url = format!("{scheme}://{host}:{port}{redirected_path}")
             .parse()
             .unwrap();
@@ -143,9 +152,10 @@ impl GetAuthorizationCommand {
         stream.shutdown(Shutdown::Both)?;
 
         let cmd = ResumeAuthorizationCommand {
+            redirected_uri,
             state: Some(state),
             pkce: pkce_code_challenge.map(|pkce| pkce.verifier),
-            redirected_uri,
+            redirect_uri: Some(redirect_uri.into_owned()),
         };
 
         cmd.execute(printer, account)

@@ -18,14 +18,14 @@
 
 #[allow(unused)]
 use anyhow::Result;
+#[cfg(feature = "command")]
+use io_process::command::Command;
 #[allow(unused)]
 use pimalaya_toolbox::feat;
 use serde::Deserialize;
 
 #[cfg(feature = "notify")]
-use crate::notify::NotifyHook;
-#[cfg(feature = "command")]
-use io_process::command::Command;
+use super::Notify;
 
 #[cfg(not(feature = "notify"))]
 pub type NotifyHook = ();
@@ -38,7 +38,7 @@ pub struct Hook {
     #[cfg_attr(not(feature = "command"), serde(default, deserialize_with = "command"))]
     pub command: Option<Command>,
     #[cfg_attr(not(feature = "notify"), serde(default, deserialize_with = "notify"))]
-    pub notify: Option<NotifyHook>,
+    pub notify: Option<Notify>,
 }
 
 impl From<Hook> for super::Hook {

@@ -84,6 +84,14 @@ pub struct ResumeAuthorizationCommand {
     #[arg(long, short, value_parser = pkce_code_verifier_parser)]
     #[arg(value_name = "CODE")]
     pub pkce: Option<PkceCodeVerifier>,
+
+    /// The PKCE code verifier generated during the authorization flow
+    /// initiation.
+    ///
+    /// If PKCE has been enabled during the `auth get` command, the
+    /// generated code should be given to the `resume` command.
+    #[arg(long, short, value_parser = uri_parser)]
+    pub redirect_uri: Option<Url>,
 }
 
 impl ResumeAuthorizationCommand {
@@ -142,7 +150,7 @@ impl ResumeAuthorizationCommand {
 
         let mut params = AccessTokenRequestParams {
             code: params.code,
-            redirect_uri: None,
+            redirect_uri: self.redirect_uri.as_ref().map(|uri| uri.as_str().into()),
             client_id: account.client_id.into(),
             pkce_code_verifier: self.pkce.as_ref().map(Cow::Borrowed),
         };
@@ -170,7 +178,7 @@ impl ResumeAuthorizationCommand {
                 account.storage.write(&res)?;
 
                 debug!("execute issue access token success hook");
-                account.on_issue_access_token.execute_success(&res);
+                account.hooks.on_issue.execute_success(&res);
 
                 let msg = "Access token successfully issued";
                 let msg = match res.expires_in {
@@ -185,7 +193,7 @@ impl ResumeAuthorizationCommand {
             }
             Err(res) => {
                 debug!("execute issue access token error hook");
-                account.on_issue_access_token.execute_error(&res);
+                account.hooks.on_issue.execute_error(&res);
 
                 let err = anyhow!("Issue access token error (code {:?})", res.error);
                 return Err(match (res.error_description, res.error_uri) {

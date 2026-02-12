@@ -269,7 +269,7 @@ The advanced way is based on environment variables:
 Logs are written to the `stderr`, which means that you can redirect them easily to a file:
 
 ```
-ortie server start --debug 2>/tmp/ortie.log
+ortie token show --debug 2>/tmp/ortie.log
 ```
 
 ## Social

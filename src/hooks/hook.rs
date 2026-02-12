@@ -40,21 +40,27 @@ use notify_rust::Notification;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "notify")]
-use crate::notify::NotifyHook;
-
 use super::de;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Hooks {
     #[serde(default)]
+    pub on_issue: HookStatus,
+    #[serde(default)]
+    pub on_refresh: HookStatus,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct HookStatus {
+    #[serde(default)]
     pub success: Hook,
     #[serde(default)]
     pub error: Hook,
 }
 
-impl Hooks {
+impl HookStatus {
     pub fn execute_success(&self, res: &IssueAccessTokenSuccessParams) {
         trace!("execute success hook: {res:?}");
 
@@ -234,5 +240,13 @@ pub struct Hook {
     #[cfg(feature = "command")]
     pub command: Option<Command>,
     #[cfg(feature = "notify")]
-    pub notify: Option<NotifyHook>,
+    pub notify: Option<Notify>,
+}
+
+#[cfg(feature = "notify")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Notify {
+    pub summary: String,
+    pub body: String,
 }

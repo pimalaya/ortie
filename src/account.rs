@@ -19,7 +19,7 @@
 use pimalaya_toolbox::{secret::Secret, stream::Tls};
 use serde::{Deserialize, Serialize};
 
-use crate::{endpoint::Endpoints, hook::Hooks, storage::Storages};
+use crate::{endpoint::Endpoints, hooks::Hooks, storage::Storages};
 
 /// The account configuration.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -44,9 +44,6 @@ pub struct Account {
     pub auto_refresh: bool,
 
     pub storage: Storages,
-
     #[serde(default)]
-    pub on_issue_access_token: Hooks,
-    #[serde(default)]
-    pub on_refresh_access_token: Hooks,
+    pub hooks: Hooks,
 }

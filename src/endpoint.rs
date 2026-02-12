@@ -16,6 +16,9 @@
 // License along with this program. If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::{borrow::Cow, net::TcpListener};
+
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -28,42 +31,15 @@ pub struct Endpoints {
 }
 
 impl Endpoints {
-    const DEFAULT_REDIRECTION_SCHEME: &'static str = "http";
-    const DEFAULT_REDIRECTION_HOST: &'static str = "127.0.0.1";
+    pub fn redirection(&self) -> Result<Cow<'_, Url>> {
+        if let Some(url) = self.redirection.as_ref() {
+            return Ok(Cow::Borrowed(url));
+        }
 
-    pub fn redirection_scheme(&self) -> &str {
-        let Some(uri) = &self.redirection else {
-            return Self::DEFAULT_REDIRECTION_SCHEME;
-        };
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        let url: Url = format!("http://127.0.0.1:{port}").parse()?;
 
-        uri.scheme()
-    }
-
-    pub fn redirection_host(&self) -> &str {
-        let Some(uri) = &self.redirection else {
-            return Self::DEFAULT_REDIRECTION_HOST;
-        };
-
-        let Some(host) = uri.host_str() else {
-            return Self::DEFAULT_REDIRECTION_HOST;
-        };
-
-        host
-    }
-
-    pub fn redirection_port(&self) -> u16 {
-        let Some(uri) = &self.redirection else {
-            return 80;
-        };
-
-        let Some(port) = uri.port_or_known_default() else {
-            return if uri.scheme().eq_ignore_ascii_case("https") {
-                443
-            } else {
-                80
-            };
-        };
-
-        port
+        Ok(Cow::Owned(url))
     }
 }

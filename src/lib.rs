@@ -25,7 +25,6 @@ pub mod cli;
 pub mod command;
 pub mod config;
 pub mod endpoint;
-pub mod hook;
-pub mod notify;
+pub mod hooks;
 pub mod storage;
 pub mod token;

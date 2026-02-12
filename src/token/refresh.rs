@@ -133,13 +133,13 @@ impl RefreshTokenCommand {
                 account.storage.write(&res)?;
 
                 debug!("execute refresh access token success hook");
-                account.on_refresh_access_token.execute_success(&res);
+                account.hooks.on_refresh.execute_success(&res);
 
                 Ok(res)
             }
             Err(res) => {
                 debug!("execute refresh access token error hook");
-                account.on_refresh_access_token.execute_error(&res);
+                account.hooks.on_refresh.execute_error(&res);
 
                 let err = anyhow!("Refresh access token error (code {:?})", res.error);
 

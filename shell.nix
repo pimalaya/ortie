@@ -2,20 +2,23 @@
   nixpkgs ? <nixpkgs>,
   system ? builtins.currentSystem,
   pkgs ? import nixpkgs { inherit system; },
-  fenix ? import (fetchTarball "https://github.com/nix-community/fenix/archive/monthly.tar.gz") { },
   pimalaya ? import (fetchTarball "https://github.com/pimalaya/nix/archive/master.tar.gz"),
-}:
+  ...
+}@args:
 
-pimalaya.mkShell {
-  inherit
-    nixpkgs
-    system
-    pkgs
-    fenix
-    ;
+let
+  inherit (pkgs) dbus openssl;
+  shell = pimalaya.mkShell (removeAttrs args [ "pimalaya" ]);
 
-  buildInputs = with pkgs; [
-    dbus
+in
+shell.overrideAttrs (prev: {
+  LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
     openssl
+    dbus
   ];
-}
+
+  buildInputs = (prev.buildInputs or [ ]) ++ [
+    openssl
+    dbus
+  ];
+})
