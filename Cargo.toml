@@ -13,11 +13,11 @@ documentation = "https://github.com/pimalaya/ortie"
 repository = "https://github.com/pimalaya/ortie"
 
 [package.metadata.docs.rs]
-features = ["rustls-ring", "command"]
+all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["notify", "command", "rustls-ring", "rustls-aws", "native-tls", "keyring"]
+default = ["native-tls", "command", "keyring", "notify"]
 
 # TLS
 #

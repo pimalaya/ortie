@@ -3,11 +3,9 @@
 
 {
   apple-sdk,
-  aws-lc,
   buildFeatures ? [ ],
   buildNoDefaultFeatures ? false,
   buildPackages,
-  cmake,
   dbus,
   fetchFromGitHub,
   installManPages ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
@@ -39,7 +37,6 @@ let
   # notify feature is part of default cargo features
   hasNotifyFeature = !buildNoDefaultFeatures || builtins.elem "notify" buildFeatures;
   hasNativeTlsFeature = !buildNoDefaultFeatures || builtins.elem "native-tls" buildFeatures;
-  hasAwsLcFeature = !buildNoDefaultFeatures || builtins.elem "rustls-aws" buildFeatures;
 
   # statically link dbus via cargo (vendored)
   dbusFromCargo = hasNotifyFeature && isWindows && isx86_64;
@@ -68,28 +65,20 @@ rustPlatform.buildRustPackage {
     rev = "v${version}";
   };
 
-  env =
-    { }
-    // lib.optionalAttrs hasAwsLcFeature {
-      AWS_LC_SYS_CMAKE_BUILDER = "1";
-    }
-    // lib.optionalAttrs (isLinux && isAarch64) {
-      NIX_CFLAGS_COMPILE = "-mno-outline-atomics";
+  env = lib.optionalAttrs (isLinux && isAarch64) {
+    NIX_CFLAGS_COMPILE = "-mno-outline-atomics";
+  };
 
-    };
-
-  nativeBuildInputs = [
-    pkg-config
-    cmake
-  ]
-  ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
+  nativeBuildInputs =
+    [ ]
+    ++ lib.optional (hasNotifyFeature || hasNativeTlsFeature) pkg-config
+    ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
 
   buildInputs =
     [ ]
     ++ lib.optional isDarwin apple-sdk
     ++ lib.optional dbusFromNix dbus'
-    ++ lib.optional hasNativeTlsFeature openssl
-    ++ lib.optional hasAwsLcFeature aws-lc;
+    ++ lib.optional hasNativeTlsFeature openssl;
 
   buildFeatures = buildFeatures ++ lib.optional dbusFromCargo "vendored";
 
