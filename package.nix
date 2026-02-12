@@ -15,6 +15,7 @@
   pkg-config,
   rustPlatform,
   stdenv,
+  ...
 }:
 
 let
