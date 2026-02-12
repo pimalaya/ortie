@@ -68,10 +68,15 @@ rustPlatform.buildRustPackage {
     rev = "v${version}";
   };
 
-  env = lib.optionalAttrs (isLinux && isAarch64) {
-    NIX_CFLAGS_COMPILE = "-mno-outline-atomics";
-    AWS_LC_SYS_CMAKE_BUILDER = "1";
-  };
+  env =
+    { }
+    // lib.optionalAttrs hasAwsLcFeature {
+      AWS_LC_SYS_CMAKE_BUILDER = "1";
+    }
+    // lib.optionalAttrs (isLinux && isAarch64) {
+      NIX_CFLAGS_COMPILE = "-mno-outline-atomics";
+
+    };
 
   nativeBuildInputs = [
     pkg-config
