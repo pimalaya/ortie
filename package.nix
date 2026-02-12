@@ -12,6 +12,7 @@
   installShellCompletions ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
   installShellFiles,
   lib,
+  openssl,
   pkg-config,
   rustPlatform,
   stdenv,
@@ -35,6 +36,7 @@ let
 
   # notify feature is part of default cargo features
   hasNotifyFeature = !buildNoDefaultFeatures || builtins.elem "notify" buildFeatures;
+  hasNativeTlsFeature = builtins.elem "native-tls" buildFeatures;
 
   # statically link dbus via cargo (vendored)
   dbusFromCargo = hasNotifyFeature && isWindows && isx86_64;
@@ -72,7 +74,11 @@ rustPlatform.buildRustPackage {
     ++ lib.optional hasNotifyFeature pkg-config
     ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
 
-  buildInputs = lib.optional isDarwin apple-sdk ++ lib.optional dbusFromNix dbus';
+  buildInputs =
+    [ ]
+    ++ lib.optional isDarwin apple-sdk
+    ++ lib.optional dbusFromNix dbus'
+    ++ lib.optional hasNativeTlsFeature openssl;
 
   buildFeatures = buildFeatures ++ lib.optional dbusFromCargo "vendored";
 
