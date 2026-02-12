@@ -44,13 +44,13 @@ let
   dbusFromNix = hasNotifyFeature && !(isWindows && isx86_64);
 
   # needed for building dbus on aarch64-linux
-  dbus' = dbus.overrideAttrs (old: {
-    env = (old.env or { }) // {
-      NIX_CFLAGS_COMPILE =
-        (old.env.NIX_CFLAGS_COMPILE or "")
-        + lib.optionalString (isLinux && isAarch64) " -mno-outline-atomics";
-    };
-  });
+  # dbus' = dbus.overrideAttrs (old: {
+  #   env = (old.env or { }) // {
+  #     NIX_CFLAGS_COMPILE =
+  #       (old.env.NIX_CFLAGS_COMPILE or "")
+  #       + lib.optionalString (isLinux && isAarch64) " -mno-outline-atomics";
+  #   };
+  # });
 
 in
 rustPlatform.buildRustPackage {
@@ -65,14 +65,10 @@ rustPlatform.buildRustPackage {
     rev = "v${version}";
   };
 
-  env =
-    { }
-    // lib.optionalAttrs (isLinux && isAarch64) {
-      NIX_CFLAGS_COMPILE = "-mno-outline-atomics";
-    }
-    // lib.optionalAttrs (isWindows && isx86_64) {
-      OPENSSL_NO_VENDOR = "1";
-    };
+  env = {
+    OPENSSL_NO_VENDOR = "1";
+  }
+  // lib.optionalAttrs (isLinux && isAarch64) { NIX_CFLAGS_COMPILE = "-mno-outline-atomics"; };
 
   nativeBuildInputs =
     [ ]
@@ -82,7 +78,7 @@ rustPlatform.buildRustPackage {
   buildInputs =
     [ ]
     ++ lib.optional isDarwin apple-sdk
-    ++ lib.optional dbusFromNix dbus'
+    ++ lib.optional dbusFromNix dbus
     ++ lib.optional hasNativeTlsFeature openssl;
 
   buildFeatures = buildFeatures ++ lib.optional dbusFromCargo "vendored";
