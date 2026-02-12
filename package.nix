@@ -7,6 +7,7 @@
   buildFeatures ? [ ],
   buildNoDefaultFeatures ? false,
   buildPackages,
+  cmake,
   dbus,
   fetchFromGitHub,
   installManPages ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
@@ -69,12 +70,14 @@ rustPlatform.buildRustPackage {
 
   env = lib.optionalAttrs (isLinux && isAarch64) {
     NIX_CFLAGS_COMPILE = "-mno-outline-atomics";
+    AWS_LC_SYS_CMAKE_BUILDER = "1";
   };
 
-  nativeBuildInputs =
-    [ ]
-    ++ lib.optional (hasNotifyFeature || hasNativeTlsFeature) pkg-config
-    ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
+  nativeBuildInputs = [
+    pkg-config
+    cmake
+  ]
+  ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
 
   buildInputs =
     [ ]
