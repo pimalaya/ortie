@@ -36,7 +36,8 @@ let
 
   # notify feature is part of default cargo features
   hasNotifyFeature = !buildNoDefaultFeatures || builtins.elem "notify" buildFeatures;
-  hasNativeTlsFeature = builtins.elem "native-tls" buildFeatures;
+  #hasNativeTlsFeature = builtins.elem "native-tls" buildFeatures;
+  hasNativeTlsFeature = !buildNoDefaultFeatures || builtins.elem "native-tls" buildFeatures;
 
   # statically link dbus via cargo (vendored)
   dbusFromCargo = hasNotifyFeature && isWindows && isx86_64;
