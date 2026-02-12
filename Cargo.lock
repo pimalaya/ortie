@@ -1141,8 +1141,9 @@ dependencies = [
 
 [[package]]
 name = "io-oauth"
-version = "0.0.3"
-source = "git+https://github.com/pimalaya/io-oauth#ce43c3dabd61883553c8a955d6ba06f2f7ea5ed7"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e47ba85ea401499f60b70781e2c3639459807554dd60d025ffaa54926e9abfa"
 dependencies = [
  "base64",
  "http",
@@ -1701,8 +1702,9 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pimalaya-toolbox"
-version = "0.0.3"
-source = "git+https://github.com/pimalaya/toolbox#a2b35ca823ffa2d589d5c9ceedadaa5c71d4c774"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0c0dc5e81b77ccca35158e2663f1d62304241a9c9758a68b02ade6484713bc8"
 dependencies = [
  "anyhow",
  "clap",
