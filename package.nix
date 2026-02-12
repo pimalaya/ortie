@@ -71,7 +71,7 @@ rustPlatform.buildRustPackage {
 
   nativeBuildInputs =
     [ ]
-    ++ lib.optional hasNotifyFeature pkg-config
+    ++ lib.optional (hasNotifyFeature || hasNativeTlsFeature) pkg-config
     ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
 
   buildInputs =
