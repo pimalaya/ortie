@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Changed default cargo features to `native-tls`, `command`, `keyring` and `notify`.
 - Made the redirection endpoint optional. If omitted, `http://127.0.0.1:0` is used by default, which will start the redirection server on a random port ([#3]).
+- Replaced `on-issue-access-token` by `hooks.on-issue`.
+- Replaced `on-refresh-access-token` by `hooks.on-refresh`.
 
 ### Fixed
 

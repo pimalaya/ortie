@@ -7,8 +7,8 @@ default = true
 
 # The client credentials
 #
-client-id = "15d6e8a7-50cc-4df6-a60d-0904d280ede0"
-#client-secret.raw = "46a5eac3-7e51-40bd-a486-0f8a39564993"
+client-id = ""
+#client-secret.raw = "secret"
 #client-secret.command = "pass show example"
 #client-secret.keyring = "example"
 
@@ -39,25 +39,25 @@ auto-refresh = false
 
 # Access token storage
 #
-storage.read.command = ["pass", "show", "ortie/example"]
-storage.write.command = ["pass", "insert", "-e", "ortie/example"]
-#storage.read.keyring = "ortie-example"
-#storage.write.keyring = "ortie-example"
+storage.read.keyring = "ortie-example"
+storage.write.keyring = "ortie-example"
+#storage.read.command = ["pass", "show", "ortie/example"]
+#storage.write.command = ["pass", "insert", "-e", "ortie/example"]
 
 # Hooks
 #
-#on-issue-access-token.success.command = []
-#on-issue-access-token.success.notify.summary = "Ortie"
-#on-issue-access-token.success.notify.body = "Issued access token (expires in $EXPIRES_IN)"
+#hooks.on-issue.success.command = []
+#hooks.on-issue.success.notify.summary = "Ortie"
+#hooks.on-issue.success.notify.body = "Issued access token (expires in $EXPIRES_IN)"
 #
-#on-issue-access-token.error.command = []
-#on-issue-access-token.error.notify.summary = "Ortie"
-#on-issue-access-token.error.notify.body = "[$ERROR] Issue access token error\n$ERROR_DESCRIPTION"
+#hooks.on-issue.error.command = []
+#hooks.on-issue.error.notify.summary = "Ortie"
+#hooks.on-issue.error.notify.body = "[$ERROR] Issue access token error\n$ERROR_DESCRIPTION"
 #
-#on-refresh-access-token.success.command = []
-#on-refresh-access-token.success.notify.summary = "Ortie"
-#on-refresh-access-token.success.notify.body = "Refreshed access token (expires in $EXPIRES_IN)"
+#hooks.on-refresh.success.command = []
+#hooks.on-refresh.success.notify.summary = "Ortie"
+#hooks.on-refresh.success.notify.body = "Refreshed access token (expires in $EXPIRES_IN)"
 #
-#on-refresh-access-token.error.command = []
-#on-refresh-access-token.error.notify.summary = "Ortie"
-#on-refresh-access-token.error.notify.body = "[$ERROR] Refresh access token error\n$ERROR_DESCRIPTION"
+#hooks.on-refresh.error.command = []
+#hooks.on-refresh.error.notify.summary = "Ortie"
+#hooks.on-refresh.error.notify.body = "[$ERROR] Refresh access token error\n$ERROR_DESCRIPTION"
