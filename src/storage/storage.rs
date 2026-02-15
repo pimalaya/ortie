@@ -24,15 +24,6 @@ use std::{
 
 #[allow(unused)]
 use anyhow::{anyhow, bail, Context, Result};
-#[cfg(feature = "keyring")]
-use io_keyring::{
-    coroutines::{
-        read::{ReadSecret, ReadSecretResult},
-        write::{WriteSecret, WriteSecretResult},
-    },
-    entry::KeyringEntry,
-    runtimes::std::handle as handle_keyring,
-};
 use io_oauth::v2_0::issue_access_token::IssueAccessTokenSuccessParams;
 #[cfg(feature = "command")]
 use io_process::{
@@ -42,8 +33,6 @@ use io_process::{
     },
     runtimes::std::handle as handle_process,
 };
-#[cfg(feature = "keyring")]
-use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 
 use super::de;
@@ -61,8 +50,6 @@ pub enum Storage {
     None,
     #[cfg(feature = "command")]
     Command(Command),
-    #[cfg(feature = "keyring")]
-    Keyring(KeyringEntry),
 }
 
 impl Storages {
@@ -97,32 +84,6 @@ impl Storages {
 
                 let mut res = IssueAccessTokenSuccessParams::try_from(stdout.as_slice())
                     .context("Parse access token from command error")?;
-
-                res.sync_expires_in();
-
-                Ok(res)
-            }
-
-            #[cfg(feature = "keyring")]
-            Storage::Keyring(entry) => {
-                let mut read = ReadSecret::new(entry.clone());
-                let mut arg = None;
-
-                let secret = loop {
-                    match read.resume(arg.take()) {
-                        ReadSecretResult::Ok(output) => break output,
-                        ReadSecretResult::Io(io) => arg = Some(handle_keyring(io)?),
-                        ReadSecretResult::Err(err2) => {
-                            let err = "Read keyring to get OAuth 2.0 access token error";
-                            return Err(anyhow!("{err2}").context(err));
-                        }
-                    }
-                };
-
-                let secret_bytes = secret.expose_secret().as_bytes();
-
-                let mut res = IssueAccessTokenSuccessParams::try_from(secret_bytes)
-                    .context("Parse access token from keyring error")?;
 
                 res.sync_expires_in();
 
@@ -173,25 +134,6 @@ impl Storages {
                     let err2 = anyhow!("{}", String::from_utf8_lossy(&data));
                     return Err(err2.context(err));
                 };
-
-                Ok(())
-            }
-            #[cfg(feature = "keyring")]
-            Storage::Keyring(entry) => {
-                let json = String::try_from(res)?;
-                let mut write = WriteSecret::new(entry.clone(), json);
-                let mut arg = None;
-
-                loop {
-                    match write.resume(arg.take()) {
-                        WriteSecretResult::Ok(()) => break,
-                        WriteSecretResult::Io(io) => arg = Some(handle_keyring(io)?),
-                        WriteSecretResult::Err(err2) => {
-                            let err = "Read keyring to get OAuth 2.0 access token error";
-                            return Err(anyhow!("{err2}").context(err));
-                        }
-                    }
-                }
 
                 Ok(())
             }

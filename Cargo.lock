@@ -1668,7 +1668,6 @@ dependencies = [
  "dirs",
  "http",
  "humantime",
- "io-keyring",
  "io-oauth",
  "io-process",
  "io-stream",

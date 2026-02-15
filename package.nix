@@ -18,7 +18,7 @@
 }:
 
 let
-  version = "0.1.0";
+  version = "1.0.0";
   hash = "";
   cargoHash = "";
 
@@ -31,8 +31,7 @@ let
   emulator = stdenv.hostPlatform.emulator buildPackages;
   exe = stdenv.hostPlatform.extensions.executable;
 
-  # native-tls and notify features are part of default cargo features
-  hasNativeTlsFeature = !buildNoDefaultFeatures || builtins.elem "native-tls" buildFeatures;
+  hasNativeTlsFeature = builtins.elem "native-tls" buildFeatures;
   hasNotifyFeature = !buildNoDefaultFeatures || builtins.elem "notify" buildFeatures;
 
   dbus' = dbus.overrideAttrs (old: {

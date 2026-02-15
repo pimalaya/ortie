@@ -10,7 +10,6 @@ default = true
 client-id = ""
 #client-secret.raw = "secret"
 #client-secret.command = "pass show example"
-#client-secret.keyring = "example"
 
 # Endpoints, given by your OAuth provider.
 #
@@ -37,12 +36,15 @@ pkce = false
 #
 auto-refresh = false
 
-# Access token storage
+# Token storage
 #
-storage.read.keyring = "ortie-example"
-storage.write.keyring = "ortie-example"
-#storage.read.command = ["pass", "show", "ortie/example"]
-#storage.write.command = ["pass", "insert", "-e", "ortie/example"]
+# You need 2 different commands: one that reads your token, and one
+# that writes freshly issued or refreshed tokens. Mimosa is a good
+# candidate, but you can use whatever CLI matching your needs:
+#
+# https://github.com/pimalaya/mimosa
+storage.read.command = ["mimosa", "password", "read", "ortie"]
+storage.write.command = ["mimosa", "password", "write", "ortie"]
 
 # Hooks
 #

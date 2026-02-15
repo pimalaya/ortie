@@ -20,13 +20,9 @@
 use anyhow::{bail, Error};
 use serde::Deserialize;
 
-#[cfg(feature = "keyring")]
-use io_keyring::entry::KeyringEntry;
 #[cfg(feature = "command")]
 use io_process::command::Command;
 
-#[cfg(not(feature = "keyring"))]
-pub type KeyringEntry = ();
 #[cfg(not(feature = "command"))]
 pub type Command = ();
 
@@ -38,8 +34,8 @@ use pimalaya_toolbox::feat;
 pub enum Storage {
     #[cfg_attr(not(feature = "command"), serde(deserialize_with = "command"))]
     Command(Command),
-    #[cfg_attr(not(feature = "keyring"), serde(deserialize_with = "keyring"))]
-    Keyring(KeyringEntry),
+    #[serde(deserialize_with = "keyring")]
+    Keyring(()),
 }
 
 impl TryFrom<Storage> for super::Storage {
@@ -51,11 +47,7 @@ impl TryFrom<Storage> for super::Storage {
             Storage::Command(cmd) => Ok(Self::Command(cmd)),
             #[cfg(not(feature = "command"))]
             Storage::Command(_) => bail!(feat!("command")),
-
-            #[cfg(feature = "keyring")]
-            Storage::Keyring(entry) => Ok(Self::Keyring(entry)),
-            #[cfg(not(feature = "keyring"))]
-            Storage::Keyring(_) => bail!(feat!("keyring")),
+            Storage::Keyring(_) => bail!("The `keyring` feature is no longer supported, use command instead. See also https://github.com/pimalaya/mimosa."),
         }
     }
 }
@@ -65,7 +57,6 @@ pub fn command<'de, T, D: serde::Deserializer<'de>>(_: D) -> Result<T, D::Error>
     Err(serde::de::Error::custom(feat!("command")))
 }
 
-#[cfg(not(feature = "keyring"))]
 pub fn keyring<'de, T, D: serde::Deserializer<'de>>(_: D) -> Result<T, D::Error> {
-    Err(serde::de::Error::custom(feat!("keyring")))
+    Err(serde::de::Error::custom("The `keyring` feature is no longer supported, use command instead. See also https://github.com/pimalaya/mimosa."))
 }

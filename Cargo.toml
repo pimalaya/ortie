@@ -17,7 +17,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["native-tls", "command", "keyring", "notify"]
+default = ["rustls-ring", "command", "notify"]
 
 # TLS
 #
@@ -28,12 +28,11 @@ rustls-ring = ["pimalaya-toolbox/rustls-ring"]
 # Storages and hooks
 #
 command = ["dep:io-process", "pimalaya-toolbox/command"]
-keyring = ["dep:io-keyring", "pimalaya-toolbox/keyring"]
 notify = ["dep:notify-rust"]
 
 # Vendored (OpenSSL and D-Bus)
 #
-vendored = ["pimalaya-toolbox/vendored", "notify-rust?/d_vendored", "io-keyring?/vendored"]
+vendored = ["pimalaya-toolbox/vendored", "notify-rust?/d_vendored"]
 
 [build-dependencies]
 pimalaya-toolbox = { version = "0.0.4", default-features = false, features = ["build"] }
@@ -45,7 +44,6 @@ clap = { version = "4.4", features = ["derive", "wrap_help"] }
 dirs = "6.0"
 http = "1"
 humantime = "2.2"
-io-keyring = { version = "0.0.2", default-features = false, features = ["serde", "std"], optional = true }
 io-oauth = { version = "0.0.4", default-features = false, features = ["oauth2", "pkce"] }
 io-process = { version = "0.0.2", default-features = false, features = ["expand", "serde", "std"], optional = true }
 io-stream = { version = "0.0.2", default-features = false, features = ["std"] }
