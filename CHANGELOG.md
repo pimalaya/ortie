@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-02-16
+
+### Changed
+
+- Replaced default TLS feature `native-tls` by `rustls-ring`. Native TLS makes release process a bit more complicated and heavier static binaries. Rustls + Ring seems to be a better choice.
+
 ### Removed
 
 - Removed direct keyring support. Use commands instead. The reason is that keyring support has always been a bit blurry for users. It's hard to know what it truly does behind the scene. Plus it increases the complexity. The same way Ortie CLI exports OAuth logic and simplies usage inside tools, [Mimosa CLI](https://github.com/pimalaya/mimosa) does the same for passwords and keyring.
@@ -43,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#3]: https://github.com/pimalaya/ortie/issues/3
 [#4]: https://github.com/pimalaya/ortie/issues/4
 
-[unreleased]: https://github.com/pimalaya/ortie/compare/v1.0.0...master
+[unreleased]: https://github.com/pimalaya/ortie/compare/v1.1.0...master
+[1.1.0]: https://github.com/pimalaya/ortie/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/pimalaya/ortie/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/pimalaya/ortie/compare/root...v0.1.0
