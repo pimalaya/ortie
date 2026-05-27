@@ -1,123 +1,123 @@
-# 🔑 Ortie [![Releases](https://img.shields.io/github/v/release/pimalaya/ortie?color=success)](https://github.com/pimalaya/ortie/releases/latest) [![Repology](https://img.shields.io/repology/repositories/ortie?color=success)]("https://repology.org/project/ortie/versions) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
+# 🔑 Ortie [![Documentation](https://img.shields.io/docsrs/ortie?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/ortie/latest/ortie) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-CLI to manage OAuth tokens
+Library and CLI to manage OAuth 2.0 tokens, written in Rust.
+
+This repository ships three layers:
+
+- Low-level **I/O-free** coroutines: no_std-friendly state machines that emit read/write requests for any runtime.
+- Mid-level **blocking client** wrapping the coroutines over a `pimalaya-stream` connection.
+- High-level **CLI** consuming the std client, configured through TOML.
 
 ## Table of contents
 
 - [Features](#features)
 - [Installation](#installation)
+  - [Pre-built binary](#pre-built-binary)
+  - [Cargo](#cargo)
+  - [Nix](#nix)
+  - [Sources](#sources)
 - [Configuration](#configuration)
   - [Google](#google)
   - [Microsoft](#microsoft)
 - [Usage](#usage)
-  - [Request new access token](#request-new-access-token)
-  - [Refresh access token](#refresh-access-token)
-  - [Show access token](#show-access-token)
+  - [Library](#library)
+  - [Request a new access token](#request-a-new-access-token)
+  - [Refresh an access token](#refresh-an-access-token)
+  - [Show an access token](#show-an-access-token)
+  - [Debugging](#debugging)
 - [Alternatives](#alternatives)
-- [FAQ](#faq)
 - [Social](#social)
 - [Sponsoring](#sponsoring)
 
 ## Features
 
-- **OAuth 2.0** support:
-  - Authorization Code Grant <sup>[rfc6749 #4.1](https://datatracker.ietf.org/doc/html/rfc6749#section-4.1)</sup>
-  - Refreshing an access token <sup>[rfc6749 #6](https://datatracker.ietf.org/doc/html/rfc6749#section-6)</sup>
-- **PKCE** support <sup>[rfc7636](https://datatracker.ietf.org/doc/html/rfc7636)<sup>
-- Native TLS support via [native-tls](https://crates.io/crates/native-tls) crate (requires `native-tls` feature)
-- Rust TLS support via [rustls](https://crates.io/crates/rustls) crate with:
-  - AWS crypto support (requires `rustls-aws` feature)
-  - Ring crypto support (requires `rustls-ring` feature)
-- Fake HTTP **redirection server**
-- Shell command and keyring **storages** (requires `command` and `keyring` features)
-- Shell command and system notification **hooks** (requires `command` and `notify` features)
-- **JSON** support with `--json`
+- **OAuth 2.0** Authorization Code Grant <sup>[rfc6749 #4.1](https://datatracker.ietf.org/doc/html/rfc6749#section-4.1)</sup> and refresh <sup>[rfc6749 #6](https://datatracker.ietf.org/doc/html/rfc6749#section-6)</sup>
+- **PKCE** <sup>[rfc7636](https://datatracker.ietf.org/doc/html/rfc7636)</sup>
+- **TLS** support:
+  - [Rustls](https://crates.io/crates/rustls) with ring crypto (`rustls-ring` feature, default)
+  - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)
+  - [Native TLS](https://crates.io/crates/native-tls) (requires `native-tls` feature)
+- Fake HTTP **redirection server** during the interactive flow
+- Shell command **storages** for reading and writing access tokens
+- Shell command **hooks** on success and error of token issuance / refresh
+- System notification **hooks** (requires `notify` feature)
+- **JSON** output via `--json`
 
-*Ortie CLI is written in [Rust](https://www.rust-lang.org/), and relies on [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to enable or disable functionalities. Default features can be found in the `features` section of the [`Cargo.toml`](https://github.com/pimalaya/ortie/blob/master/Cargo.toml#L18), or on [docs.rs](https://docs.rs/crate/ortie/latest/features).*
+> [!TIP]
+> Ortie is written in [Rust](https://www.rust-lang.org/) and uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional functionality. The default feature set is declared in [Cargo.toml](./Cargo.toml).
 
 ## Installation
 
 ### Pre-built binary
 
-Ortie CLI can be installed with the installer:
+Ortie can be installed with the installer:
 
 *As root:*
 
-```
+```text
 curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | sudo sh
 ```
 
 *As a regular user:*
 
-```
+```text
 curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | PREFIX=~/.local sh
 ```
 
 These commands install the latest binary from the GitHub [releases](https://github.com/pimalaya/ortie/releases) section.
 
-If you want a more up-to-date version than the latest release, check out the [releases](https://github.com/pimalaya/ortie/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. You should find a pre-built binary matching your OS. These pre-built binaries are built from the `master` branch, using default features.
+For a more up-to-date version than the latest release, check out the [releases](https://github.com/pimalaya/ortie/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. These pre-built binaries are built from the `master` branch.
+
+> [!NOTE]
+> Such binaries are built with the default cargo features. If you need specific features, please use another installation method.
 
 ### Cargo
 
-Ortie CLI can be installed with [cargo](https://doc.rust-lang.org/cargo/):
-
-```
-cargo install ortie
+```text
+cargo install --locked ortie
 ```
 
-You can also use the git repository for a more up-to-date (but less stable) version:
+For the git tip:
 
-```
+```text
 cargo install --locked --git https://github.com/pimalaya/ortie.git
 ```
 
 ### Nix
 
-Ortie CLI can be installed with [Nix](https://serokell.io/blog/what-is-nix):
-
-```
-nix-env -i ortie
-```
-
-You can also use the git repository for a more up-to-date (but less stable) version:
-
-```
-nix-env -if https://github.com/pimalaya/ortie/archive/master.tar.gz
-```
-
-*Or, from within the source tree checkout:*
-
-```
-nix-env -if .
-```
-
 If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
 
-```
-nix profile install ortie
-```
-
-*Or, from within the source tree checkout:*
-
-```
-nix profile install
+```text
+nix profile install github:pimalaya/ortie
 ```
 
-*You can also run Ortie directly without installing it:*
+Or run without installing:
 
+```text
+nix run github:pimalaya/ortie
 ```
-nix run ortie
+
+### Sources
+
+```text
+git clone https://github.com/pimalaya/ortie
+cd ortie
+nix run
 ```
 
 ## Configuration
 
-The wizard is not yet available (it should come soon), meanwhile you can manually edit your own configuration from scratch:
+Ortie does not yet ship a wizard: copy [config.sample.toml](./config.sample.toml) into one of the canonical paths below and edit it by hand.
 
-- Copy the content of the documented [`./config.sample.toml`](./config.sample.toml)
-- Paste it into a new file `~/.config/ortie/config.toml`
-- Edit, then comment or uncomment the options you want
+A configuration is loaded from the first valid path among:
 
-You will also need a registered application. This depends on your OAuth 2.0 provider. You can either use an existing application (public registration like Thunderbird) or register your own application. The first option is definitely simpler.
+- `$XDG_CONFIG_HOME/ortie/config.toml`
+- `$HOME/.config/ortie/config.toml`
+- `$HOME/.ortierc`
+
+Override the path with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`; multiple paths can be passed at once, separated by `:`. The first one is the base and the rest are deep-merged on top.
+
+You will also need a registered OAuth 2.0 application: either use a public application (Thunderbird credentials cover most consumer providers) or register your own. The first option is simpler.
 
 *See public Thunderbird application credentials for various providers at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).*
 
@@ -126,22 +126,22 @@ You will also need a registered application. This depends on your OAuth 2.0 prov
 ```toml
 endpoints.authorization = "https://accounts.google.com/o/oauth2/auth?access_type=offline"
 endpoints.token = "https://www.googleapis.com/oauth2/v3/token"
-scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com"] # choose the right scope for your usage
+scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com"]
 ```
 
-Using public Thunderbird application:
+Using the public Thunderbird application:
 
 ```toml
 client-id = "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com"
 client-secret.raw = "kSmqreRr0qwBWJgbf5Y-PjSU"
-enpoints.redirection = "http://localhost"
+endpoints.redirection = "http://localhost"
 ```
 
 Using your [own application](https://developers.google.com/identity/protocols/oauth2):
 
 ```toml
 client-id = "<your-client-id>"
-client-secret = "<your-client-secret>"
+client-secret.raw = "<your-client-secret>"
 ```
 
 ### Microsoft
@@ -151,7 +151,7 @@ endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/
 endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 ```
 
-Using public Thunderbird application:
+Using the public Thunderbird application:
 
 ```toml
 client-id = "9e5f94bc-e8a4-4e73-b8be-63364c29d753"
@@ -162,14 +162,27 @@ Using your [own application](https://learn.microsoft.com/en-us/exchange/client-d
 
 ```toml
 client-id = "<your-client-id>"
-client-secret = "<your-client-secret>"
+client-secret.raw = "<your-client-secret>"
 ```
 
 ## Usage
 
-### Request new access token
+### Library
 
+The low-level coroutines live under `ortie::authorization_code_grant`, `ortie::issue_access_token` and `ortie::refresh_access_token`; they emit `WantsRead` / `WantsWrite(bytes)` events the caller drives against any transport. The mid-level `ortie::client::OauthClient` wraps them with a blocking `pimalaya-stream` connection:
+
+```rust,ignore
+use ortie::client::OauthClient;
+
+let mut client = OauthClient::new(&token_endpoint, &tls, &client_id);
+let res = client.refresh_access_token(refresh_token, scopes)?;
 ```
+
+A complete example using the authorization code grant flow lives in [examples/authorization_code_grant.rs](./examples/authorization_code_grant.rs).
+
+### Request a new access token
+
+```text
 $ ortie auth get
 
 Created authorization request with:
@@ -181,65 +194,43 @@ Spawning fake HTTP redirection server…
 Waiting for redirection…
 ```
 
-Go to your browser, follow the instructions, then you should see:
+Follow the browser flow, then on success the terminal shows:
 
-```
-Authorization succeeded!
-```
-
-Go back to your terminal, you should see:
-
-```
+```text
 Continue authorization process…
 Access token successfully issued (expires in 1h)
 ```
 
-In case the redirections fails, for example:
+If the redirection server cannot start (port permission denied, etc.), copy the URL you are redirected to and complete the flow manually:
 
-```
-$ ortie auth get
-
-Created authorization request with:
- - state: RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4
- - pkce: oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6
-
-Sending authorization request to your browser…
-Spawn fake HTTP redirection server…
-Error: Permission denied (os error 13)
-```
-
-Go to your browser, follow the instructions, then copy the URL you are redirected to (it should fail since the fake HTTP redirection server did not start).
-
-Go back to your terminal, and complete the authorization flow:
-
-```
+```text
 ortie auth resume \
   --state RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4 \
   --pkce oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6 \
   https://localhost/?code=M.C521_BAY.2.U&state=RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4
 ```
 
-### Refresh access token
+### Refresh an access token
 
-```
+```text
 $ ortie token refresh
 
 Access token successfully refreshed (expires in 1h)
 ```
 
-### Show access token
+### Show an access token
 
-```
+```text
 $ ortie token show
 
 EwA4BOl3BAAUcDnR9grBJokeAHaUV8R3+rVHX+IAAQfw9oZLztQS8bo8NvyWmbs…
 ```
 
-The `--auto-refresh` argument (as well as the config option `auto-refresh = true`) automatically refreshes expired tokens.
+The `--auto-refresh` flag (or the `auto-refresh = true` config option) automatically refreshes expired tokens.
 
-You can also inspect token metadata:
+Inspect token metadata:
 
-```
+```text
 $ ortie token inspect
 
 Token type: bearer
@@ -249,28 +240,22 @@ With refresh token: true
 With scope: https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send
 ```
 
+### Debugging
+
+The `--log-level <LEVEL>` flag controls log verbosity (`off`, `error`, `warn`, `info`, `debug`, `trace`). When omitted, `RUST_LOG` is consulted; it supports per-target filters (see the [env_logger](https://docs.rs/env_logger) docs). `RUST_BACKTRACE=1` enables the full error backtrace.
+
+Logs go to stderr by default; redirect them with `--log-file <PATH>` or shell redirection:
+
+```text
+ortie token show --log-level debug --log-file /tmp/ortie.log
+ortie token show --log-level trace 2>/tmp/ortie.log
+```
+
 ## Alternatives
 
 - [pizauth](https://github.com/ltratt/pizauth): daemon-oriented alternative
-- [oama](https://github.com/pdobsan/oama): haskell alternative
-- [mutt_oauth2.py](https://gitlab.com/muttmua/mutt/-/blob/master/contrib/mutt_oauth2.py): python script alternative
-
-## FAQ
-
-### How to debug Ortie CLI?
-
-The simplest way is to use `--debug` and/or `--trace` arguments.
-
-The advanced way is based on environment variables:
-
-- `RUST_LOG=<level>`: determines the log level filter, can be one of `off`, `error`, `warn`, `info`, `debug` and `trace`.
-- `RUST_BACKTRACE=1`: enables the full error backtrace, which include source lines where the error originated from.
-
-Logs are written to the `stderr`, which means that you can redirect them easily to a file:
-
-```
-ortie token show --debug 2>/tmp/ortie.log
-```
+- [oama](https://github.com/pdobsan/oama): Haskell alternative
+- [mutt_oauth2.py](https://gitlab.com/muttmua/mutt/-/blob/master/contrib/mutt_oauth2.py): Python script alternative
 
 ## Social
 
@@ -284,9 +269,10 @@ ortie token show --debug 2>/tmp/ortie.log
 
 Special thanks to the [NLnet foundation](https://nlnet.nl/) and the [European Commission](https://www.ngi.eu/) that have been financially supporting the project for years:
 
-- 2022: [NGI Assure](https://nlnet.nl/project/Himalaya/)
-- 2023: [NGI Zero Entrust](https://nlnet.nl/project/Pimalaya/)
-- 2024: [NGI Zero Core](https://nlnet.nl/project/Pimalaya-PIM/) *(still ongoing in 2026)*
+- 2022 → 2023: [NGI Assure](https://nlnet.nl/project/Himalaya/)
+- 2023 → 2024: [NGI Zero Entrust](https://nlnet.nl/project/Pimalaya/)
+- 2024 → 2026: [NGI Zero Core](https://nlnet.nl/project/Pimalaya-PIM/)
+- *2027 in preparation…*
 
 If you appreciate the project, feel free to donate using one of the following providers:
 

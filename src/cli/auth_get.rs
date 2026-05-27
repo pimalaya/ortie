@@ -1,54 +1,38 @@
-// This file is part of Ortie, a CLI to manage OAuth tokens.
-//
-// Copyright (C) 2025-2026 Clément DOUIN <pimalaya.org@posteo.net>
-//
-// This program is free software: you can redistribute it and/or
-// modify it under the terms of the GNU Affero General Public License
-// as published by the Free Software Foundation, either version 3 of
-// the License, or (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-// Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public
-// License along with this program. If not, see
-// <https://www.gnu.org/licenses/>.
-
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     fmt,
-    io::{stdout, BufRead, BufReader, IsTerminal, Write},
+    io::{BufRead, BufReader, IsTerminal, Write, stdout},
     net::{Shutdown, TcpListener},
 };
 
-use anyhow::{bail, Result};
-use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
+use anyhow::{Result, bail};
+use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
 use clap::Parser;
-use io_oauth::v2_0::authorization_code_grant::{
-    authorization_request::AuthorizationRequestParams,
-    pkce::{PkceCodeChallenge, PkceCodeVerifier},
-    state::State,
-};
-use pimalaya_toolbox::terminal::printer::Printer;
+use pimalaya_cli::printer::Printer;
 use serde::{
-    de::value::{Error, StrDeserializer, StringDeserializer},
     Deserialize, Serialize, Serializer,
+    de::value::{Error, StrDeserializer, StringDeserializer},
 };
 use url::Url;
 
-use crate::{account::Account, auth::resume::ResumeAuthorizationCommand};
+use crate::{
+    authorization_code_grant::{
+        authorization_request::AuthorizationRequestParams,
+        pkce::{PkceCodeChallenge, PkceCodeVerifier},
+        state::State,
+    },
+    cli::{account::Account, auth_resume::AuthResumeCommand},
+};
 
 /// Initiate a new OAuth 2.0 Authorization Code Grant from scratch.
 ///
 /// If this command is used in an interactive shell, a fake redirect
 /// server is spawned in order to intercept the OAuth 2.0 redirection.
 #[derive(Debug, Parser)]
-pub struct GetAuthorizationCommand;
+pub struct AuthGetCommand;
 
-impl GetAuthorizationCommand {
+impl AuthGetCommand {
     pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
         let interactive = stdout().is_terminal();
 
@@ -64,7 +48,7 @@ impl GetAuthorizationCommand {
             None
         };
 
-        let redirect_uri = account.endpoints.redirection()?;
+        let redirect_uri = account.redirection()?;
 
         let auth_req_params = AuthorizationRequestParams {
             client_id: account.client_id.as_str().into(),
@@ -76,11 +60,11 @@ impl GetAuthorizationCommand {
         .to_form_url_encoded_string();
 
         // first collect user's auth request query params
-        let auth_uri = account.endpoints.authorization.clone();
+        let auth_uri = account.authorization_endpoint.clone();
         let auth_req_user_params: HashMap<_, _> = auth_uri.query_pairs().collect();
 
         // then collect auth request query params
-        let mut auth_uri = account.endpoints.authorization.clone();
+        let mut auth_uri = account.authorization_endpoint.clone();
         auth_uri.set_query(Some(&auth_req_params));
         let mut auth_req_params: HashMap<_, _> = auth_uri.query_pairs().collect();
 
@@ -88,14 +72,14 @@ impl GetAuthorizationCommand {
         auth_req_params.extend(auth_req_user_params);
 
         // rebuild the final auth URI with merged query params
-        let mut auth_uri = account.endpoints.authorization.clone();
+        let mut auth_uri = account.authorization_endpoint.clone();
         let mut q = auth_uri.query_pairs_mut();
         q.clear();
         q.extend_pairs(auth_req_params);
         let auth_uri = q.finish();
 
         let authorization_uri = AuthorizationUri {
-            authorization_uri: &auth_uri,
+            authorization_uri: auth_uri,
             state: &state,
             pkce_code_verifier: pkce_code_challenge
                 .as_ref()
@@ -151,7 +135,7 @@ impl GetAuthorizationCommand {
         stream.write_all(b"HTTP/1.0 200 OK\r\n\r\nAuthorization succeeded!")?;
         stream.shutdown(Shutdown::Both)?;
 
-        let cmd = ResumeAuthorizationCommand {
+        let cmd = AuthResumeCommand {
             redirected_uri,
             state: Some(state),
             pkce: pkce_code_challenge.map(|pkce| pkce.verifier),
@@ -203,11 +187,12 @@ impl fmt::Display for AuthorizationUri<'_> {
 
         writeln!(f)?;
         if self.interactive {
-            write!(f, "Sending authorization request to your browser…")
+            writeln!(f, "Sending authorization request to your browser:")
         } else {
-            let msg = "Click on the link to start the authorization process";
-            write!(f, "{msg}: {}", self.authorization_uri)
-        }
+            writeln!(f, "Click on the link to start the authorization process:")
+        }?;
+
+        writeln!(f, "{}", self.authorization_uri)
     }
 }
 

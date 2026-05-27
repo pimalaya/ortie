@@ -2,15 +2,12 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are currently being supported with security updates.
-
 | Version | Supported      |
 | ------- | -------------- |
 | 1.x.x   | :green_circle: |
-| 0.1.x   | :red_circle:   |
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Please report security issues privately by opening a confidential issue at <https://github.com/pimalaya/ortie/issues> or by sending an email to <pimalaya.org@posteo.net>.
 
-Tell them where to go, how often they can expect to get an update on a reported vulnerability, what to expect if the vulnerability is accepted or declined, etc.
+You can expect an acknowledgment within a few working days. Once the vulnerability is confirmed, a patch release will be cut and credited disclosure coordinated with you before the fix is announced publicly.

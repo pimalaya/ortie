@@ -1,65 +1,138 @@
+# ================================================================================
+# `ortie` configuration file.
+#
+# Loaded from the first valid path among:
+#   - $XDG_CONFIG_HOME/ortie/config.toml
+#   - $HOME/.config/ortie/config.toml
+#   - $HOME/.ortierc
+#
+# Override with `ortie -c <PATH>` or `ORTIE_CONFIG=<PATH>`. Multiple paths can
+# be passed at once, separated by `:`; the first one is the base and the rest
+# are deep-merged on top of it.
+#
+# Ortie does not yet ship a wizard: copy this file into one of the paths above
+# and edit by hand. Each `[accounts.<name>]` section declares one OAuth 2.0
+# account, picked at runtime with `-a <NAME>` (or via the `default = true`
+# flag).
+# ================================================================================
+
+# --------------------------------------------------------------------------------
+# Account
+# --------------------------------------------------------------------------------
+
 [accounts.example]
 
-# Make this current account the default one to use when no account is
-# specified in the CLI with the --account argument.
-#
+# Mark this account as the default one, used when no `-a <NAME>` is passed.
 default = true
 
-# The client credentials
+# OAuth 2.0 client credentials, as registered with your provider.
 #
+# `client-secret` is optional (PKCE-only public clients skip it). When set, it
+# accepts the same shapes as pimalaya-config secrets: `raw`, `command`, `env`.
 client-id = ""
 #client-secret.raw = "secret"
-#client-secret.command = "pass show example"
+#client-secret.command = "pass show ortie/example"
 
-# Endpoints, given by your OAuth provider.
-#
+# --------------------------------------------------------------------------------
+# Endpoints
+# --------------------------------------------------------------------------------
+
+# Endpoints given by your OAuth 2.0 provider.
 endpoints.authorization = ""
 endpoints.token = ""
+
+# Optional redirection endpoint. When omitted, defaults to
+# `http://127.0.0.1:0` (random port chosen by the OS). Set it explicitly to
+# match a redirect URI registered with the provider (e.g. `http://localhost`).
 #endpoints.redirection = "http://localhost"
 
-# Access token scopes
-#
+# --------------------------------------------------------------------------------
+# Scopes, PKCE and TLS
+# --------------------------------------------------------------------------------
+
+# OAuth 2.0 scopes granted to the access token.
 scopes = []
 
-# TLS configuration
-#
-#tls = "native-tls"
-#tls = "rustls-aws"
-#tls = "rustls-ring"
-
-# Enables Proof Key for Code Exchange (rfc7636)
-#
+# Enable Proof Key for Code Exchange (RFC 7636). Recommended for public
+# clients (no client secret).
 pkce = false
 
-# Automatically refreshes expired access token when using `ortie token
-# show` command.
+# TLS provider used for the HTTPS connection to the token endpoint.
 #
+# Possible values: "native-tls", "rustls-aws", "rustls-ring"
+#tls = "rustls-ring"
+
+# --------------------------------------------------------------------------------
+# Auto refresh
+# --------------------------------------------------------------------------------
+
+# When true, `ortie token show` automatically refreshes the access token if it
+# has expired. Equivalent to passing `--auto-refresh` on every call.
 auto-refresh = false
 
-# Token storage
+# --------------------------------------------------------------------------------
+# Storage
+# --------------------------------------------------------------------------------
 #
-# You need 2 different commands: one that reads your token, and one
-# that writes freshly issued or refreshed tokens. Mimosa is a good
-# candidate, but you can use whatever CLI matching your needs:
+# Ortie does not persist tokens on disk by itself; both reads and writes go
+# through a shell command. Any CLI that reads from / writes to stdin works.
+# A few good candidates, matched to your platform / setup:
 #
-# https://github.com/pimalaya/mimosa
-storage.read.command = ["mimosa", "password", "read", "ortie"]
-storage.write.command = ["mimosa", "password", "write", "ortie"]
+#   GNOME / Secret Service .... `secret-tool` (libsecret)
+#   KDE ....................... `kwallet-query`, `kwalletcli`
+#   macOS ..................... `security find/add-generic-password`
+#   Windows ................... `cmdkey`, PowerShell `Get-Credential`
+#   Headless / CI ............. `keyctl` (kernel keyutils)
+#   Terminal-first, portable .. `pass`, `gopass`
+#
+# Two TOML shapes are accepted on every `*.command` field:
+#
+#   - Array form, exec-style, no shell involved. First element is the
+#     program, the rest are its arguments. Whitespace / quoting follow
+#     the kernel exec rules.
+#
+#         storage.read.command = ["pass", "show", "ortie/example"]
+#
+#   - String form, wrapped through the platform shell:
+#     `/bin/sh -c "<string>"` on Unix, `cmd /C "<string>"` on Windows.
+#     Pick this when you want pipes, glob expansion or `$VAR`
+#     substitution.
+#
+#         storage.write.command = "pass insert -m -f ortie/example"
 
+storage.read.command = ["pass", "show", "ortie/example"]
+storage.write.command = "pass insert -m -f ortie/example"
+
+# --------------------------------------------------------------------------------
 # Hooks
+# --------------------------------------------------------------------------------
 #
-#hooks.on-issue.success.command = []
+# Each hook fires on token issuance (`on-issue`) or refresh (`on-refresh`),
+# split by outcome (`success` / `error`). Both accept an optional shell
+# `command` and an optional `notify` block.
+#
+# Success hooks receive the following environment variables on the command:
+#   ACCESS_TOKEN, TOKEN_TYPE, EXPIRES_IN, REFRESH_TOKEN, SCOPE
+#
+# Error hooks receive: ERROR, ERROR_DESCRIPTION, ERROR_URI
+#
+# The `notify` block (requires the `notify` cargo feature, default) expands
+# the same variables inside `summary` and `body` via shellexpand.
+#
+# Note: hook command fields accept the same array / string shapes as the
+# storage commands above. Use the string form when the command needs to
+# expand `$ACCESS_TOKEN`, `$EXPIRES_IN`, ... inside its arguments (the
+# shell sees them as env vars); use the array form to skip the shell.
+
+#hooks.on-issue.success.command = "logger 'ortie issued a token (expires in $EXPIRES_IN)'"
 #hooks.on-issue.success.notify.summary = "Ortie"
 #hooks.on-issue.success.notify.body = "Issued access token (expires in $EXPIRES_IN)"
-#
-#hooks.on-issue.error.command = []
+
 #hooks.on-issue.error.notify.summary = "Ortie"
 #hooks.on-issue.error.notify.body = "[$ERROR] Issue access token error\n$ERROR_DESCRIPTION"
-#
-#hooks.on-refresh.success.command = []
+
 #hooks.on-refresh.success.notify.summary = "Ortie"
 #hooks.on-refresh.success.notify.body = "Refreshed access token (expires in $EXPIRES_IN)"
-#
-#hooks.on-refresh.error.command = []
+
 #hooks.on-refresh.error.notify.summary = "Ortie"
 #hooks.on-refresh.error.notify.body = "[$ERROR] Refresh access token error\n$ERROR_DESCRIPTION"

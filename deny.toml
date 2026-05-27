@@ -1,0 +1,20 @@
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = [
+  "https://github.com/pimalaya/cli",
+  "https://github.com/pimalaya/config",
+  "https://github.com/pimalaya/io-http",
+  "https://github.com/pimalaya/stream",
+]
+
+[licenses]
+allow = [
+  "Apache-2.0",
+  "BSD-3-Clause",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MPL-2.0",
+  "Unicode-3.0",
+]

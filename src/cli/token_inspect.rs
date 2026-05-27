@@ -1,43 +1,24 @@
-// This file is part of Ortie, a CLI to manage OAuth tokens.
-//
-// Copyright (C) 2025-2026 Clément DOUIN <pimalaya.org@posteo.net>
-//
-// This program is free software: you can redistribute it and/or
-// modify it under the terms of the GNU Affero General Public License
-// as published by the Free Software Foundation, either version 3 of
-// the License, or (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-// Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public
-// License along with this program. If not, see
-// <https://www.gnu.org/licenses/>.
-
 use std::{fmt, time::Duration};
 
 use anyhow::Result;
 use clap::Parser;
 use humantime::format_duration;
-use io_oauth::v2_0::issue_access_token::IssueAccessTokenSuccessParams;
-use pimalaya_toolbox::terminal::printer::Printer;
+use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use crate::account::Account;
+use crate::{cli::account::Account, issue_access_token::IssueAccessTokenSuccessParams};
 
 /// Inspect metadata associated to the access token.
 ///
-/// Unlike the `token get` command, this command shows you metadata
-/// like the access token, the refresh token, when it was issued and
-/// when it expires.
+/// Unlike the `token show` command, this command shows you metadata
+/// like the token type, when it was issued, when it expires, the
+/// presence of a refresh token, and the granted scopes.
 #[derive(Debug, Parser)]
-pub struct InspectTokenCommand;
+pub struct TokenInspectCommand;
 
-impl InspectTokenCommand {
-    pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
-        let response = account.storage.read()?;
+impl TokenInspectCommand {
+    pub fn execute(self, printer: &mut impl Printer, mut account: Account) -> Result<()> {
+        let response = account.read_from_storage()?;
         printer.out(Report(response))
     }
 }

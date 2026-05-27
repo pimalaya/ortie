@@ -1,15 +1,15 @@
 [package]
 name = "ortie"
-description = "CLI to manage OAuth tokens"
-version = "1.1.0"
+description = "Library and CLI to manage OAuth tokens"
+version = "1.2.0"
 authors = ["soywod <clement.douin@posteo.net>"]
-rust-version = "1.87"
-edition = "2021"
-license = "AGPL-3.0-only"
-categories = ["command-line-utilities"]
-keywords = ["cli", "oauth", "token", "flow", "auth"]
+rust-version = "1.88"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+categories = ["command-line-utilities", "api-bindings"]
+keywords = ["oauth", "oauth2", "io-free", "coroutine", "cli"]
 homepage = "https://pimalaya.org"
-documentation = "https://github.com/pimalaya/ortie"
+documentation = "https://docs.rs/ortie/latest/ortie"
 repository = "https://github.com/pimalaya/ortie"
 
 [package.metadata.docs.rs]
@@ -17,41 +17,72 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["rustls-ring", "command", "notify"]
-
-# TLS
-#
-native-tls = ["pimalaya-toolbox/native-tls"]
-rustls-aws = ["pimalaya-toolbox/rustls-aws"]
-rustls-ring = ["pimalaya-toolbox/rustls-ring"]
-
-# Storages and hooks
-#
-command = ["dep:io-process", "pimalaya-toolbox/command"]
+default = ["pkce", "rustls-ring", "cli", "notify"]
+cli = ["client", "pkce", "dep:clap", "dep:dirs", "dep:humantime", "dep:pimalaya-cli", "dep:pimalaya-config", "dep:shellexpand"]
+client = ["dep:open", "dep:pimalaya-stream", "pimalaya-stream/std"]
+native-tls = ["client", "pimalaya-stream/native-tls", "io-http/native-tls"]
+rustls-aws = ["client", "pimalaya-stream/rustls-aws", "io-http/rustls-aws"]
+rustls-ring = ["client", "pimalaya-stream/rustls-ring", "io-http/rustls-ring"]
+vendored = ["pimalaya-stream?/vendored", "io-http/vendored", "notify-rust?/d_vendored"]
+pkce = ["dep:sha2"]
+rfc7636 = ["pkce"]
 notify = ["dep:notify-rust"]
 
-# Vendored (OpenSSL and D-Bus)
-#
-vendored = ["pimalaya-toolbox/vendored", "notify-rust?/d_vendored"]
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+[[bin]]
+name = "ortie"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[[example]]
+name = "authorization-code-grant"
+path = "examples/authorization_code_grant.rs"
+required-features = ["pkce"]
 
 [build-dependencies]
-pimalaya-toolbox = { version = "0.0.4", default-features = false, features = ["build"] }
+pimalaya-cli = { version = "0.0.1", default-features = false, features = ["build"], optional = true }
+
+[dev-dependencies]
+env_logger = "0.11"
+rustls = "0.23"
+rustls-platform-verifier = "0.7"
 
 [dependencies]
 anyhow = "1"
 base64 = "0.22"
-clap = { version = "4.4", features = ["derive", "wrap_help"] }
-dirs = "6.0"
-http = "1"
-humantime = "2.2"
-io-oauth = { version = "0.0.4", default-features = false, features = ["oauth2", "pkce"] }
-io-process = { version = "0.0.2", default-features = false, features = ["expand", "serde", "std"], optional = true }
-io-stream = { version = "0.0.2", default-features = false, features = ["std"] }
+clap = { version = "4.4", features = ["derive", "wrap_help"], optional = true }
+dirs = { version = "6.0", optional = true }
+http = "1.3"
+humantime = { version = "2.2", optional = true }
+io-http = { version = "0.0.3", default-features = false }
 log = "0.4"
 notify-rust = { version = "4.11", default-features = false, features = ["d"], optional = true }
-open = "5.3"
-pimalaya-toolbox = { version = "0.0.4", default-features = false, features = ["config", "secret", "stream", "terminal"] }
+open = { version = "5.3", optional = true }
+pimalaya-cli = { version = "0.0.1", default-features = false, features = ["terminal"], optional = true }
+pimalaya-config = { version = "0.0.1", default-features = false, features = ["toml", "secret"], optional = true }
+pimalaya-stream = { version = "0.0.1", default-features = false, optional = true }
+rand = "0.10"
 secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
-shellexpand = "3.1"
-url = "2.5"
+serde_json = "1"
+sha2 = { version = "=0.11.0-rc.5", features = ["zeroize"], optional = true }
+shellexpand = { version = "3.1", optional = true }
+thiserror = "2"
+url = { version = "2.5", features = ["serde"] }
+
+# [patch.crates-io]
+# io-http.path = "../io-http"
+# pimalaya-cli.path = "../cli"
+# pimalaya-config.path = "../config"
+# pimalaya-stream.path = "../stream"
+
+[patch.crates-io]
+io-http.git = "https://github.com/pimalaya/io-http"
+pimalaya-cli.git = "https://github.com/pimalaya/cli"
+pimalaya-config.git = "https://github.com/pimalaya/config"
+pimalaya-stream.git = "https://github.com/pimalaya/stream"
