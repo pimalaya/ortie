@@ -1,6 +1,6 @@
 # 🔑 Ortie [![Documentation](https://img.shields.io/docsrs/ortie?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/ortie/latest/ortie) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-Library and CLI to manage OAuth 2.0 tokens, written in Rust.
+CLI and lib to manage OAuth 2.0 tokens, written in Rust.
 
 This repository ships three layers:
 

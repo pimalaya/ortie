@@ -1,5 +1,5 @@
 {
-  description = "Library and CLI to manage OAuth tokens, written in Rust";
+  description = "CLI and lib to manage OAuth 2.0 tokens, written in Rust";
 
   inputs = {
     nixpkgs = {
