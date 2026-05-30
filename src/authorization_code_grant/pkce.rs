@@ -1,7 +1,16 @@
-use std::{borrow::Cow, str::FromStr};
+//! Proof Key for Code Exchange by OAuth Public Clients.
+//!
+//! Refs: <https://datatracker.ietf.org/doc/html/rfc7636>
 
-use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
+use core::str::FromStr;
+
+use alloc::{borrow::Cow, string::String};
+#[cfg(feature = "client")]
+use alloc::{boxed::Box, vec::Vec};
+
+use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
 use log::debug;
+#[cfg(feature = "client")]
 use rand::seq::IndexedRandom;
 use secrecy::{ExposeSecret, SecretBox};
 use sha2::{Digest, Sha256};
@@ -17,7 +26,8 @@ const UNRESERVED: [u8; 66] = [
     b'_', b'~',
 ];
 
-#[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "client", derive(Default))]
+#[derive(Clone, Debug)]
 pub struct PkceCodeChallenge {
     pub method: PkceCodeChallengeMethod,
     pub verifier: PkceCodeVerifier,
@@ -62,8 +72,9 @@ impl PkceCodeChallengeMethod {
 pub struct PkceCodeVerifier(SecretBox<[u8]>);
 
 impl PkceCodeVerifier {
+    #[cfg(feature = "client")]
     pub fn new(size: u8) -> Self {
-        // code-verifier = 43*128unreserved
+        // NOTE: code-verifier = 43*128unreserved
         let size = size.clamp(43, 128) as usize;
 
         let random: Vec<u8> = UNRESERVED.sample(&mut rand::rng(), size).cloned().collect();
@@ -78,9 +89,10 @@ impl PkceCodeVerifier {
     }
 }
 
+#[cfg(feature = "client")]
 impl Default for PkceCodeVerifier {
     fn default() -> Self {
-        // code-verifier = 43*128unreserved
+        // NOTE: code-verifier = 43*128unreserved
         let random: [u8; 43] = UNRESERVED
             .sample_array(&mut rand::rng())
             // SAFETY: unreserved is not empty

@@ -1,3 +1,5 @@
+//! `token` subcommand router (show, refresh, inspect).
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
@@ -14,6 +16,7 @@ use crate::cli::{
 /// refresh token (if available).
 #[derive(Subcommand, Debug)]
 pub enum TokenCommand {
+    #[command(visible_alias = "get")]
     Show(TokenShowCommand),
     Inspect(TokenInspectCommand),
     Refresh(TokenRefreshCommand),

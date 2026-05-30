@@ -1,3 +1,5 @@
+//! `token show` subcommand: print the current access token.
+
 use std::fmt;
 
 use anyhow::Result;
@@ -26,12 +28,11 @@ impl TokenShowCommand {
     pub fn execute(self, printer: &mut impl Printer, mut account: Account) -> Result<()> {
         let mut token = account.read_from_storage()?;
 
-        if self.auto_refresh || account.auto_refresh {
-            if let Some(refresh_token) = token.refresh_token {
-                if let Some(0) = token.expires_in {
-                    token = TokenRefreshCommand::refresh(account, refresh_token)?;
-                }
-            }
+        if (self.auto_refresh || account.auto_refresh)
+            && let Some(refresh_token) = token.refresh_token
+            && let Some(0) = token.expires_in
+        {
+            token = TokenRefreshCommand::refresh(account, refresh_token)?;
         }
 
         printer.out(AccessToken {

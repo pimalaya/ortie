@@ -2,18 +2,30 @@
 //!
 //! Refs: <https://datatracker.ietf.org/doc/html/rfc6749#section-6>
 
-use std::{borrow::Cow, collections::HashSet};
+use core::fmt;
+
+use alloc::{
+    borrow::Cow,
+    collections::BTreeSet,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use io_http::{
-    rfc9110::request::HttpRequest,
-    rfc9112::send::{Http11Send, Http11SendError, Http11SendResult},
+    coroutine::*,
+    rfc9110::{
+        request::HttpRequest,
+        send::{HttpSendOutput, HttpSendYield},
+    },
+    rfc9112::send::{Http11Send, Http11SendError},
 };
 use secrecy::{ExposeSecret, SecretString};
 use thiserror::Error;
-use url::{form_urlencoded::Serializer, Url};
+use url::{Url, form_urlencoded::Serializer};
 
 use crate::issue_access_token::{
     AccessTokenResponse, IssueAccessTokenErrorParams, IssueAccessTokenSuccessParams,
+    parse_http_date,
 };
 
 /// Errors that can occur during the coroutine progression.
@@ -69,29 +81,38 @@ impl RefreshOauth2AccessToken {
     /// Makes the coroutine progress.
     pub fn resume(&mut self, arg: Option<&[u8]>) -> RefreshOauth2AccessTokenResult {
         match self.send.resume(arg) {
-            Http11SendResult::Ok { response, .. } if response.status.is_success() => {
+            HttpCoroutineState::Complete(Ok(HttpSendOutput { response, .. }))
+                if response.status.is_success() =>
+            {
                 match IssueAccessTokenSuccessParams::try_from(response.body.as_slice()) {
-                    Ok(res) => RefreshOauth2AccessTokenResult::Ok(Ok(res)),
+                    Ok(mut res) => {
+                        res.issued_at = response.header("date").and_then(parse_http_date);
+                        RefreshOauth2AccessTokenResult::Ok(Ok(res))
+                    }
                     Err(err) => RefreshOauth2AccessTokenResult::Err(err.into()),
                 }
             }
-            Http11SendResult::Ok { response, .. } => {
+            HttpCoroutineState::Complete(Ok(HttpSendOutput { response, .. })) => {
                 match IssueAccessTokenErrorParams::try_from(response.body.as_slice()) {
                     Ok(res) => RefreshOauth2AccessTokenResult::Ok(Err(res)),
                     Err(err) => RefreshOauth2AccessTokenResult::Err(err.into()),
                 }
             }
-            Http11SendResult::WantsRead => RefreshOauth2AccessTokenResult::WantsRead,
-            Http11SendResult::WantsWrite(bytes) => {
+            HttpCoroutineState::Yielded(HttpSendYield::WantsRead) => {
+                RefreshOauth2AccessTokenResult::WantsRead
+            }
+            HttpCoroutineState::Yielded(HttpSendYield::WantsWrite(bytes)) => {
                 RefreshOauth2AccessTokenResult::WantsWrite(bytes)
             }
-            Http11SendResult::WantsRedirect { url, response, .. } => {
+            HttpCoroutineState::Yielded(HttpSendYield::WantsRedirect { url, response, .. }) => {
                 RefreshOauth2AccessTokenResult::Err(RefreshOauth2AccessTokenError::Redirect {
                     url,
                     code: *response.status,
                 })
             }
-            Http11SendResult::Err(err) => RefreshOauth2AccessTokenResult::Err(err.into()),
+            HttpCoroutineState::Complete(Err(err)) => {
+                RefreshOauth2AccessTokenResult::Err(err.into())
+            }
         }
     }
 }
@@ -109,7 +130,7 @@ impl RefreshOauth2AccessToken {
 pub struct RefreshAccessTokenParams<'a> {
     pub client_id: String,
     pub refresh_token: SecretString,
-    pub scopes: HashSet<Cow<'a, str>>,
+    pub scopes: BTreeSet<Cow<'a, str>>,
 }
 
 impl<'a> RefreshAccessTokenParams<'a> {
@@ -117,7 +138,7 @@ impl<'a> RefreshAccessTokenParams<'a> {
         Self {
             client_id: client_id.to_string(),
             refresh_token: refresh_token.into(),
-            scopes: HashSet::new(),
+            scopes: BTreeSet::new(),
         }
     }
 
@@ -145,8 +166,8 @@ impl<'a> RefreshAccessTokenParams<'a> {
     }
 }
 
-impl ToString for RefreshAccessTokenParams<'_> {
-    fn to_string(&self) -> String {
-        self.to_serializer().finish()
+impl fmt::Display for RefreshAccessTokenParams<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.to_serializer().finish())
     }
 }

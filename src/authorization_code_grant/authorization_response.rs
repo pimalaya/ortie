@@ -1,10 +1,15 @@
-use std::borrow::Cow;
+//! Module dedicated to the section 4.1.2: Authorization Response.
+//!
+//! Refs: <https://datatracker.ietf.org/doc/html/rfc6749#section-4.1.2>
+
+use alloc::borrow::Cow;
 
 use log::debug;
 use serde::{
-    de::value::{CowStrDeserializer, Error},
     Deserialize, Serialize,
+    de::value::{CowStrDeserializer, Error},
 };
+use thiserror::Error as ThisError;
 use url::Url;
 
 use crate::authorization_code_grant::state::State;
@@ -12,6 +17,50 @@ use crate::authorization_code_grant::state::State;
 pub enum AuthorizeParams<'a> {
     Success(AuthorizeSuccessParams<'a>),
     Error(AuthorizeErrorParams<'a>),
+}
+
+impl<'a> AuthorizeParams<'a> {
+    /// Validate the authorization response and return the authorization
+    /// code on success.
+    ///
+    /// When `expected_state` is `Some`, the response must carry a
+    /// matching state (CSRF protection per RFC 6749 §10.12); when
+    /// `None`, the state field is not checked.
+    pub fn validate(
+        self,
+        expected_state: Option<&State>,
+    ) -> Result<Cow<'a, str>, AuthorizeValidateError<'a>> {
+        match self {
+            Self::Error(err) => Err(AuthorizeValidateError::Server(err)),
+            Self::Success(success) => {
+                if let Some(expected) = expected_state {
+                    match &success.state {
+                        None => return Err(AuthorizeValidateError::StateMissing),
+                        Some(got) if expected != got.as_ref() => {
+                            return Err(AuthorizeValidateError::StateMismatch);
+                        }
+                        Some(_) => {}
+                    }
+                }
+                Ok(success.code)
+            }
+        }
+    }
+}
+
+/// Errors returned by [`AuthorizeParams::validate`].
+#[derive(Debug, ThisError)]
+pub enum AuthorizeValidateError<'a> {
+    /// The authorization server returned an error response.
+    #[error("Authorization error: {:?}", _0.error)]
+    Server(AuthorizeErrorParams<'a>),
+    /// A state was expected in the response but none was returned.
+    #[error("Authorization state missing from response")]
+    StateMissing,
+    /// The state returned by the server does not match the expected
+    /// one (CSRF mismatch).
+    #[error("Authorization state mismatch")]
+    StateMismatch,
 }
 
 impl<'a> From<&'a Url> for AuthorizeParams<'a> {

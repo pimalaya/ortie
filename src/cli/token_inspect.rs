@@ -1,4 +1,9 @@
-use std::{fmt, time::Duration};
+//! `token inspect` subcommand: print metadata about the access token.
+
+use std::{
+    fmt,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::Result;
 use clap::Parser;
@@ -31,8 +36,13 @@ impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Token type: {}", self.0.token_type.to_lowercase())?;
 
-        if let Ok(mut elapsed) = self.0.issued_at.elapsed() {
-            elapsed = Duration::from_secs(elapsed.as_secs());
+        let now_epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .ok();
+
+        if let (Some(issued_at), Some(now)) = (self.0.issued_at, now_epoch) {
+            let elapsed = Duration::from_secs(now.saturating_sub(issued_at));
             writeln!(f)?;
             write!(f, "Issued: {} ago", format_duration(elapsed))?;
         }
@@ -42,15 +52,18 @@ impl fmt::Display for Report {
                 writeln!(f)?;
                 write!(f, "Expired: unknown")?;
             }
-            Some(0) => {
-                writeln!(f)?;
-                write!(f, "Expired: true")?;
-            }
             Some(exp) => {
-                let duration = Duration::from_secs(exp as u64);
-                let duration = format_duration(duration);
+                let remaining = match (self.0.issued_at, now_epoch) {
+                    (Some(issued_at), Some(now)) => (issued_at + exp as u64).saturating_sub(now),
+                    _ => exp as u64,
+                };
                 writeln!(f)?;
-                write!(f, "Expires in: {duration}")?;
+                if remaining == 0 {
+                    write!(f, "Expired: true")?;
+                } else {
+                    let duration = format_duration(Duration::from_secs(remaining));
+                    write!(f, "Expires in: {duration}")?;
+                }
             }
         }
 

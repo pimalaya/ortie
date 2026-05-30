@@ -1,3 +1,5 @@
+//! `token refresh` subcommand: refresh the current access token.
+
 use std::time::Duration;
 
 use anyhow::{Result, anyhow, bail};
@@ -10,7 +12,9 @@ use secrecy::SecretBox;
 use pimalaya_config::secret::Secret;
 
 use crate::{
-    cli::account::Account, client::OauthClient, issue_access_token::IssueAccessTokenSuccessParams,
+    cli::account::Account, client::OauthClientStd,
+    issue_access_token::IssueAccessTokenSuccessParams,
+    refresh_access_token::RefreshAccessTokenParams,
 };
 
 /// Refresh the current access token.
@@ -50,11 +54,18 @@ impl TokenRefreshCommand {
     ) -> Result<IssueAccessTokenSuccessParams> {
         let client_secret = account.client_secret.clone().map(Secret::get).transpose()?;
 
-        let mut client =
-            OauthClient::new(&account.token_endpoint, &account.tls, &account.client_id);
+        let mut client = OauthClientStd::connect(
+            account.token_endpoint.clone(),
+            &account.tls,
+            account.client_id.clone(),
+        )?;
         client.client_secret = client_secret;
 
-        let res = client.refresh_access_token(refresh_token, account.scopes.iter().cloned())?;
+        let res = client.refresh_access_token(RefreshAccessTokenParams {
+            client_id: account.client_id.clone(),
+            refresh_token,
+            scopes: account.scopes.iter().map(Into::into).collect(),
+        })?;
 
         match res {
             Ok(mut res) => {

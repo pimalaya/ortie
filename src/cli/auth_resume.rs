@@ -1,4 +1,11 @@
-use std::{borrow::Cow, time::Duration};
+//! `auth resume` subcommand: complete an authorization code grant flow.
+
+use alloc::{
+    borrow::Cow,
+    format,
+    string::{String, ToString},
+};
+use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use clap::Parser;
@@ -15,10 +22,13 @@ use pimalaya_config::secret::Secret;
 
 use crate::{
     authorization_code_grant::{
-        authorization_response::AuthorizeParams, pkce::PkceCodeVerifier, state::State,
+        access_token_request::AccessTokenRequestParams,
+        authorization_response::{AuthorizeParams, AuthorizeValidateError},
+        pkce::PkceCodeVerifier,
+        state::State,
     },
     cli::account::Account,
-    client::OauthClient,
+    client::OauthClientStd,
 };
 
 /// Resume an existing OAuth 2.0 Authorization Code Grant flow.
@@ -68,9 +78,9 @@ pub struct AuthResumeCommand {
 
 impl AuthResumeCommand {
     pub fn execute(self, printer: &mut impl Printer, mut account: Account) -> Result<()> {
-        let params = match AuthorizeParams::from(&self.redirected_uri) {
-            AuthorizeParams::Success(params) => params,
-            AuthorizeParams::Error(params) => {
+        let code = match AuthorizeParams::from(&self.redirected_uri).validate(self.state.as_ref()) {
+            Ok(code) => code,
+            Err(AuthorizeValidateError::Server(params)) => {
                 let err = anyhow!("Authorization error (code {:?})", params.error);
                 return Err(match (params.error_description, params.error_uri) {
                     (None, None) => err,
@@ -79,18 +89,16 @@ impl AuthResumeCommand {
                     (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
                 });
             }
-        };
-
-        let state = self.state.as_ref().map(Cow::Borrowed);
-
-        if params.state != state {
-            let req = self.state.as_ref().map(|state| state.expose());
-            let res = params.state.as_ref().map(|state| state.expose());
-
-            let err = anyhow!("Request state {req:?} differs from response state {res:?}")
-                .context("Authorization request and response states do not match");
-
-            return Err(err);
+            Err(AuthorizeValidateError::StateMissing) => {
+                return Err(anyhow!("Authorization response is missing state"));
+            }
+            Err(AuthorizeValidateError::StateMismatch) => {
+                let req = self.state.as_ref().map(|state| state.expose());
+                return Err(
+                    anyhow!("Request state {req:?} does not match response state")
+                        .context("Authorization request and response states do not match"),
+                );
+            }
         };
 
         let client_secret = account.client_secret.clone().map(Secret::get).transpose()?;
@@ -106,15 +114,20 @@ impl AuthResumeCommand {
                     .map(|uri| Cow::Owned(uri.to_string()))
             });
 
-        let mut client =
-            OauthClient::new(&account.token_endpoint, &account.tls, &account.client_id);
+        let mut client = OauthClientStd::connect(
+            account.token_endpoint.clone(),
+            &account.tls,
+            account.client_id.clone(),
+        )?;
         client.client_secret = client_secret;
 
-        let res = client.request_access_token(
-            params.code,
+        let res = client.request_access_token(AccessTokenRequestParams {
+            code,
             redirect_uri,
-            self.pkce.as_ref().map(Cow::Borrowed),
-        )?;
+            client_id: account.client_id.as_str().into(),
+            #[cfg(feature = "pkce")]
+            pkce_code_verifier: self.pkce.as_ref().map(Cow::Borrowed),
+        })?;
 
         match res {
             Ok(res) => {

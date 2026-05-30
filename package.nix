@@ -103,7 +103,7 @@ rustPlatform.buildRustPackage {
     description = "CLI to manage OAuth 2.0 tokens";
     mainProgram = "ortie";
     homepage = "https://github.com/pimalaya/ortie";
-    changelog = "https://github.com/pimalaya/ortie/blob/v${version}/CHANGELOG.md";
+    changelog = "https://github.com/pimalaya/ortie/blob/master/CHANGELOG.md";
     license = [
       lib.licenses.mit
       lib.licenses.asl20

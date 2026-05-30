@@ -12,6 +12,7 @@
 //!
 //! Override with `-c, --config <PATH>` or `ORTIE_CONFIG=<PATH>`.
 
+use alloc::{string::String, vec::Vec};
 use std::{collections::HashMap, process::Command};
 
 use pimalaya_config::{command, secret::Secret, toml::TomlConfig};

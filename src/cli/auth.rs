@@ -1,3 +1,5 @@
+//! `auth` subcommand router (get, resume).
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
@@ -13,6 +15,7 @@ use crate::cli::{account::Account, auth_get::AuthGetCommand, auth_resume::AuthRe
 #[derive(Subcommand, Debug)]
 pub enum AuthCommand {
     Get(AuthGetCommand),
+    #[command(visible_alias = "continue")]
     Resume(AuthResumeCommand),
 }
 

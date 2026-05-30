@@ -2,7 +2,7 @@
 //!
 //! Refs: <https://datatracker.ietf.org/doc/html/rfc6749#section-5>
 
-use std::time::SystemTime;
+use alloc::string::String;
 
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize, Serializer};
@@ -55,28 +55,79 @@ pub struct IssueAccessTokenSuccessParams {
     /// Refs: <https://datatracker.ietf.org/doc/html/rfc6749#section-3.3>
     pub scope: Option<String>,
 
-    /// Time the access token was issued at.
+    /// Unix epoch seconds when the access token was issued.
     ///
-    /// This field does not belong to the specs, its sole purpose is
-    /// to track whenever the token is expired or not.
-    #[serde(default = "SystemTime::now")]
-    pub issued_at: SystemTime,
+    /// Outside the OAuth 2.0 specs; populated by the coroutine from
+    /// the HTTP `Date` response header (RFC 9110 §5.6.7). `None`
+    /// when the server did not advertise a `Date`. Callers compute
+    /// expiration as `issued_at + expires_in` against their own
+    /// clock.
+    #[serde(default)]
+    pub issued_at: Option<u64>,
 }
 
-impl IssueAccessTokenSuccessParams {
-    pub fn sync_expires_in(&mut self) {
-        let Some(expires_in) = &mut self.expires_in else {
-            return;
-        };
+/// Parse an HTTP IMF-fixdate string (RFC 9110 §5.6.7) into Unix
+/// epoch seconds (UTC).
+///
+/// Format: `Sun, 06 Nov 1994 08:49:37 GMT` (29 ASCII bytes). Returns
+/// `None` on any structural deviation. Does not validate that the
+/// day-of-month is legal for the month/year; relies on origin
+/// servers to send well-formed dates.
+pub fn parse_http_date(s: &str) -> Option<u64> {
+    let b = s.as_bytes();
 
-        let Ok(elapsed) = self.issued_at.elapsed() else {
-            return;
-        };
-
-        let elapsed = elapsed.as_secs() as usize;
-
-        *expires_in -= elapsed.min(*expires_in);
+    if b.len() != 29 || &b[26..29] != b"GMT" {
+        return None;
     }
+
+    let day = parse_2_digits(&b[5..7])? as u64;
+    let month: u64 = match &b[8..11] {
+        b"Jan" => 1,
+        b"Feb" => 2,
+        b"Mar" => 3,
+        b"Apr" => 4,
+        b"May" => 5,
+        b"Jun" => 6,
+        b"Jul" => 7,
+        b"Aug" => 8,
+        b"Sep" => 9,
+        b"Oct" => 10,
+        b"Nov" => 11,
+        b"Dec" => 12,
+        _ => return None,
+    };
+    let year = parse_4_digits(&b[12..16])? as u64;
+    let hour = parse_2_digits(&b[17..19])? as u64;
+    let min = parse_2_digits(&b[20..22])? as u64;
+    let sec = parse_2_digits(&b[23..25])? as u64;
+
+    // NOTE: Howard Hinnant's days_from_civil algorithm; treats March
+    // as the first month so the leap day lands at the end of the year.
+    let (y, m) = if month <= 2 {
+        (year - 1, month + 9)
+    } else {
+        (year, month - 3)
+    };
+    let era = y / 400;
+    let yoe = y - era * 400;
+    let doy = (153 * m + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days_from_epoch = era * 146097 + doe - 719468;
+
+    Some(days_from_epoch * 86400 + hour * 3600 + min * 60 + sec)
+}
+
+fn parse_2_digits(b: &[u8]) -> Option<u32> {
+    let a = (b[0] as u32).wrapping_sub(b'0' as u32);
+    let c = (b[1] as u32).wrapping_sub(b'0' as u32);
+    if a > 9 || c > 9 {
+        return None;
+    }
+    Some(a * 10 + c)
+}
+
+fn parse_4_digits(b: &[u8]) -> Option<u32> {
+    Some(parse_2_digits(&b[0..2])? * 100 + parse_2_digits(&b[2..4])?)
 }
 
 /// Serializes success params into JSON string.

@@ -1,7 +1,8 @@
 use std::{
     borrow::Cow,
+    collections::BTreeMap,
     env,
-    io::{stdin, stdout, Read, Write},
+    io::{Read, Write, stdin, stdout},
     net::TcpStream,
     sync::Arc,
 };
@@ -38,7 +39,7 @@ fn main() {
         Err(_) => read_line("Scope?"),
     };
 
-    let mut auth_uri: Url = match env::var("AUTHORIZATION_URI") {
+    let auth_uri: Url = match env::var("AUTHORIZATION_URI") {
         Ok(url) => url.parse().unwrap(),
         Err(_) => read_line("Authorization URL?").parse().unwrap(),
     };
@@ -52,16 +53,17 @@ fn main() {
 
     // 1. authorization request: build URL for user to browse
 
-    let request_params = AuthorizationRequestParams {
+    let state = State::default();
+    let auth_uri = AuthorizationRequestParams {
         client_id: client_id.as_str().into(),
         redirect_uri: Some(redirect_uri.clone().into()),
         scope: scope.split_whitespace().map(Into::into).collect(),
-        state: Some(Cow::Owned(State::default())),
+        state: Some(Cow::Borrowed(&state)),
         #[cfg(feature = "pkce")]
         pkce_code_challenge: None,
-    };
-
-    auth_uri.set_query(Some(&request_params.to_form_url_encoded_string()));
+        extras: BTreeMap::new(),
+    }
+    .build_url(&auth_uri);
 
     println!();
     println!("Navigate to the following URI: {auth_uri}");
@@ -78,7 +80,7 @@ fn main() {
         panic!("invalid response params");
     };
 
-    if request_params.state != response_params.state {
+    if Some(Cow::Borrowed(&state)) != response_params.state {
         panic!("states mismatch");
     }
 

@@ -1,3 +1,6 @@
+//! Root clap parser for the `ortie` binary.
+
+use alloc::vec::Vec;
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
@@ -15,6 +18,7 @@ use pimalaya_config::toml::TomlConfig;
 
 use crate::cli::{account::Account, auth::AuthCommand, config::Config, token::TokenCommand};
 
+/// Top-level command-line interface for the `ortie` binary.
 #[derive(Parser, Debug)]
 #[command(name = env!("CARGO_PKG_NAME"))]
 #[command(author, version)]
@@ -35,6 +39,7 @@ pub struct Cli {
     pub log: LogFlags,
 }
 
+/// Top-level subcommand router.
 #[derive(Subcommand, Debug)]
 pub enum Command {
     #[command(subcommand)]

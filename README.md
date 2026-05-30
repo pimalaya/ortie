@@ -5,7 +5,7 @@ CLI and lib to manage OAuth 2.0 tokens, written in Rust.
 This repository ships three layers:
 
 - Low-level **I/O-free** coroutines: no_std-friendly state machines that emit read/write requests for any runtime.
-- Mid-level **blocking client** wrapping the coroutines over a `pimalaya-stream` connection.
+- Mid-level **blocking client** wrapping the coroutines around any `Read + Write + Send` stream, or (with a TLS feature on) building the TLS stream itself via [pimalaya-stream](https://github.com/pimalaya/stream).
 - High-level **CLI** consuming the std client, configured through TOML.
 
 ## Table of contents
@@ -26,6 +26,7 @@ This repository ships three layers:
   - [Show an access token](#show-an-access-token)
   - [Debugging](#debugging)
 - [Alternatives](#alternatives)
+- [AI disclosure](#ai-disclosure)
 - [Social](#social)
 - [Sponsoring](#sponsoring)
 
@@ -54,13 +55,13 @@ Ortie can be installed with the installer:
 
 *As root:*
 
-```text
+```shell
 curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | sudo sh
 ```
 
 *As a regular user:*
 
-```text
+```shell
 curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | PREFIX=~/.local sh
 ```
 
@@ -73,13 +74,13 @@ For a more up-to-date version than the latest release, check out the [releases](
 
 ### Cargo
 
-```text
+```shell
 cargo install --locked ortie
 ```
 
 For the git tip:
 
-```text
+```shell
 cargo install --locked --git https://github.com/pimalaya/ortie.git
 ```
 
@@ -87,19 +88,19 @@ cargo install --locked --git https://github.com/pimalaya/ortie.git
 
 If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
 
-```text
+```shell
 nix profile install github:pimalaya/ortie
 ```
 
 Or run without installing:
 
-```text
+```shell
 nix run github:pimalaya/ortie
 ```
 
 ### Sources
 
-```text
+```shell
 git clone https://github.com/pimalaya/ortie
 cd ortie
 nix run
@@ -169,41 +170,53 @@ client-secret.raw = "<your-client-secret>"
 
 ### Library
 
-The low-level coroutines live under `ortie::authorization_code_grant`, `ortie::issue_access_token` and `ortie::refresh_access_token`; they emit `WantsRead` / `WantsWrite(bytes)` events the caller drives against any transport. The mid-level `ortie::client::OauthClient` wraps them with a blocking `pimalaya-stream` connection:
+The low-level coroutines live under `ortie::authorization_code_grant`, `ortie::issue_access_token` and `ortie::refresh_access_token`; they emit `WantsRead` / `WantsWrite(bytes)` events the caller pumps against any transport. The mid-level `ortie::client::OauthClientStd` inlines the loop against a single boxed stream, with two construction paths:
 
 ```rust,ignore
-use ortie::client::OauthClient;
+use ortie::{
+    client::OauthClientStd,
+    refresh_access_token::RefreshAccessTokenParams,
+};
 
-let mut client = OauthClient::new(&token_endpoint, &tls, &client_id);
-let res = client.refresh_access_token(refresh_token, scopes)?;
+// Light: caller owns the connection (TCP, mock, plaintext, …).
+let mut client = OauthClientStd::new(my_stream, token_endpoint, &client_id);
+
+// Full (requires `rustls-ring` / `rustls-aws` / `native-tls`):
+// opens the TLS stream itself via pimalaya-stream.
+let mut client = OauthClientStd::connect(token_endpoint, &tls, &client_id)?;
+
+let res = client.refresh_access_token(RefreshAccessTokenParams {
+    client_id: client_id.into(),
+    refresh_token,
+    scopes,
+})?;
 ```
 
 A complete example using the authorization code grant flow lives in [examples/authorization_code_grant.rs](./examples/authorization_code_grant.rs).
 
 ### Request a new access token
 
-```text
+```shell
 $ ortie auth get
 
 Created authorization request with:
  - state: RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4
  - pkce: oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6
 
-Sending authorization request to your browser…
-Spawning fake HTTP redirection server…
-Waiting for redirection…
+Sending authorization request to your browser:
+https://login.example.com/oauth/authorize?…
+Wait for redirection…
 ```
 
 Follow the browser flow, then on success the terminal shows:
 
-```text
-Continue authorization process…
+```shell
 Access token successfully issued (expires in 1h)
 ```
 
 If the redirection server cannot start (port permission denied, etc.), copy the URL you are redirected to and complete the flow manually:
 
-```text
+```shell
 ortie auth resume \
   --state RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4 \
   --pkce oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6 \
@@ -212,7 +225,7 @@ ortie auth resume \
 
 ### Refresh an access token
 
-```text
+```shell
 $ ortie token refresh
 
 Access token successfully refreshed (expires in 1h)
@@ -220,7 +233,7 @@ Access token successfully refreshed (expires in 1h)
 
 ### Show an access token
 
-```text
+```shell
 $ ortie token show
 
 EwA4BOl3BAAUcDnR9grBJokeAHaUV8R3+rVHX+IAAQfw9oZLztQS8bo8NvyWmbs…
@@ -230,7 +243,7 @@ The `--auto-refresh` flag (or the `auto-refresh = true` config option) automatic
 
 Inspect token metadata:
 
-```text
+```shell
 $ ortie token inspect
 
 Token type: bearer
@@ -246,7 +259,7 @@ The `--log-level <LEVEL>` flag controls log verbosity (`off`, `error`, `warn`, `
 
 Logs go to stderr by default; redirect them with `--log-file <PATH>` or shell redirection:
 
-```text
+```shell
 ortie token show --log-level debug --log-file /tmp/ortie.log
 ortie token show --log-level trace 2>/tmp/ortie.log
 ```
@@ -256,6 +269,22 @@ ortie token show --log-level trace 2>/tmp/ortie.log
 - [pizauth](https://github.com/ltratt/pizauth): daemon-oriented alternative
 - [oama](https://github.com/pdobsan/oama): Haskell alternative
 - [mutt_oauth2.py](https://gitlab.com/muttmua/mutt/-/blob/master/contrib/mutt_oauth2.py): Python script alternative
+
+## AI disclosure
+
+This project is developed with AI assistance. This section documents how, so users and downstream packagers can make informed decisions.
+
+- **Tools**: Claude Code (Anthropic), Opus 4.7, invoked locally with a persistent project-scoped memory and a small set of repo-specific rules.
+
+- **Used for**: Refactors, mechanical multi-file edits, boilerplate (feature gates, error enums, derive macros, trait impls), test scaffolding, doc polish, exploratory design conversations.
+
+- **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
+
+- **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit (`nix develop --command cargo check / cargo test / cargo fmt`). Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
+
+- **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong: off-by-one errors, missed edge cases, plausible but nonexistent APIs, stale RFC references. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
+
+- **Last reviewed**: 30/05/2026
 
 ## Social
 

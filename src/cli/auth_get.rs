@@ -1,12 +1,13 @@
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-    fmt,
-    io::{BufRead, BufReader, IsTerminal, Write, stdout},
-    net::{Shutdown, TcpListener},
-};
+//! `auth get` subcommand: initiate a new authorization code grant flow.
 
-use anyhow::{Result, bail};
+use alloc::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+    string::{String, ToString},
+};
+use std::{fmt, io::IsTerminal, io::stdout};
+
+use anyhow::Result;
 use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
@@ -23,6 +24,7 @@ use crate::{
         state::State,
     },
     cli::{account::Account, auth_resume::AuthResumeCommand},
+    client,
 };
 
 /// Initiate a new OAuth 2.0 Authorization Code Grant from scratch.
@@ -36,8 +38,8 @@ impl AuthGetCommand {
     pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
         let interactive = stdout().is_terminal();
 
-        // generate a URL-friendly state for better user
-        // experience
+        // NOTE: re-encode the random state in URL-safe base64 so it
+        // round-trips through the redirect URI without escaping.
         let state = State::default();
         let state = BASE64_URL_SAFE_NO_PAD.encode(state.expose());
         let state = State::deserialize(StringDeserializer::<Error>::new(state)).unwrap();
@@ -50,36 +52,18 @@ impl AuthGetCommand {
 
         let redirect_uri = account.redirection()?;
 
-        let auth_req_params = AuthorizationRequestParams {
+        let auth_uri = AuthorizationRequestParams {
             client_id: account.client_id.as_str().into(),
             redirect_uri: Some(Cow::from(redirect_uri.as_str())),
-            scope: HashSet::from_iter(account.scopes.iter().map(Into::into)),
+            scope: BTreeSet::from_iter(account.scopes.iter().map(Into::into)),
             state: Some(Cow::Borrowed(&state)),
             pkce_code_challenge: pkce_code_challenge.as_ref().map(Cow::Borrowed),
+            extras: BTreeMap::new(),
         }
-        .to_form_url_encoded_string();
-
-        // first collect user's auth request query params
-        let auth_uri = account.authorization_endpoint.clone();
-        let auth_req_user_params: HashMap<_, _> = auth_uri.query_pairs().collect();
-
-        // then collect auth request query params
-        let mut auth_uri = account.authorization_endpoint.clone();
-        auth_uri.set_query(Some(&auth_req_params));
-        let mut auth_req_params: HashMap<_, _> = auth_uri.query_pairs().collect();
-
-        // finally merge defaults with user's overrides
-        auth_req_params.extend(auth_req_user_params);
-
-        // rebuild the final auth URI with merged query params
-        let mut auth_uri = account.authorization_endpoint.clone();
-        let mut q = auth_uri.query_pairs_mut();
-        q.clear();
-        q.extend_pairs(auth_req_params);
-        let auth_uri = q.finish();
+        .build_url(&account.authorization_endpoint);
 
         let authorization_uri = AuthorizationUri {
-            authorization_uri: auth_uri,
+            authorization_uri: &auth_uri,
             state: &state,
             pkce_code_verifier: pkce_code_challenge
                 .as_ref()
@@ -93,47 +77,15 @@ impl AuthGetCommand {
 
         println!("{authorization_uri}");
 
-        if interactive {
-            if let Err(err) = open::that(auth_uri.as_str()) {
-                println!("Cannot open your browser ({err})");
+        if interactive && let Err(err) = open::that(auth_uri.as_str()) {
+            println!("Cannot open your browser ({err})");
 
-                let msg = "Click on the link to manually start the authorization process";
-                println!("{msg}: {auth_uri}");
-            }
+            let msg = "Click on the link to manually start the authorization process";
+            println!("{msg}: {auth_uri}");
         }
 
-        println!("Spawn fake HTTP redirection server…");
-
-        let scheme = redirect_uri.scheme();
-
-        let Some(host) = redirect_uri.host_str() else {
-            bail!("Missing host in redirect URI: {redirect_uri}");
-        };
-
-        let Some(port) = redirect_uri.port_or_known_default() else {
-            bail!("Missing port in redirect URI: {redirect_uri}");
-        };
-
-        let listener = TcpListener::bind((host, port))?;
-
         println!("Wait for redirection…");
-        let (mut stream, _) = listener.accept()?;
-
-        println!("Continue authorization process…");
-        let mut reader = BufReader::new(&mut stream);
-        let mut request_line = String::new();
-        reader.read_line(&mut request_line)?;
-
-        let redirected_path = request_line.split_whitespace().nth(1).unwrap();
-        println!("redirected_path: {redirected_path:?}");
-
-        let redirected_uri: Url = format!("{scheme}://{host}:{port}{redirected_path}")
-            .parse()
-            .unwrap();
-
-        let stream = reader.into_inner();
-        stream.write_all(b"HTTP/1.0 200 OK\r\n\r\nAuthorization succeeded!")?;
-        stream.shutdown(Shutdown::Both)?;
+        let redirected_uri = client::await_redirect(&redirect_uri)?;
 
         let cmd = AuthResumeCommand {
             redirected_uri,

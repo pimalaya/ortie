@@ -1,10 +1,19 @@
-use std::fmt;
+//! Opaque state value used for CSRF protection (section 10.12).
+//!
+//! Refs: <https://datatracker.ietf.org/doc/html/rfc6749#section-10.12>
 
+use core::fmt;
+
+#[cfg(feature = "client")]
+use alloc::{boxed::Box, vec::Vec};
+use alloc::{format, string::String};
+
+#[cfg(feature = "client")]
 use rand::seq::IndexedRandom;
 use secrecy::{ExposeSecret, SecretBox};
 use serde::{
-    de::{Error, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
+    de::{Error, Visitor},
 };
 
 // VSCHAR = %x20-7E
@@ -29,6 +38,7 @@ pub struct State(SecretBox<[u8]>);
 
 impl State {
     /// Generates a new random state of custom size.
+    #[cfg(feature = "client")]
     pub fn new(size: u8) -> Self {
         let random: Vec<u8> = VSCHAR
             .sample(&mut rand::rng(), size as usize)
@@ -53,6 +63,7 @@ impl PartialEq for State {
     }
 }
 
+#[cfg(feature = "client")]
 impl Default for State {
     fn default() -> Self {
         let random: [u8; 32] = VSCHAR

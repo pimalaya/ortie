@@ -8,16 +8,21 @@
 //! `execute_on_{issue,refresh}_{success,error}_hook`,
 //! `redirection`) instead of walking the original config tree.
 
-use std::{
+use alloc::{
     borrow::Cow,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
+#[cfg(feature = "notify")]
+use std::time::Duration;
+use std::{
     io::Write,
     net::TcpListener,
     process::{Command, Stdio},
 };
-#[cfg(feature = "notify")]
-use std::{borrow::Cow as StdCow, time::Duration};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 #[cfg(feature = "notify")]
 use humantime::format_duration;
 use log::trace;
@@ -192,10 +197,8 @@ impl Account {
             return Err(err.context("Read access token via command error"));
         }
 
-        let mut res = IssueAccessTokenSuccessParams::try_from(output.stdout.as_slice())
+        let res = IssueAccessTokenSuccessParams::try_from(output.stdout.as_slice())
             .context("Parse access token from command error")?;
-
-        res.sync_expires_in();
 
         Ok(res)
     }
@@ -304,7 +307,7 @@ fn execute_success_hook(
 
     #[cfg(feature = "notify")]
     if let Some(config) = notify {
-        let get_env = |key: &str| -> Result<Option<StdCow<str>>, ()> {
+        let get_env = |key: &str| -> Result<Option<Cow<str>>, ()> {
             if key == "EXPIRES_IN" {
                 return match res.expires_in {
                     None => Ok(Some("unknown".into())),
@@ -355,7 +358,7 @@ fn execute_error_hook(
 
     #[cfg(feature = "notify")]
     if let Some(config) = notify {
-        let get_env = |key: &str| -> Result<Option<StdCow<str>>, ()> {
+        let get_env = |key: &str| -> Result<Option<Cow<str>>, ()> {
             if key == "ERROR" {
                 return Ok(Some(format!("{:?}", res.error).into()));
             }
@@ -406,7 +409,7 @@ fn execute_command_hook(cmd: &mut Command) -> Result<()> {
 #[cfg(feature = "notify")]
 fn notify_with<'a, F>(config: &'a NotifyConfig, get_env: F)
 where
-    F: Fn(&str) -> Result<Option<StdCow<'a, str>>, ()> + Copy,
+    F: Fn(&str) -> Result<Option<Cow<'a, str>>, ()> + Copy,
 {
     let home_dir = || dirs::home_dir().map(|p| p.to_string_lossy().to_string());
 
