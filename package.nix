@@ -56,24 +56,22 @@ rustPlatform.buildRustPackage {
     rev = "v${version}";
   };
 
-  env = {
-    # OpenSSL should not be provided by vendors, not even on Windows
-    OPENSSL_NO_VENDOR = "1";
-  };
+  # OpenSSL should not be provided by vendors, not even on Windows
+  env.OPENSSL_NO_VENDOR = true;
 
-  nativeBuildInputs =
-    [ ]
-    ++ lib.optional (hasNativeTlsFeature || hasNotifyFeature) pkg-config
-    ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
+  nativeBuildInputs = [
+    pkg-config
+    installShellFiles
+  ];
 
   buildInputs =
-    [ ]
-    ++ lib.optional hasNativeTlsFeature openssl
+    lib.optional hasNativeTlsFeature openssl
     # D-Bus is provided by vendors on Windows
     ++ lib.optional (hasNotifyFeature && !isWindows) dbus';
 
   buildFeatures =
     buildFeatures
+    ++ [ "cli" ]
     # D-Bus is provided by vendors on Windows
     ++ lib.optional (hasNotifyFeature && isWindows) "vendored";
 
