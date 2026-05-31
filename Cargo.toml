@@ -17,7 +17,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = []
+default = ["rustls-ring", "pkce", "notify"]
 cli = ["client", "pkce", "dep:clap", "dep:dirs", "dep:humantime", "dep:pimalaya-cli", "dep:pimalaya-config", "dep:shellexpand"]
 client = ["dep:anyhow", "anyhow/std", "dep:open", "dep:pimalaya-stream", "pimalaya-stream/std", "dep:rand", "rand/thread_rng"]
 native-tls = ["client", "pimalaya-stream/native-tls", "io-http/native-tls"]
