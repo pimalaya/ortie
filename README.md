@@ -135,7 +135,6 @@ Using the public Thunderbird application:
 ```toml
 client-id = "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com"
 client-secret.raw = "kSmqreRr0qwBWJgbf5Y-PjSU"
-endpoints.redirection = "http://localhost"
 ```
 
 Using your [own application](https://developers.google.com/identity/protocols/oauth2):
@@ -156,7 +155,6 @@ Using the public Thunderbird application:
 
 ```toml
 client-id = "9e5f94bc-e8a4-4e73-b8be-63364c29d753"
-endpoints.redirection = "https://localhost"
 ```
 
 Using your [own application](https://learn.microsoft.com/en-us/exchange/client-developer/legacy-protocols/how-to-authenticate-an-imap-pop-smtp-application-by-using-oauth):
