@@ -2,8 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
@@ -11,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the account discovery wizard, run by bare `ortie` (alias of `auth discover`).
 
-  Prompts for an email address, a server or an issuer URI, discovers the reachable PIM services through [io-pim-discovery](https://github.com/pimalaya/io-pim-discovery) (a spinner reports the search progress), keeps the ones advertising an OAuth 2.0 method and prints the pick as a complete `[accounts.<name>]` fragment: valid TOML on stdout with guidance embedded as comments (prompts render on stderr, so `ortie >> <config>` appends it directly), or a JSON object with `--json`. The client step proposes well-known public applications registered against the discovered provider (Thunderbird for Google, Microsoft and Fastmail), each labelled with the PIM domains its registration covers and carrying its registered scopes (used when discovery yielded none); the custom entry prompts for client id and secret, scopes and redirection instead. The storage step plugs the token into a credential provider CLI known for the running OS (secret-tool, kwallet-query, security, pass), custom shell commands as fallback. The fragment enables auto-refresh, links config.sample.toml and lists the follow-up commands (auth get, auth resume, token show, token refresh). Ortie never writes the config itself.
+  Prompts for an email address, a server or an issuer URI, discovers the reachable OAuth 2.0 services and prints the pick as a complete `[accounts.<name>]` fragment: valid TOML on stdout (`ortie >> <config>` appends it directly), or a JSON object with `--json`. Along the way it proposes well-known public applications (Thunderbird for Google, Microsoft and Fastmail) and plugs the token storage into a credential provider CLI known for your platform (secret-tool, kwallet-query, security, pass). Ortie never writes the config itself.
 
 - Added the `grant` account config field.
 
@@ -19,45 +18,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the `extras` account config table.
 
-  Parameters forwarded verbatim to the authorization request query, for provider-specific knobs like Google's `access_type` / `prompt`, `login_hint`, or the RFC 8707 `resource` indicator; keys are wire parameter names, never kebab-case renamed.
+  Parameters forwarded verbatim to the authorization request, for provider-specific knobs like Google's `access_type` / `prompt`, `login_hint`, or the RFC 8707 `resource` indicator.
 
 - Added the token issuance time to the `token inspect` output.
 
-  Read from the HTTP `Date` response header.
-
 ### Changed
-
-- Turned ortie into a pure CLI binary over the extracted [io-oauth](https://github.com/pimalaya/io-oauth) crate.
-
-  io-oauth owns the I/O-free OAuth 2.0 coroutines and the std blocking client; library users should depend on it directly. The source tree follows the command shape (src/auth, src/token) and the src/main.rs header doubles as the architecture document.
 
 - Enabled PKCE by default with the S256 method, aligning with OAuth 2.1.
 
   The `pkce` config field accepts booleans (`true` = S256, `false` = off) and method strings (`"s256"`, `"plain"`); servers rejecting PKCE parameters need an explicit `pkce = false`.
 
-- Made every `endpoints.*` config field optional at parse time.
+- Made every `endpoints.*` config field optional.
 
   Each command checks the endpoints it actually needs, so `token show` works on a minimal account holding only `client-id` and the storage commands.
 
 - Replaced the deprecated `--debug` and `--trace` CLI flags with `--log-level <level>` and `--log-file <path>`.
 
-- Replaced the `io-process`-based storage and hook commands with `std::process::Command` and the `pimalaya-config::command` helpers.
+- Changed the storage and hook command shapes.
 
-  Commands accept the standard TOML shapes: a string wrapped through the platform shell (with env-var expansion) or an exec-style `[program, arg, ...]` array (no expansion).
+  A string command runs through the platform shell with env-var expansion; an exec-style `[program, arg, ...]` array runs directly, without expansion. Configurations relying on env-var expansion inside array commands must switch to the string form.
 
 - Re-licensed the project from AGPL-3.0-only to dual MIT OR Apache-2.0.
 
-- Migrated from pimalaya-toolbox to the split pimalaya-cli / pimalaya-config / pimalaya-stream stack.
-
 ### Removed
 
-- Removed the library target and every non-TLS cargo feature (`oauth2`, its `rfc6749` alias, `command`, `cli`, `client`).
+- Removed the library target.
 
-  The binary always builds with OAuth, shell-command storage / hooks and the full CLI included; remaining features are the TLS providers (`rustls-ring` default, `rustls-aws`, `native-tls`), `vendored` and `notify`.
+  Ortie is now a pure CLI binary; library users should depend on [io-oauth](https://github.com/pimalaya/io-oauth) directly.
 
-- Removed the `io-process` dependency.
+- Removed every non-TLS cargo feature (`oauth2`, its `rfc6749` alias, `command`, `cli`, `client`).
 
-  Configurations relying on env-var expansion inside list-form commands must switch to the string form.
+  The binary always builds with the full CLI included; remaining features are the TLS providers (`rustls-ring` default, `rustls-aws`, `native-tls`), `vendored` and `notify`.
 
 ## [1.1.0] - 2026-02-16
 

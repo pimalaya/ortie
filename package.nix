@@ -71,7 +71,6 @@ rustPlatform.buildRustPackage {
 
   buildFeatures =
     buildFeatures
-    ++ [ "cli" ]
     # D-Bus is provided by vendors on Windows
     ++ lib.optional (hasNotifyFeature && isWindows) "vendored";
 
@@ -98,7 +97,7 @@ rustPlatform.buildRustPackage {
     '';
 
   meta = {
-    description = "CLI to manage OAuth 2.0 tokens";
+    description = "CLI to manage OAuth tokens";
     mainProgram = "ortie";
     homepage = "https://github.com/pimalaya/ortie";
     changelog = "https://github.com/pimalaya/ortie/blob/master/CHANGELOG.md";

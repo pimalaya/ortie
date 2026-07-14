@@ -2,8 +2,6 @@
 
 CLI to manage OAuth tokens, written in Rust.
 
-Ortie is a **CLI** over the [io-oauth](https://github.com/pimalaya/io-oauth) library, configured through TOML. io-oauth ships the reusable building blocks: low-level **I/O-free** coroutines (no_std-friendly state machines that emit read/write requests for any runtime) and a mid-level **blocking client** wrapping the coroutines around any `Read + Write + Send` stream, or (with a TLS feature on) building the TLS stream itself via [pimalaya-stream](https://github.com/pimalaya/stream).
-
 ## Table of contents
 
 - [Features](#features)
@@ -17,7 +15,6 @@ Ortie is a **CLI** over the [io-oauth](https://github.com/pimalaya/io-oauth) lib
   - [Microsoft](#microsoft)
   - [Microsoft Graph](#microsoft-graph)
 - [Usage](#usage)
-  - [Library](#library)
   - [Discover an account](#discover-an-account)
   - [Request a new access token](#request-a-new-access-token)
   - [Refresh an access token](#refresh-an-access-token)
@@ -55,13 +52,13 @@ Ortie can be installed with the installer:
 
 *As root:*
 
-```shell
+```sh
 curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | sudo sh
 ```
 
 *As a regular user:*
 
-```shell
+```sh
 curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | PREFIX=~/.local sh
 ```
 
@@ -74,33 +71,33 @@ For a more up-to-date version than the latest release, check out the [releases](
 
 ### Cargo
 
-```shell
+```sh
 cargo install --locked ortie
 ```
 
 For the git tip:
 
-```shell
+```sh
 cargo install --locked --git https://github.com/pimalaya/ortie.git
 ```
 
 ### Nix
 
-If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
+If you have the [Flakes](https://wiki.nixos.org/wiki/Flakes) feature enabled:
 
-```shell
+```sh
 nix profile install github:pimalaya/ortie
 ```
 
 Or run without installing:
 
-```shell
+```sh
 nix run github:pimalaya/ortie
 ```
 
 ### Sources
 
-```shell
+```sh
 git clone https://github.com/pimalaya/ortie
 cd ortie
 nix run
@@ -195,15 +192,11 @@ Work or school (Entra ID) accounts receive a JWT access token the Graph API acce
 
 ## Usage
 
-### Library
-
-Ortie is a pure CLI binary and exposes no library API. The reusable OAuth 2.0 building blocks (the I/O-free coroutines and the mid-level `Oauth20ClientStd` std blocking client) live in the [io-oauth](https://github.com/pimalaya/io-oauth) crate. Depend on it directly, and see its examples for the authorization code grant and device authorization grant flows.
-
 ### Discover an account
 
 Bare `ortie` (an alias of `ortie auth discover`) walks you through creating an account with a minimum of questions:
 
-```shell
+```sh
 $ ortie
 
 ? Email, server or URI: user@fastmail.com
@@ -219,13 +212,11 @@ $ ortie
 # …
 ```
 
-When the discovered endpoints match a well-known public application (Thunderbird is registered with Google, Microsoft and Fastmail), the client step proposes reusing it, client secret, redirection and registered scopes included; each entry shows the PIM domains its registration covers. No OAuth mechanism exposes the scopes a registration is granted, so the wizard carries them hardcoded (as Thunderbird itself does) and uses them whenever discovery yielded none. The trailing custom entry asks for the details of your own registered application instead (client id and secret, scopes, redirection endpoint).
-
-The storage step lists the credential provider CLIs known for your platform (secret-tool and kwallet-query on Linux, security on macOS, pass on any unix) and plugs the matching read and write commands into the fragment; the trailing custom entry takes your own shell commands, the write one receiving the token on stdin.
+When the discovered endpoints match a well-known public application (Thunderbird is registered with Google, Microsoft and Fastmail), the client step proposes reusing it, client secret, redirection and scopes included. The storage step plugs the token read and write commands into a credential provider CLI known for your platform (secret-tool, kwallet-query, security, pass). Both steps end with a custom entry taking your own application details or shell commands instead.
 
 The fragment is complete, valid TOML printed on stdout, while the prompts render on stderr; appending it to your config is therefore a one-liner:
 
-```shell
+```sh
 ortie >> ~/.config/ortie/config.toml
 ```
 
@@ -233,7 +224,7 @@ The `--json` flag switches the fragment to a JSON object, for scripts and other 
 
 ### Request a new access token
 
-```shell
+```sh
 $ ortie auth get
 
 Created authorization request with:
@@ -247,13 +238,13 @@ Wait for redirection…
 
 Follow the browser flow, then on success the terminal shows:
 
-```shell
+```sh
 Access token successfully issued (expires in 1h)
 ```
 
 If the redirection server cannot start (port permission denied, etc.), copy the URL you are redirected to and complete the flow manually:
 
-```shell
+```sh
 ortie auth resume \
   --state RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4 \
   --pkce oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6 \
@@ -262,7 +253,7 @@ ortie auth resume \
 
 ### Refresh an access token
 
-```shell
+```sh
 $ ortie token refresh
 
 Access token successfully refreshed (expires in 1h)
@@ -270,7 +261,7 @@ Access token successfully refreshed (expires in 1h)
 
 ### Show an access token
 
-```shell
+```sh
 $ ortie token show
 
 EwA4BOl3BAAUcDnR9grBJokeAHaUV8R3+rVHX+IAAQfw9oZLztQS8bo8NvyWmbs…
@@ -280,7 +271,7 @@ The `--auto-refresh` flag (or the `auto-refresh = true` config option) automatic
 
 Inspect token metadata:
 
-```shell
+```sh
 $ ortie token inspect
 
 Token type: bearer
@@ -296,7 +287,7 @@ The `--log-level <LEVEL>` flag controls log verbosity (`off`, `error`, `warn`, `
 
 Logs go to stderr by default; redirect them with `--log-file <PATH>` or shell redirection:
 
-```shell
+```sh
 ortie token show --log-level debug --log-file /tmp/ortie.log
 ortie token show --log-level trace 2>/tmp/ortie.log
 ```
@@ -312,15 +303,10 @@ ortie token show --log-level trace 2>/tmp/ortie.log
 This project is developed with AI assistance. This section documents how, so users and downstream packagers can make informed decisions.
 
 - **Tools**: Claude Code (Anthropic), Opus 4.7, invoked locally with a persistent project-scoped memory and a small set of repo-specific rules.
-
 - **Used for**: Refactors, mechanical multi-file edits, boilerplate (feature gates, error enums, derive macros, trait impls), test scaffolding, doc polish, exploratory design conversations.
-
 - **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
-
 - **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit (`nix develop --command cargo check / cargo test / cargo fmt`). Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
-
 - **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong: off-by-one errors, missed edge cases, plausible but nonexistent APIs, stale RFC references. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
-
 - **Last reviewed**: 30/05/2026
 
 ## Social

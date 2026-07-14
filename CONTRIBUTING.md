@@ -4,23 +4,23 @@ Thank you for investing your time in contributing to Ortie.
 
 ## Development environment
 
-The development environment is managed by [Nix flakes](https://nixos.wiki/wiki/Flakes). Running `nix develop` (or `nix-shell` for non-flake users) spawns a shell with the right Rust toolchain, `cargo-deny`, `pkg-config` and the OpenSSL / DBus libraries.
+The development environment is managed by [Nix flakes](https://wiki.nixos.org/wiki/Flakes). Running `nix develop` (or `nix-shell` for non-flake users) spawns a shell with the right Rust toolchain, `cargo-deny`, `pkg-config` and the OpenSSL / DBus libraries.
 
 If you do not want to use Nix, install [rustup](https://rust-lang.github.io/rustup/index.html) and pull the `cargo` / `rustc` toolchain pinned by `rust-version` in Cargo.toml (edition 2024):
 
-```
+```sh
 rustup update
 ```
 
 ## Build
 
-```
+```sh
 cargo build
 ```
 
 You can disable default [features](https://doc.rust-lang.org/cargo/reference/features.html) with `--no-default-features` and enable individual features with `--features feat1,feat2`. For example, a release build with native TLS instead of the default Rustls:
 
-```
+```sh
 cargo build --no-default-features --features native-tls --release
 ```
 
@@ -47,7 +47,7 @@ If cargo complains about *"perhaps two different versions of crate X are being u
 
 ## Lint, test, audit
 
-```
+```sh
 cargo fmt
 cargo clippy --all-features --all-targets
 cargo test --all-features
