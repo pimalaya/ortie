@@ -1,6 +1,5 @@
 //! Root clap parser for the `ortie` binary.
 
-use alloc::vec::Vec;
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
@@ -16,25 +15,34 @@ use pimalaya_cli::{
 };
 use pimalaya_config::toml::TomlConfig;
 
-use crate::cli::{account::Account, auth::AuthCommand, config::Config, token::TokenCommand};
+use crate::{account::Account, auth::AuthCommand, config::Config, token::TokenCommand};
 
 /// Top-level command-line interface for the `ortie` binary.
 #[derive(Parser, Debug)]
 #[command(name = env!("CARGO_PKG_NAME"))]
 #[command(author, version)]
-#[command(about = "CLI to manage OAuth 2.0 tokens")]
+#[command(about = "CLI to manage OAuth tokens")]
 #[command(long_version = long_version!())]
 #[command(propagate_version = true, infer_subcommands = true)]
-#[command(arg_required_else_help = true)]
 pub struct Cli {
+    /// The subcommand to run; bare `ortie` runs the discovery wizard
+    /// (auth discover).
     #[command(subcommand)]
-    pub cmd: Command,
+    pub cmd: Option<Command>,
+
+    /// Path(s) to the TOML configuration file(s).
     #[command(flatten)]
     pub config: ConfigPathsArg,
+
+    /// Name of the account to run the subcommand with.
     #[command(flatten)]
     pub account: AccountFlag,
+
+    /// Switch the output format to JSON.
     #[command(flatten)]
     pub json: JsonFlag,
+
+    /// Log level and log file destination.
     #[command(flatten)]
     pub log: LogFlags,
 }
@@ -53,6 +61,8 @@ pub enum Command {
 }
 
 impl Command {
+    /// Dispatches the parsed subcommand, resolving the account first
+    /// for the token tree (the auth tree resolves it per leaf).
     pub fn execute(
         self,
         printer: &mut impl Printer,
@@ -60,10 +70,7 @@ impl Command {
         account_name: Option<&str>,
     ) -> Result<()> {
         match self {
-            Self::Auth(cmd) => {
-                let account = take_account(config_paths, account_name)?;
-                cmd.execute(printer, account)
-            }
+            Self::Auth(cmd) => cmd.execute(printer, config_paths, account_name),
             Self::Token(cmd) => {
                 let account = take_account(config_paths, account_name)?;
                 cmd.execute(printer, account)
@@ -74,7 +81,12 @@ impl Command {
     }
 }
 
-fn take_account(config_paths: &[PathBuf], account_name: Option<&str>) -> Result<Account> {
+/// Loads the config from `config_paths` and takes the named (or
+/// default) account out of it, flattened into its runtime view.
+pub(crate) fn take_account(
+    config_paths: &[PathBuf],
+    account_name: Option<&str>,
+) -> Result<Account> {
     let Some(mut config) = Config::from_paths_or_default(config_paths)? else {
         bail!("Config file not found");
     };

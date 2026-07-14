@@ -1,12 +1,7 @@
 [sources]
+allow-org.github = ["pimalaya"]
 unknown-registry = "deny"
 unknown-git = "deny"
-allow-git = [
-  "https://github.com/pimalaya/cli",
-  "https://github.com/pimalaya/config",
-  "https://github.com/pimalaya/io-http",
-  "https://github.com/pimalaya/stream",
-]
 
 [licenses]
 allow = [

@@ -1,35 +1,31 @@
 //! `auth resume` subcommand: complete an authorization code grant flow.
 
-use alloc::{
-    borrow::Cow,
-    format,
-    string::{String, ToString},
-};
-use std::time::Duration;
+use std::{borrow::Cow, time::Duration};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use clap::Parser;
 use humantime::format_duration;
 use log::debug;
 use pimalaya_cli::printer::{Message, Printer};
 use serde::{
-    Deserialize, Serializer,
+    Deserialize,
     de::value::{Error, StrDeserializer},
 };
 use url::Url;
 
 use pimalaya_config::secret::Secret;
 
-use crate::{
-    authorization_code_grant::{
-        access_token_request::AccessTokenRequestParams,
-        authorization_response::{AuthorizeParams, AuthorizeValidateError},
-        pkce::PkceCodeVerifier,
-        state::State,
+use io_oauth::{
+    rfc6749::{
+        access_token_request::Oauth20RequestAccessTokenParams,
+        auth_response::{Oauth20AuthParams, Oauth20AuthParamsValidationError},
+        client::Oauth20ClientStd,
+        state::Oauth20State,
     },
-    cli::account::Account,
-    client::OauthClientStd,
+    rfc7636::pkce::Oauth20PkceCodeVerifier,
 };
+
+use crate::{account::Account, config::GrantConfig};
 
 /// Resume an existing OAuth 2.0 Authorization Code Grant flow.
 ///
@@ -56,7 +52,7 @@ pub struct AuthResumeCommand {
     /// should be given to the resume command and should match.
     #[arg(long, short, value_parser = state_parser)]
     #[arg(value_name = "VALUE")]
-    pub state: Option<State>,
+    pub state: Option<Oauth20State>,
 
     /// The PKCE code verifier generated during the authorization flow
     /// initiation.
@@ -65,7 +61,7 @@ pub struct AuthResumeCommand {
     /// generated code should be given to the resume command.
     #[arg(long, short, value_parser = pkce_code_verifier_parser)]
     #[arg(value_name = "CODE")]
-    pub pkce: Option<PkceCodeVerifier>,
+    pub pkce: Option<Oauth20PkceCodeVerifier>,
 
     /// The redirect URI used during the authorization flow
     /// initiation.
@@ -77,10 +73,23 @@ pub struct AuthResumeCommand {
 }
 
 impl AuthResumeCommand {
+    /// Validates the redirected URI then exchanges its authorization
+    /// code for a token, persisted to storage with the hooks fired.
     pub fn execute(self, printer: &mut impl Printer, mut account: Account) -> Result<()> {
-        let code = match AuthorizeParams::from(&self.redirected_uri).validate(self.state.as_ref()) {
+        // FIXME: interpret the positional input per grant once the
+        // device authorization grant path lands.
+        if account.grant == GrantConfig::Device {
+            bail!("The device authorization grant is not supported yet");
+        }
+
+        let Some(token_endpoint) = account.token_endpoint.clone() else {
+            bail!("Missing endpoints.token in the account config");
+        };
+
+        let code = match Oauth20AuthParams::from(&self.redirected_uri).validate(self.state.as_ref())
+        {
             Ok(code) => code,
-            Err(AuthorizeValidateError::Server(params)) => {
+            Err(Oauth20AuthParamsValidationError::Server(params)) => {
                 let err = anyhow!("Authorization error (code {:?})", params.error);
                 return Err(match (params.error_description, params.error_uri) {
                     (None, None) => err,
@@ -89,10 +98,10 @@ impl AuthResumeCommand {
                     (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
                 });
             }
-            Err(AuthorizeValidateError::StateMissing) => {
+            Err(Oauth20AuthParamsValidationError::StateMissing) => {
                 return Err(anyhow!("Authorization response is missing state"));
             }
-            Err(AuthorizeValidateError::StateMismatch) => {
+            Err(Oauth20AuthParamsValidationError::StateMismatch) => {
                 let req = self.state.as_ref().map(|state| state.expose());
                 return Err(
                     anyhow!("Request state {req:?} does not match response state")
@@ -114,18 +123,15 @@ impl AuthResumeCommand {
                     .map(|uri| Cow::Owned(uri.to_string()))
             });
 
-        let mut client = OauthClientStd::connect(
-            account.token_endpoint.clone(),
-            &account.tls,
-            account.client_id.clone(),
-        )?;
+        let mut client =
+            Oauth20ClientStd::connect(token_endpoint, &account.tls, account.client_id.clone())?;
         client.client_secret = client_secret;
 
-        let res = client.request_access_token(AccessTokenRequestParams {
+        let res = client.request_access_token(Oauth20RequestAccessTokenParams {
             code,
             redirect_uri,
             client_id: account.client_id.as_str().into(),
-            #[cfg(feature = "pkce")]
+            client_secret: None,
             pkce_code_verifier: self.pkce.as_ref().map(Cow::Borrowed),
         })?;
 
@@ -163,36 +169,21 @@ impl AuthResumeCommand {
     }
 }
 
-pub fn serialize_state<S: Serializer>(state: &State, s: S) -> Result<S::Ok, S::Error> {
-    let state = String::from_utf8_lossy(state.expose());
-    s.serialize_str(&state)
-}
-
-pub fn serialize_pkce_code_verifier<S: Serializer>(
-    verifier: &Option<PkceCodeVerifier>,
-    s: S,
-) -> Result<S::Ok, S::Error> {
-    match verifier {
-        Some(verifier) => {
-            let verifier = String::from_utf8_lossy(verifier.expose());
-            s.serialize_str(&verifier)
-        }
-        None => s.serialize_none(),
-    }
-}
-
+/// Clap value parser for URI arguments.
 pub fn uri_parser(url: &str) -> Result<Url, String> {
     Url::parse(url).map_err(|err| err.to_string())
 }
 
-pub fn state_parser(state: &str) -> Result<State, String> {
-    match State::deserialize(StrDeserializer::<Error>::new(state)) {
+/// Clap value parser for the CSRF state argument.
+pub fn state_parser(state: &str) -> Result<Oauth20State, String> {
+    match Oauth20State::deserialize(StrDeserializer::<Error>::new(state)) {
         Ok(state) => Ok(state),
         Err(err) => Err(err.to_string()),
     }
 }
 
-pub fn pkce_code_verifier_parser(verifier: &str) -> Result<PkceCodeVerifier, String> {
+/// Clap value parser for the PKCE code verifier argument.
+pub fn pkce_code_verifier_parser(verifier: &str) -> Result<Oauth20PkceCodeVerifier, String> {
     match verifier.parse() {
         Ok(verifier) => Ok(verifier),
         Err(b) => {

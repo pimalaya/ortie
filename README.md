@@ -1,12 +1,8 @@
-# 🔑 Ortie [![Documentation](https://img.shields.io/docsrs/ortie?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/ortie/latest/ortie) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
+# 🔑 Ortie [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-CLI and lib to manage OAuth 2.0 tokens, written in Rust.
+CLI to manage OAuth tokens, written in Rust.
 
-This repository ships three layers:
-
-- Low-level **I/O-free** coroutines: no_std-friendly state machines that emit read/write requests for any runtime.
-- Mid-level **blocking client** wrapping the coroutines around any `Read + Write + Send` stream, or (with a TLS feature on) building the TLS stream itself via [pimalaya-stream](https://github.com/pimalaya/stream).
-- High-level **CLI** consuming the std client, configured through TOML.
+Ortie is a **CLI** over the [io-oauth](https://github.com/pimalaya/io-oauth) library, configured through TOML. io-oauth ships the reusable building blocks: low-level **I/O-free** coroutines (no_std-friendly state machines that emit read/write requests for any runtime) and a mid-level **blocking client** wrapping the coroutines around any `Read + Write + Send` stream, or (with a TLS feature on) building the TLS stream itself via [pimalaya-stream](https://github.com/pimalaya/stream).
 
 ## Table of contents
 
@@ -19,8 +15,10 @@ This repository ships three layers:
 - [Configuration](#configuration)
   - [Google](#google)
   - [Microsoft](#microsoft)
+  - [Microsoft Graph](#microsoft-graph)
 - [Usage](#usage)
   - [Library](#library)
+  - [Discover an account](#discover-an-account)
   - [Request a new access token](#request-a-new-access-token)
   - [Refresh an access token](#refresh-an-access-token)
   - [Show an access token](#show-an-access-token)
@@ -33,7 +31,9 @@ This repository ships three layers:
 ## Features
 
 - **OAuth 2.0** Authorization Code Grant <sup>[rfc6749 #4.1](https://datatracker.ietf.org/doc/html/rfc6749#section-4.1)</sup> and refresh <sup>[rfc6749 #6](https://datatracker.ietf.org/doc/html/rfc6749#section-6)</sup>
-- **PKCE** <sup>[rfc7636](https://datatracker.ietf.org/doc/html/rfc7636)</sup>
+- **PKCE** <sup>[rfc7636](https://datatracker.ietf.org/doc/html/rfc7636)</sup>, S256 enabled by default (OAuth 2.1 posture; opt out with `pkce = false`)
+- Account discovery **wizard** (bare `ortie`), printing a ready-to-append config fragment
+- Extra authorization request **parameters** (`access_type`, `login_hint`, RFC 8707 `resource`, ...) via the `extras` config table
 - **TLS** support:
   - [Rustls](https://crates.io/crates/rustls) with ring crypto (`rustls-ring` feature, default)
   - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)
@@ -108,7 +108,7 @@ nix run
 
 ## Configuration
 
-Ortie does not yet ship a wizard: copy [config.sample.toml](./config.sample.toml) into one of the canonical paths below and edit it by hand.
+Run bare `ortie` to launch the discovery wizard: it asks for an email address (or a server / issuer URI), discovers the OAuth 2.0 services reachable for it, and prints a complete account config fragment as valid TOML on stdout, with its guidance embedded as comments. Ortie never writes your config itself; prompts render on stderr, so appending the fragment is a one-liner: `ortie >> ~/.config/ortie/config.toml`. The full field reference lives in [config.sample.toml](./config.sample.toml).
 
 A configuration is loaded from the first valid path among:
 
@@ -125,9 +125,10 @@ You will also need a registered OAuth 2.0 application: either use a public appli
 ### Google
 
 ```toml
-endpoints.authorization = "https://accounts.google.com/o/oauth2/auth?access_type=offline"
+endpoints.authorization = "https://accounts.google.com/o/oauth2/auth"
 endpoints.token = "https://www.googleapis.com/oauth2/v3/token"
 scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com"]
+extras.access_type = "offline"
 ```
 
 Using the public Thunderbird application:
@@ -166,33 +167,69 @@ client-id = "<your-client-id>"
 client-secret.raw = "<your-client-secret>"
 ```
 
+### Microsoft Graph
+
+The Thunderbird application above is registered for Outlook IMAP/SMTP, not for the Microsoft Graph API. To mint Graph tokens (used by the Microsoft Graph backend, e.g. Himalaya's `msgraph` backend), request Graph scopes from a client registered for Graph:
+
+```toml
+endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+scopes = ["https://graph.microsoft.com/User.Read", "https://graph.microsoft.com/Mail.ReadWrite", "https://graph.microsoft.com/Mail.Send", "offline_access"]
+```
+
+Using the public Microsoft Graph PowerShell application:
+
+```toml
+client-id = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
+endpoints.redirection = "http://localhost"
+```
+
+Using your [own application](https://learn.microsoft.com/en-us/graph/auth-register-app-v2) (set the redirection to a redirect URI registered for it):
+
+```toml
+client-id = "<your-client-id>"
+endpoints.redirection = "<your-registered-redirect-uri>"
+```
+
+Work or school (Entra ID) accounts receive a JWT access token the Graph API accepts; personal Microsoft accounts may be issued an opaque token the API rejects with `InvalidAuthenticationToken`, so prefer a work/school account or your own registered application.
+
 ## Usage
 
 ### Library
 
-The low-level coroutines live under `ortie::authorization_code_grant`, `ortie::issue_access_token` and `ortie::refresh_access_token`; they emit `WantsRead` / `WantsWrite(bytes)` events the caller pumps against any transport. The mid-level `ortie::client::OauthClientStd` inlines the loop against a single boxed stream, with two construction paths:
+Ortie is a pure CLI binary and exposes no library API. The reusable OAuth 2.0 building blocks (the I/O-free coroutines and the mid-level `Oauth20ClientStd` std blocking client) live in the [io-oauth](https://github.com/pimalaya/io-oauth) crate. Depend on it directly, and see its examples for the authorization code grant and device authorization grant flows.
 
-```rust,ignore
-use ortie::{
-    client::OauthClientStd,
-    refresh_access_token::RefreshAccessTokenParams,
-};
+### Discover an account
 
-// Light: caller owns the connection (TCP, mock, plaintext, …).
-let mut client = OauthClientStd::new(my_stream, token_endpoint, &client_id);
+Bare `ortie` (an alias of `ortie auth discover`) walks you through creating an account with a minimum of questions:
 
-// Full (requires `rustls-ring` / `rustls-aws` / `native-tls`):
-// opens the TLS stream itself via pimalaya-stream.
-let mut client = OauthClientStd::connect(token_endpoint, &tls, &client_id)?;
+```shell
+$ ortie
 
-let res = client.refresh_access_token(RefreshAccessTokenParams {
-    client_id: client_id.into(),
-    refresh_token,
-    scopes,
-})?;
+? Email, server or URI: user@fastmail.com
+✓ Found 1 OAuth 2.0 service(s)
+? Choose an OAuth 2.0 service: OAuth 2.0 authorization code grant (jmap, caldav, carddav) via https://api.fastmail.com/oauth/refresh
+? Account name: fastmail
+? Public application: Thunderbird (emails, contacts, calendars)
+? Token storage: pass (password store)
+
+# OAuth 2.0 account discovered by the ortie wizard.
+# …
+[accounts.fastmail]
+# …
 ```
 
-A complete example using the authorization code grant flow lives in [examples/authorization_code_grant.rs](./examples/authorization_code_grant.rs).
+When the discovered endpoints match a well-known public application (Thunderbird is registered with Google, Microsoft and Fastmail), the client step proposes reusing it, client secret, redirection and registered scopes included; each entry shows the PIM domains its registration covers. No OAuth mechanism exposes the scopes a registration is granted, so the wizard carries them hardcoded (as Thunderbird itself does) and uses them whenever discovery yielded none. The trailing custom entry asks for the details of your own registered application instead (client id and secret, scopes, redirection endpoint).
+
+The storage step lists the credential provider CLIs known for your platform (secret-tool and kwallet-query on Linux, security on macOS, pass on any unix) and plugs the matching read and write commands into the fragment; the trailing custom entry takes your own shell commands, the write one receiving the token on stdin.
+
+The fragment is complete, valid TOML printed on stdout, while the prompts render on stderr; appending it to your config is therefore a one-liner:
+
+```shell
+ortie >> ~/.config/ortie/config.toml
+```
+
+The `--json` flag switches the fragment to a JSON object, for scripts and other tools.
 
 ### Request a new access token
 

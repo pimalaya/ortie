@@ -1,22 +1,18 @@
 //! Flat runtime account.
 //!
-//! Built from [`crate::cli::config::AccountConfig`] (the nested
-//! TOML DTO) by flattening every `storage.*.command` and
+//! Built from [`crate::config::AccountConfig`] (the nested TOML DTO)
+//! by flattening every `storage.*.command` and
 //! `hooks.*.*.{command,notify}` into a direct field on this type.
 //! Commands consume `Account` and call the driver methods
 //! (`read_from_storage`, `write_to_storage`,
 //! `execute_on_{issue,refresh}_{success,error}_hook`,
 //! `redirection`) instead of walking the original config tree.
 
-use alloc::{
-    borrow::Cow,
-    format,
-    string::{String, ToString},
-    vec::Vec,
-};
 #[cfg(feature = "notify")]
 use std::time::Duration;
 use std::{
+    borrow::Cow,
+    collections::HashMap,
     io::Write,
     net::TcpListener,
     process::{Command, Stdio},
@@ -33,43 +29,67 @@ use pimalaya_stream::tls::Tls;
 use secrecy::ExposeSecret;
 use url::Url;
 
-use crate::{
-    cli::config::{
-        AccountConfig, EndpointsConfig, HookConfig, HookStatusConfig, HooksConfig, NotifyConfig,
-        StorageConfig, StoragesConfig,
-    },
-    issue_access_token::{IssueAccessTokenErrorParams, IssueAccessTokenSuccessParams},
+use io_oauth::rfc6749::issue_access_token::{
+    Oauth20IssueAccessTokenErrorParams, Oauth20IssueAccessTokenSuccessParams,
+};
+
+use crate::config::{
+    AccountConfig, EndpointsConfig, GrantConfig, HookConfig, HookStatusConfig, HooksConfig,
+    NotifyConfig, PkceConfig, StorageConfig, StoragesConfig,
 };
 
 /// Flat, command-ready view of one OAuth 2.0 account.
 #[derive(Debug)]
 pub struct Account {
-    pub default: bool,
+    /// OAuth 2.0 client identifier.
     pub client_id: String,
+    /// Optional OAuth 2.0 client secret.
     pub client_secret: Option<Secret>,
+    /// OAuth 2.0 grant flow run by the auth commands.
+    pub grant: GrantConfig,
+    /// TLS provider used for the HTTPS connections.
     pub tls: Tls,
+    /// OAuth 2.0 scopes requested for the access token.
     pub scopes: Vec<String>,
-    pub pkce: bool,
+    /// PKCE posture of the authorization code grant.
+    pub pkce: PkceConfig,
+    /// Extra parameters forwarded verbatim to the authorization
+    /// request query.
+    pub extras: HashMap<String, String>,
+    /// Whether `token show` refreshes an expired token by itself.
     pub auto_refresh: bool,
 
-    pub authorization_endpoint: Url,
-    pub token_endpoint: Url,
+    /// Authorization endpoint of the authorization code grant.
+    pub authorization_endpoint: Option<Url>,
+    /// Token endpoint shared by grants and refreshes.
+    pub token_endpoint: Option<Url>,
+    /// Redirection endpoint registered with the provider.
     pub redirection_endpoint: Option<Url>,
 
+    /// Command printing the stored token JSON on its stdout.
     pub read_storage_command: Command,
+    /// Command receiving the token JSON on its stdin.
     pub write_storage_command: Command,
 
+    /// Command hook fired when a token is successfully issued.
     pub on_issue_success_hook_command: Option<Command>,
+    /// Command hook fired when issuing a token fails.
     pub on_issue_error_hook_command: Option<Command>,
+    /// Command hook fired when the token is successfully refreshed.
     pub on_refresh_success_hook_command: Option<Command>,
+    /// Command hook fired when refreshing the token fails.
     pub on_refresh_error_hook_command: Option<Command>,
 
+    /// Notification fired when a token is successfully issued.
     #[cfg(feature = "notify")]
     pub on_issue_success_hook_notify: Option<NotifyConfig>,
+    /// Notification fired when issuing a token fails.
     #[cfg(feature = "notify")]
     pub on_issue_error_hook_notify: Option<NotifyConfig>,
+    /// Notification fired when the token is successfully refreshed.
     #[cfg(feature = "notify")]
     pub on_refresh_success_hook_notify: Option<NotifyConfig>,
+    /// Notification fired when refreshing the token fails.
     #[cfg(feature = "notify")]
     pub on_refresh_error_hook_notify: Option<NotifyConfig>,
 }
@@ -77,16 +97,18 @@ pub struct Account {
 impl From<AccountConfig> for Account {
     fn from(cfg: AccountConfig) -> Self {
         let AccountConfig {
-            default,
             client_id,
             client_secret,
+            grant,
             endpoints,
             tls,
             scopes,
             pkce,
+            extras,
             auto_refresh,
             storage,
             hooks,
+            ..
         } = cfg;
 
         let EndpointsConfig {
@@ -136,12 +158,13 @@ impl From<AccountConfig> for Account {
         } = refresh_error;
 
         Self {
-            default,
             client_id,
             client_secret,
+            grant,
             tls,
             scopes,
             pkce,
+            extras,
             auto_refresh,
             authorization_endpoint: authorization,
             token_endpoint: token,
@@ -180,7 +203,9 @@ impl Account {
         Ok(Cow::Owned(url))
     }
 
-    pub fn read_from_storage(&mut self) -> Result<IssueAccessTokenSuccessParams> {
+    /// Reads the persisted token by running the read storage command
+    /// and parsing its stdout as the token response JSON.
+    pub fn read_from_storage(&mut self) -> Result<Oauth20IssueAccessTokenSuccessParams> {
         let cmd = &mut self.read_storage_command;
 
         let output = cmd
@@ -197,13 +222,15 @@ impl Account {
             return Err(err.context("Read access token via command error"));
         }
 
-        let res = IssueAccessTokenSuccessParams::try_from(output.stdout.as_slice())
+        let res = Oauth20IssueAccessTokenSuccessParams::try_from(output.stdout.as_slice())
             .context("Parse access token from command error")?;
 
         Ok(res)
     }
 
-    pub fn write_to_storage(&mut self, res: &IssueAccessTokenSuccessParams) -> Result<()> {
+    /// Persists the token by running the write storage command and
+    /// piping the token response JSON to its stdin.
+    pub fn write_to_storage(&mut self, res: &Oauth20IssueAccessTokenSuccessParams) -> Result<()> {
         let cmd = &mut self.write_storage_command;
         let json = String::try_from(res)?.into_bytes();
 
@@ -244,7 +271,8 @@ impl Account {
         Ok(())
     }
 
-    pub fn execute_on_issue_success_hook(&mut self, res: &IssueAccessTokenSuccessParams) {
+    /// Fires the on-issue success hook with the issued token.
+    pub fn execute_on_issue_success_hook(&mut self, res: &Oauth20IssueAccessTokenSuccessParams) {
         #[cfg(feature = "notify")]
         let notify = self.on_issue_success_hook_notify.as_ref();
         #[cfg(not(feature = "notify"))]
@@ -252,7 +280,8 @@ impl Account {
         execute_success_hook(self.on_issue_success_hook_command.as_mut(), notify, res);
     }
 
-    pub fn execute_on_issue_error_hook(&mut self, res: &IssueAccessTokenErrorParams) {
+    /// Fires the on-issue error hook with the server error.
+    pub fn execute_on_issue_error_hook(&mut self, res: &Oauth20IssueAccessTokenErrorParams) {
         #[cfg(feature = "notify")]
         let notify = self.on_issue_error_hook_notify.as_ref();
         #[cfg(not(feature = "notify"))]
@@ -260,7 +289,8 @@ impl Account {
         execute_error_hook(self.on_issue_error_hook_command.as_mut(), notify, res);
     }
 
-    pub fn execute_on_refresh_success_hook(&mut self, res: &IssueAccessTokenSuccessParams) {
+    /// Fires the on-refresh success hook with the refreshed token.
+    pub fn execute_on_refresh_success_hook(&mut self, res: &Oauth20IssueAccessTokenSuccessParams) {
         #[cfg(feature = "notify")]
         let notify = self.on_refresh_success_hook_notify.as_ref();
         #[cfg(not(feature = "notify"))]
@@ -268,7 +298,8 @@ impl Account {
         execute_success_hook(self.on_refresh_success_hook_command.as_mut(), notify, res);
     }
 
-    pub fn execute_on_refresh_error_hook(&mut self, res: &IssueAccessTokenErrorParams) {
+    /// Fires the on-refresh error hook with the server error.
+    pub fn execute_on_refresh_error_hook(&mut self, res: &Oauth20IssueAccessTokenErrorParams) {
         #[cfg(feature = "notify")]
         let notify = self.on_refresh_error_hook_notify.as_ref();
         #[cfg(not(feature = "notify"))]
@@ -277,10 +308,12 @@ impl Account {
     }
 }
 
+/// Runs a success hook: the command with the token exposed as
+/// environment variables, then the notification.
 fn execute_success_hook(
     cmd: Option<&mut Command>,
     #[cfg_attr(not(feature = "notify"), allow(unused))] notify: Option<&NotifyConfig>,
-    res: &IssueAccessTokenSuccessParams,
+    res: &Oauth20IssueAccessTokenSuccessParams,
 ) {
     trace!("execute success hook: {res:?}");
 
@@ -333,10 +366,12 @@ fn execute_success_hook(
     }
 }
 
+/// Runs an error hook: the command with the server error exposed as
+/// environment variables, then the notification.
 fn execute_error_hook(
     cmd: Option<&mut Command>,
     #[cfg_attr(not(feature = "notify"), allow(unused))] notify: Option<&NotifyConfig>,
-    res: &IssueAccessTokenErrorParams,
+    res: &Oauth20IssueAccessTokenErrorParams,
 ) {
     trace!("execute error hook: {res:?}");
 
@@ -381,6 +416,7 @@ fn execute_error_hook(
     }
 }
 
+/// Spawns a hook command, logging (never failing on) its outcome.
 fn execute_command_hook(cmd: &mut Command) -> Result<()> {
     let output = cmd
         .output()
@@ -406,6 +442,8 @@ fn execute_command_hook(cmd: &mut Command) -> Result<()> {
     Ok(())
 }
 
+/// Shows a system notification, shell-expanding `$VAR` references in
+/// the summary and body through `get_env`.
 #[cfg(feature = "notify")]
 fn notify_with<'a, F>(config: &'a NotifyConfig, get_env: F)
 where

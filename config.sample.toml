@@ -10,10 +10,10 @@
 # be passed at once, separated by `:`; the first one is the base and the rest
 # are deep-merged on top of it.
 #
-# Ortie does not yet ship a wizard: copy this file into one of the paths above
-# and edit by hand. Each `[accounts.<name>]` section declares one OAuth 2.0
-# account, picked at runtime with `-a <NAME>` (or via the `default = true`
-# flag).
+# Run bare `ortie` to discover an account and print a ready-to-append config
+# fragment (`ortie >> <path>` appends it directly); this file documents every
+# field. Each `[accounts.<name>]` section declares one OAuth 2.0 account,
+# picked at runtime with `-a <NAME>` (or via the `default = true` flag).
 # ================================================================================
 
 # --------------------------------------------------------------------------------
@@ -34,10 +34,21 @@ client-id = ""
 #client-secret.command = "pass show ortie/example"
 
 # --------------------------------------------------------------------------------
+# Grant
+# --------------------------------------------------------------------------------
+
+# The OAuth 2.0 grant flow run by the auth commands.
+#
+# Possible values: "authorization-code" (default)
+#grant = "authorization-code"
+
+# --------------------------------------------------------------------------------
 # Endpoints
 # --------------------------------------------------------------------------------
 
-# Endpoints given by your OAuth 2.0 provider.
+# Endpoints given by your OAuth 2.0 provider. All optional at parse time:
+# each command checks the ones it actually needs (auth get needs
+# authorization + token, token refresh only token, token show none).
 endpoints.authorization = ""
 endpoints.token = ""
 
@@ -47,15 +58,31 @@ endpoints.token = ""
 #endpoints.redirection = "http://localhost"
 
 # --------------------------------------------------------------------------------
-# Scopes, PKCE and TLS
+# Scopes, PKCE, extras and TLS
 # --------------------------------------------------------------------------------
 
 # OAuth 2.0 scopes granted to the access token.
 scopes = []
 
-# Enable Proof Key for Code Exchange (RFC 7636). Recommended for public
-# clients (no client secret).
-pkce = false
+# Proof Key for Code Exchange (RFC 7636), used by the authorization code
+# grant. Enabled with the S256 method by default, aligning with OAuth 2.1.
+#
+# Possible values:
+#   pkce = true    # S256 (same as the default)
+#   pkce = "s256"  # explicit method
+#   pkce = "plain" # escape hatch for servers rejecting S256
+#   pkce = false   # disable, for servers rejecting PKCE parameters
+#pkce = "s256"
+
+# Extra parameters forwarded verbatim to the authorization request query.
+# Keys are wire parameter names (no kebab-case renaming). This is the place
+# for provider-specific knobs:
+#
+#   extras.access_type = "offline"          # Google: required for a refresh token
+#   extras.prompt = "consent"               # Google: force the consent screen
+#   extras.login_hint = "user@example.com"
+#   extras.resource = "https://api.example.com/"  # RFC 8707 resource indicator
+#extras.access_type = "offline"
 
 # TLS provider used for the HTTPS connection to the token endpoint.
 #
@@ -116,8 +143,8 @@ storage.write.command = "pass insert -m -f ortie/example"
 #
 # Error hooks receive: ERROR, ERROR_DESCRIPTION, ERROR_URI
 #
-# The `notify` block (requires the `notify` cargo feature, default) expands
-# the same variables inside `summary` and `body` via shellexpand.
+# The `notify` block (requires the `notify` cargo feature, off by default)
+# expands the same variables inside `summary` and `body` via shellexpand.
 #
 # Note: hook command fields accept the same array / string shapes as the
 # storage commands above. Use the string form when the command needs to

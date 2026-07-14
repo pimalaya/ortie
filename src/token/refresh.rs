@@ -11,11 +11,12 @@ use secrecy::SecretBox;
 
 use pimalaya_config::secret::Secret;
 
-use crate::{
-    cli::account::Account, client::OauthClientStd,
-    issue_access_token::IssueAccessTokenSuccessParams,
-    refresh_access_token::RefreshAccessTokenParams,
+use io_oauth::rfc6749::{
+    client::Oauth20ClientStd, issue_access_token::Oauth20IssueAccessTokenSuccessParams,
+    refresh_access_token::Oauth20RefreshAccessTokenParams,
 };
+
+use crate::account::Account;
 
 /// Refresh the current access token.
 ///
@@ -27,6 +28,8 @@ use crate::{
 pub struct TokenRefreshCommand;
 
 impl TokenRefreshCommand {
+    /// Reads the stored refresh token, exchanges it for a fresh
+    /// access token and reports the new expiry.
     pub fn execute(self, printer: &mut impl Printer, mut account: Account) -> Result<()> {
         let token = account.read_from_storage()?;
 
@@ -48,21 +51,26 @@ impl TokenRefreshCommand {
         printer.out(Message::new(msg))
     }
 
+    /// Runs the refresh grant against the token endpoint, persists
+    /// the outcome (keeping the previous refresh token when the
+    /// server omits a rotated one) and fires the on-refresh hooks.
     pub fn refresh(
         mut account: Account,
         refresh_token: SecretBox<str>,
-    ) -> Result<IssueAccessTokenSuccessParams> {
+    ) -> Result<Oauth20IssueAccessTokenSuccessParams> {
+        let Some(token_endpoint) = account.token_endpoint.clone() else {
+            bail!("Missing endpoints.token in the account config");
+        };
+
         let client_secret = account.client_secret.clone().map(Secret::get).transpose()?;
 
-        let mut client = OauthClientStd::connect(
-            account.token_endpoint.clone(),
-            &account.tls,
-            account.client_id.clone(),
-        )?;
+        let mut client =
+            Oauth20ClientStd::connect(token_endpoint, &account.tls, account.client_id.clone())?;
         client.client_secret = client_secret;
 
-        let res = client.refresh_access_token(RefreshAccessTokenParams {
+        let res = client.refresh_access_token(Oauth20RefreshAccessTokenParams {
             client_id: account.client_id.clone(),
+            client_secret: None,
             refresh_token,
             scopes: account.scopes.iter().map(Into::into).collect(),
         })?;

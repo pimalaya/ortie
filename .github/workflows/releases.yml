@@ -13,4 +13,4 @@ jobs:
     secrets: inherit
     with:
       project: ortie
-      nixpkgs: staging-next
+      nixpkgs: nixos-25.11

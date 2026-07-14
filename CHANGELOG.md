@@ -9,30 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Merged the io-oauth library into this repo. The crate now exposes low-level I/O-free OAuth 2.0 coroutines (always on, gated only by `pkce` for PKCE support), a mid-level std blocking client (`client` feature, `OauthClientStd`), and the existing CLI (`cli` feature, default).
-- Added a mid-level `OauthClientStd` wrapping the coroutines around any boxed `Read + Write + Send` stream. Two construction paths: `new(stream, endpoint, client_id)` for the light path (caller owns connection setup) and `connect(endpoint, &tls, client_id)` for the TLS path (opens the `pimalaya-stream` connection itself; gated on a TLS feature). Both auth resume and token refresh CLI paths route through it.
-- Made the lib `#![no_std]`-compatible. The protocol coroutines, URL builder, and authorization-response validator compile under `alloc` only; `std` is brought in behind `feature = "client"` for the std client and CLI surfaces.
-- Added `AuthorizationRequestParams::build_url(&endpoint)` that bakes the typed defaults, the new `extras: BTreeMap<Cow<str>, Cow<str>>` overrides, and any pre-existing query parameters of the endpoint URL into a single URL.
-- Added `AuthorizeParams::validate(expected_state)` returning the authorization code or a typed `AuthorizeValidateError` (`Server`, `StateMissing`, `StateMismatch`). The CLI now branches on this enum.
-- Added `parse_http_date` and populated `IssueAccessTokenSuccessParams::issued_at` from the HTTP `Date` response header (RFC 9110 §5.6.7, `Option<u64>` epoch seconds). Removed `sync_expires_in`; callers compute `(issued_at + expires_in) - now` against their own clock.
-- Added a free `client::await_redirect(redirect_uri)` that binds the listener, captures the redirected URI, and sends the placeholder 200 OK in a single shot (collapses the ~30-line cli inline server to one call).
+- Added the account discovery wizard, run by bare `ortie` (alias of `auth discover`).
+
+  Prompts for an email address, a server or an issuer URI, discovers the reachable PIM services through [io-pim-discovery](https://github.com/pimalaya/io-pim-discovery) (a spinner reports the search progress), keeps the ones advertising an OAuth 2.0 method and prints the pick as a complete `[accounts.<name>]` fragment: valid TOML on stdout with guidance embedded as comments (prompts render on stderr, so `ortie >> <config>` appends it directly), or a JSON object with `--json`. The client step proposes well-known public applications registered against the discovered provider (Thunderbird for Google, Microsoft and Fastmail), each labelled with the PIM domains its registration covers and carrying its registered scopes (used when discovery yielded none); the custom entry prompts for client id and secret, scopes and redirection instead. The storage step plugs the token into a credential provider CLI known for the running OS (secret-tool, kwallet-query, security, pass), custom shell commands as fallback. The fragment enables auto-refresh, links config.sample.toml and lists the follow-up commands (auth get, auth resume, token show, token refresh). Ortie never writes the config itself.
+
+- Added the `grant` account config field.
+
+  Selects the OAuth 2.0 grant flow run by the auth commands; defaults to `authorization-code`, the previous implicit behavior.
+
+- Added the `extras` account config table.
+
+  Parameters forwarded verbatim to the authorization request query, for provider-specific knobs like Google's `access_type` / `prompt`, `login_hint`, or the RFC 8707 `resource` indicator; keys are wire parameter names, never kebab-case renamed.
+
+- Added the token issuance time to the `token inspect` output.
+
+  Read from the HTTP `Date` response header.
 
 ### Changed
 
-- Re-licensed the project from AGPL-3.0-only to dual MIT OR Apache-2.0 to align with the merged library.
+- Turned ortie into a pure CLI binary over the extracted [io-oauth](https://github.com/pimalaya/io-oauth) crate.
+
+  io-oauth owns the I/O-free OAuth 2.0 coroutines and the std blocking client; library users should depend on it directly. The source tree follows the command shape (src/auth, src/token) and the src/main.rs header doubles as the architecture document.
+
+- Enabled PKCE by default with the S256 method, aligning with OAuth 2.1.
+
+  The `pkce` config field accepts booleans (`true` = S256, `false` = off) and method strings (`"s256"`, `"plain"`); servers rejecting PKCE parameters need an explicit `pkce = false`.
+
+- Made every `endpoints.*` config field optional at parse time.
+
+  Each command checks the endpoints it actually needs, so `token show` works on a minimal account holding only `client-id` and the storage commands.
+
+- Replaced the deprecated `--debug` and `--trace` CLI flags with `--log-level <level>` and `--log-file <path>`.
+
+- Replaced the `io-process`-based storage and hook commands with `std::process::Command` and the `pimalaya-config::command` helpers.
+
+  Commands accept the standard TOML shapes: a string wrapped through the platform shell (with env-var expansion) or an exec-style `[program, arg, ...]` array (no expansion).
+
+- Re-licensed the project from AGPL-3.0-only to dual MIT OR Apache-2.0.
+
 - Migrated from pimalaya-toolbox to the split pimalaya-cli / pimalaya-config / pimalaya-stream stack.
-- Reorganised the source tree. Flattened the former v2_0 module to the crate root (`ortie::{authorization_code_grant, issue_access_token, refresh_access_token}`) since OAuth 2.0 is the only protocol version supported. Moved every CLI-feature-gated module under a single flat cli/ folder: the root clap parser (cli/cli.rs exposing `Cli` + `Command`), the nested TOML DTO layer (cli/config.rs exposing `Config`, `AccountConfig`, `EndpointsConfig`, `StoragesConfig`, `StorageConfig`, `HooksConfig`, `HookStatusConfig`, `HookConfig`, `NotifyConfig`), the flat runtime view built from the DTO via `From<AccountConfig>` (cli/account.rs exposing `Account` with helper methods `read_from_storage`, `write_to_storage`, `execute_on_{issue,refresh}_{success,error}_hook`, `redirection`), and one file per subcommand router / leaf (cli/auth.rs + cli/auth_get.rs + cli/auth_resume.rs, cli/token.rs + cli/token_show.rs + cli/token_refresh.rs + cli/token_inspect.rs). client.rs stays at the crate root. The binary entry point imports `ortie::cli::Cli`.
-- Replaced the deprecated `--debug` and `--trace` CLI flags with `--log-level <level>` and `--log-file <path>` (provided by pimalaya-cli).
-- Updated to the new io-http HTTP/1.1 send coroutine (`rfc9112::send::Http11Send`).
-- Made OAuth 2.0 the always-on baseline. Dropped the `oauth2` cargo feature (and the `rfc6749` alias); the protocol modules are now part of the lib unconditionally.
-- Migrated to the new io-http coroutine API (`HttpCoroutine` trait + `HttpCoroutineState::{Yielded, Complete}` + `HttpSendYield::{WantsRead, WantsWrite, WantsRedirect}` + `HttpSendOutput`).
-- Replaced the deprecated `io-process` dependency with `std::process::Command` and the de/serializer helpers from `pimalaya-config::command`. Storage and hook commands now accept the standard TOML shapes (string wrapped through `sh -c`, or `[program, arg, ...]` array); the previous `expand = true` behaviour is folded into the string form. List-form commands no longer expand environment variables in argv, use the string form when you want shell substitution.
 
 ### Removed
 
-- Dropped the `oauth2` cargo feature (now always on) and its `rfc6749` alias.
-- Dropped the `command` cargo feature; shell-command storage and hooks are now part of the CLI baseline.
-- Dropped the `io-process` dependency. Configurations that relied on env-var expansion inside list-form commands must switch to the string form to keep that behaviour.
+- Removed the library target and every non-TLS cargo feature (`oauth2`, its `rfc6749` alias, `command`, `cli`, `client`).
+
+  The binary always builds with OAuth, shell-command storage / hooks and the full CLI included; remaining features are the TLS providers (`rustls-ring` default, `rustls-aws`, `native-tls`), `vendored` and `notify`.
+
+- Removed the `io-process` dependency.
+
+  Configurations relying on env-var expansion inside list-form commands must switch to the string form.
 
 ## [1.1.0] - 2026-02-16
 

@@ -6,14 +6,11 @@ Thank you for investing your time in contributing to Ortie.
 
 The development environment is managed by [Nix flakes](https://nixos.wiki/wiki/Flakes). Running `nix develop` (or `nix-shell` for non-flake users) spawns a shell with the right Rust toolchain, `cargo-deny`, `pkg-config` and the OpenSSL / DBus libraries.
 
-If you do not want to use Nix, install [rustup](https://rust-lang.github.io/rustup/index.html) and pull the toolchain pinned by `rust-version` in `Cargo.toml`:
+If you do not want to use Nix, install [rustup](https://rust-lang.github.io/rustup/index.html) and pull the `cargo` / `rustc` toolchain pinned by `rust-version` in Cargo.toml (edition 2024):
 
 ```
 rustup update
 ```
-
-- `cargo` (>= `v1.88`)
-- `rustc` (>= `v1.88`, edition 2024)
 
 ## Build
 
@@ -21,33 +18,32 @@ rustup update
 cargo build
 ```
 
-You can disable default [features](https://doc.rust-lang.org/cargo/reference/features.html) with `--no-default-features` and enable individual features with `--features feat1,feat2`.
-
-For example, a library-only release build with PKCE:
+You can disable default [features](https://doc.rust-lang.org/cargo/reference/features.html) with `--no-default-features` and enable individual features with `--features feat1,feat2`. For example, a release build with native TLS instead of the default Rustls:
 
 ```
-cargo build --no-default-features --features pkce,client,rustls-ring --release
+cargo build --no-default-features --features native-tls --release
 ```
 
 ## Project layout
 
-Ortie is split in three layers, all in this repository:
+Ortie is a pure CLI binary: the OAuth engine (I/O-free coroutines organised per RFC, plus the std-blocking `Oauth20ClientStd` pump) lives in [io-oauth](https://github.com/pimalaya/io-oauth), and PIM service discovery (consumed by the auth discover wizard) lives in [io-pim-discovery](https://github.com/pimalaya/io-pim-discovery). This repository only contains the glue between the user's TOML config and those two crates.
 
-- `src/{authorization_code_grant, issue_access_token, refresh_access_token}`: low-level I/O-free OAuth 2.0 coroutines (RFC 6749 + RFC 7636).
-- `src/client.rs`: mid-level `OauthClient` that wraps the coroutines over a [pimalaya-stream](https://github.com/pimalaya/stream) connection (`client` feature).
-- `src/cli/`: high-level CLI (`cli` feature, default). Flat layout:
-  - `cli.rs`: root clap parser (`Cli`, `Command`).
-  - `config.rs`: TOML DTO layer; all types end in `*Config` (`Config`, `AccountConfig`, `EndpointsConfig`, `StoragesConfig`, `StorageConfig`, `HooksConfig`, `HookStatusConfig`, `HookConfig`, `NotifyConfig`) and mirror the nested `[accounts.<name>]` shape.
-  - `account.rs`: flat runtime `Account` built via `From<AccountConfig>`; carries the driver methods (`read_from_storage`, `write_to_storage`, `execute_on_{issue,refresh}_{success,error}_hook`, `redirection`).
-  - `auth.rs`, `auth_get.rs`, `auth_resume.rs`: `AuthCommand` router and its `AuthGetCommand` / `AuthResumeCommand` leaves.
-  - `token.rs`, `token_show.rs`, `token_refresh.rs`, `token_inspect.rs`: `TokenCommand` router and its `TokenShowCommand` / `TokenRefreshCommand` / `TokenInspectCommand` leaves.
+The entry point src/main.rs doubles as the architecture document, the same way lib.rs does for io-oauth: read its header first. In short, src/cli.rs declares the root clap parser, src/config.rs holds the TOML DTO layer (every type ends in `*Config` and mirrors the nested `[accounts.<name>]` shape), src/account.rs flattens the selected account into the runtime `Account` view carrying the storage and hook drivers, and the two command trees live under src/auth (discover, get, resume) and src/token (show, inspect, refresh).
 
-The Pimalaya companion crates used at runtime are:
+Doc comments on the command structs double as the CLI help: the first paragraph (two lines at most) is what `-h` shows, the following paragraphs complete the `--help` page. Keep them present and tight on every pub item.
 
-- [pimalaya/cli](https://github.com/pimalaya/cli): cross-binary CLI helpers (clap args, printer, spinner, build-time env, log filtering).
-- [pimalaya/config](https://github.com/pimalaya/config): TOML loader, secret resolution, `std::process::Command` de/ser.
-- [pimalaya/stream](https://github.com/pimalaya/stream): TCP / TLS plumbing shared by the std clients.
-- [io-http](https://github.com/pimalaya/io-http): I/O-free HTTP/1.1 send coroutine.
+At runtime Ortie also relies on the cross-binary Pimalaya helpers: [pimalaya/cli](https://github.com/pimalaya/cli) for clap args, printer and prompt primitives, [pimalaya/config](https://github.com/pimalaya/config) for the TOML loader, secret resolution and shell-command de/serialization, and [pimalaya/stream](https://github.com/pimalaya/stream) for the TCP / TLS plumbing. Bugs touching OAuth wire semantics belong in io-oauth and discovery bugs in io-pim-discovery; config shape, storage, hooks and command UX live here.
+
+## Override dependencies
+
+Ortie builds against the published Pimalaya crates. When hacking on a companion crate, patch it to your local checkout in Cargo.toml:
+
+```toml
+[patch.crates-io]
+io-oauth.path = "../io-oauth"
+```
+
+If cargo complains about *"perhaps two different versions of crate X are being used"*, patch every Pimalaya crate that pulls X transitively so the dep graph converges on the local copies.
 
 ## Lint, test, audit
 
@@ -60,4 +56,4 @@ cargo deny check
 
 ## Commit style
 
-Ortie follows the [conventional commits specification](https://www.conventionalcommits.org/en/v1.0.0/#summary). Prefix every commit with one of `feat`, `fix`, `refactor`, `docs`, `chore`, `test`, `ci`, `build`, optionally scoped (`fix(client): …`).
+Ortie follows the [conventional commits specification](https://www.conventionalcommits.org/en/v1.0.0/#summary). Prefix every commit with one of `feat`, `fix`, `refactor`, `docs`, `chore`, `test`, `ci`, `build`, optionally scoped (`fix(auth): …`).

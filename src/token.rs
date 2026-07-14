@@ -1,12 +1,17 @@
-//! `token` subcommand router (show, refresh, inspect).
+//! `token` subcommand tree: work on the access token already
+//! persisted in storage.
+
+pub mod inspect;
+pub mod refresh;
+pub mod show;
 
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
 
-use crate::cli::{
-    account::Account, token_inspect::TokenInspectCommand, token_refresh::TokenRefreshCommand,
-    token_show::TokenShowCommand,
+use crate::{
+    account::Account,
+    token::{inspect::TokenInspectCommand, refresh::TokenRefreshCommand, show::TokenShowCommand},
 };
 
 /// Display and refresh an existing OAuth 2.0 access token.
@@ -23,6 +28,7 @@ pub enum TokenCommand {
 }
 
 impl TokenCommand {
+    /// Dispatches the token leaf on the resolved account.
     pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
         match self {
             Self::Show(cmd) => cmd.execute(printer, account),
