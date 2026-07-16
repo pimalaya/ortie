@@ -11,9 +11,12 @@ use secrecy::SecretBox;
 
 use pimalaya_config::secret::Secret;
 
-use io_oauth::rfc6749::{
-    client::Oauth20ClientStd, issue_access_token::Oauth20IssueAccessTokenSuccessParams,
-    refresh_access_token::Oauth20RefreshAccessTokenParams,
+use io_oauth::{
+    client::Oauth20ClientStd,
+    rfc6749::{
+        issue_access_token::Oauth20AccessTokenSuccessParams,
+        refresh_access_token::Oauth20AccessTokenRefreshParams,
+    },
 };
 
 use crate::account::Account;
@@ -57,7 +60,7 @@ impl TokenRefreshCommand {
     pub fn refresh(
         mut account: Account,
         refresh_token: SecretBox<str>,
-    ) -> Result<Oauth20IssueAccessTokenSuccessParams> {
+    ) -> Result<Oauth20AccessTokenSuccessParams> {
         let Some(token_endpoint) = account.token_endpoint.clone() else {
             bail!("Missing endpoints.token in the account config");
         };
@@ -68,7 +71,7 @@ impl TokenRefreshCommand {
             Oauth20ClientStd::connect(token_endpoint, &account.tls, account.client_id.clone())?;
         client.client_secret = client_secret;
 
-        let res = client.refresh_access_token(Oauth20RefreshAccessTokenParams {
+        let res = client.refresh_access_token(Oauth20AccessTokenRefreshParams {
             client_id: account.client_id.clone(),
             client_secret: None,
             refresh_token,

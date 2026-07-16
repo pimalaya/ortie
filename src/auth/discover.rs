@@ -2,14 +2,17 @@
 //! also run by bare `ortie`.
 //!
 //! Prompts for an email address, a server or an issuer URI, discovers
-//! the PIM services reachable for it through io-pim-discovery, keeps
-//! only the ones advertising an OAuth 2.0 method, and lets the user
-//! pick one. A trailing manual entry falls back to typing the OAuth
-//! 2.0 endpoints by hand. The client step proposes well-known public
-//! applications registered against the discovered provider
-//! (Thunderbird today); the trailing custom entry prompts for
-//! everything a manually registered application needs (client id and
-//! secret, scopes, redirection endpoint). The storage step plugs the
+//! the PIM services reachable for it through io-pim-discovery,
+//! reduces them to the OAuth 2.0 grants they advertise (each tagged
+//! with the services sharing it), and lets the user pick one. A
+//! trailing manual entry falls back to typing the OAuth 2.0 endpoints
+//! by hand. The application step offers every way to obtain a client
+//! registration, in io-oauth's preference order: dynamic registration
+//! (RFC 7591) first when the provider advertises it, then well-known
+//! public applications registered against the discovered provider
+//! (Thunderbird today), then a custom entry prompting for everything
+//! a manually registered application needs (client id and secret,
+//! scopes, redirection endpoint). The storage step plugs the
 //! token into a credential provider CLI known for the running OS,
 //! falling back to custom shell commands. The outcome is a complete
 //! account config fragment printed as valid TOML on stdout (guidance
@@ -23,13 +26,24 @@ use clap::Parser;
 use log::debug;
 use pimalaya_cli::{printer::Printer, prompt, spinner::Spinner};
 use pimalaya_stream::tls::{Rustls, Tls};
+use secrecy::ExposeSecret;
 use serde::Serialize;
 use url::Url;
 
+use io_oauth::{
+    client::Oauth20ClientStd,
+    rfc7591::{
+        register::{
+            Oauth20ClientRegisterErrorCode, Oauth20ClientRegisterParams,
+            Oauth20ClientRegisterResponse,
+        },
+        source::Oauth20ClientSource,
+    },
+};
 use io_pim_discovery::{
     compose::{
-        client::ComposeClientStd,
-        types::{AuthMethod, Service, ServiceConfig},
+        client::DiscoveryComposeClientStd,
+        config::{DiscoveryAuthMethod, DiscoveryService, DiscoveryServiceConfig},
     },
     shared::dns::system_resolver,
 };
@@ -37,14 +51,26 @@ use io_pim_discovery::{
 /// Fallback DNS resolver when the system one cannot be determined.
 const DEFAULT_RESOLVER: &str = "tcp://1.1.1.1:53";
 
+/// Loopback redirection URI registered by default: RFC 8252
+/// section 7.3 lets the port vary at authorization time, so it
+/// matches the runtime ephemeral-port default.
+const REDIRECT_LOOPBACK: &str = "http://127.0.0.1";
+
+/// Reverse-DNS private-use redirection URI (RFC 8252 section 7.1),
+/// retried when the provider rejects http redirections altogether
+/// (Fastmail notably); the browser dead-ends on it, and auth resume
+/// finishes the flow by hand.
+const REDIRECT_SCHEME: &str = "org.pimalaya.ortie://redirect";
+
 /// Discover OAuth 2.0 services and print a ready-to-append account
 /// config fragment. This is also what bare `ortie` runs.
 ///
 /// The wizard prompts for an email address, a server or an issuer
-/// URI, discovers the reachable services, lets you pick one (or enter
-/// the endpoints manually), then prints the resulting account as
-/// valid TOML on stdout. It never writes any file: append the
-/// fragment to your config yourself, e.g. `ortie >> <config>`.
+/// URI, discovers the reachable services, reduces them to their
+/// OAuth 2.0 grants, lets you pick one (or enter the endpoints
+/// manually), then prints the resulting account as valid TOML on
+/// stdout. It never writes any file: append the fragment to your
+/// config yourself, e.g. `ortie >> <config>`.
 #[derive(Debug, Parser)]
 pub struct AuthDiscoverCommand {
     /// Email address, server or issuer URI to discover OAuth 2.0
@@ -108,34 +134,54 @@ impl AuthDiscoverCommand {
         }
         config.name = name.to_string();
 
-        // NOTE: well-known public applications registered against the
-        // same authorization server can be reused instead of
-        // registering a client.
-        let apps = known_apps(&config);
+        // NOTE: the application step offers every way to obtain a
+        // client registration, sorted by io-oauth's client source
+        // preference: dynamic registration when the provider
+        // advertises it, well-known public applications registered
+        // against the same authorization server, then the custom
+        // entry.
+        let mut choices = Vec::new();
+        choices.extend(registration_endpoint(&config).map(ClientChoice::Dynamic));
+        choices.extend(known_apps(&config).into_iter().map(ClientChoice::Known));
+        choices.push(ClientChoice::Custom);
+        choices.sort_by_key(ClientChoice::source);
 
-        if apps.is_empty() {
+        if choices.len() == 1 {
             custom_client(&mut config)?;
         } else {
-            let mut choices: Vec<ClientChoice> =
-                apps.into_iter().map(ClientChoice::Known).collect();
-            choices.push(ClientChoice::Custom);
+            loop {
+                match prompt::item("Application:", choices.clone(), None)? {
+                    ClientChoice::Dynamic(endpoint) => match register(&mut config, &endpoint) {
+                        Ok(()) => break,
+                        // NOTE: the failure was reported by the
+                        // register spinner; drop the entry and offer
+                        // the remaining ones.
+                        Err(_) => {
+                            choices.retain(|choice| !matches!(choice, ClientChoice::Dynamic(_)));
+                        }
+                    },
+                    ClientChoice::Known(app) => {
+                        config.client_id = Some(app.client_id.to_string());
+                        config.client_secret = app.client_secret.map(|raw| RawSecret {
+                            raw: raw.to_string(),
+                        });
+                        config.endpoints.redirection = app.redirection.map(ToString::to_string);
 
-            match prompt::item("Public application:", choices, None)? {
-                ClientChoice::Known(app) => {
-                    config.client_id = Some(app.client_id.to_string());
-                    config.client_secret = app.client_secret.map(|raw| RawSecret {
-                        raw: raw.to_string(),
-                    });
-                    config.endpoints.redirection = app.redirection.map(ToString::to_string);
+                        // NOTE: discovered scopes stay, they are
+                        // narrower (per service); the app's registered
+                        // set only fills the gap when discovery
+                        // yielded none.
+                        if config.scopes.is_empty() {
+                            config.scopes = app.scopes.iter().map(ToString::to_string).collect();
+                        }
 
-                    // NOTE: discovered scopes stay, they are narrower
-                    // (per service); the app's registered set only
-                    // fills the gap when discovery yielded none.
-                    if config.scopes.is_empty() {
-                        config.scopes = app.scopes.iter().map(ToString::to_string).collect();
+                        break;
+                    }
+                    ClientChoice::Custom => {
+                        custom_client(&mut config)?;
+                        break;
                     }
                 }
-                ClientChoice::Custom => custom_client(&mut config)?,
             }
         }
 
@@ -170,24 +216,24 @@ impl AuthDiscoverCommand {
 }
 
 /// Runs discovery for `email`, then prompts the user to pick one of
-/// the OAuth 2.0 services found (or the trailing manual entry). Falls
+/// the OAuth 2.0 grants found (or the trailing manual entry). Falls
 /// straight through to manual entry when nothing is found.
 fn choose(email: &str) -> Result<OauthConfig> {
-    let spinner = Spinner::start("Searching for OAuth 2.0 services");
+    let spinner = Spinner::start("Searching for OAuth 2.0 grants");
     let discovered = discover(email)?;
 
     if discovered.is_empty() {
-        spinner.failure("No OAuth 2.0 service found, entering manually");
+        spinner.failure("No OAuth 2.0 grant found, entering manually");
         return manual(None);
     }
 
-    spinner.success(format!("Found {} OAuth 2.0 service(s)", discovered.len()));
+    spinner.success(format!("Found {} OAuth 2.0 grant(s)", discovered.len()));
 
     let mut choices: Vec<Choice> = discovered.into_iter().map(Choice::Discovered).collect();
     choices.push(Choice::Manual);
 
-    match prompt::item("Choose an OAuth 2.0 service:", choices, None)? {
-        Choice::Discovered(service) => Ok(service.into_config()),
+    match prompt::item("Choose an OAuth 2.0 grant:", choices, None)? {
+        Choice::Discovered(grant) => Ok(grant.into_config()),
         Choice::Manual => manual(None),
     }
 }
@@ -196,30 +242,16 @@ fn choose(email: &str) -> Result<OauthConfig> {
 /// mechanism and reduces the result to the deduplicated OAuth 2.0
 /// methods it advertises, each tagged with the services that share it.
 fn discover(email: &str) -> Result<Vec<DiscoveredOauth>> {
-    let resolver = system_resolver().unwrap_or_else(|| {
-        DEFAULT_RESOLVER
-            .parse()
-            .expect("default resolver must be a valid URL")
-    });
-
-    let tls = Tls {
-        rustls: Rustls {
-            alpn: vec!["http/1.1".to_string()],
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-
-    let client = ComposeClientStd::new(resolver, tls);
+    let client = compose_client();
 
     // The OAuth-capable PIM services; POP3, WebDAV and ManageSieve
     // never advertise an OAuth flow of their own.
     let services = BTreeSet::from([
-        Service::Imap,
-        Service::Smtp,
-        Service::Jmap,
-        Service::Caldav,
-        Service::Carddav,
+        DiscoveryService::Imap,
+        DiscoveryService::Smtp,
+        DiscoveryService::Jmap,
+        DiscoveryService::Caldav,
+        DiscoveryService::Carddav,
     ]);
 
     debug!("compose OAuth 2.0 services for {email}");
@@ -228,10 +260,33 @@ fn discover(email: &str) -> Result<Vec<DiscoveredOauth>> {
     Ok(collect_oauth(&configs))
 }
 
+/// The discovery client shared by the wizard's network steps, backed
+/// by the system DNS resolver (with a public fallback).
+fn compose_client() -> DiscoveryComposeClientStd {
+    let resolver = system_resolver().unwrap_or_else(|| {
+        DEFAULT_RESOLVER
+            .parse()
+            .expect("default resolver must be a valid URL")
+    });
+
+    DiscoveryComposeClientStd::new(resolver, wizard_tls())
+}
+
+/// TLS options for the wizard's HTTPS calls, pinned to HTTP/1.1.
+fn wizard_tls() -> Tls {
+    Tls {
+        rustls: Rustls {
+            alpn: vec!["http/1.1".to_string()],
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
 /// Collects the OAuth 2.0 methods across every discovered config,
 /// deduplicated by method, each carrying the set of services it
 /// authenticates.
-fn collect_oauth(configs: &[ServiceConfig]) -> Vec<DiscoveredOauth> {
+fn collect_oauth(configs: &[DiscoveryServiceConfig]) -> Vec<DiscoveredOauth> {
     let mut discovered: Vec<DiscoveredOauth> = Vec::new();
 
     for config in configs {
@@ -256,12 +311,12 @@ fn collect_oauth(configs: &[ServiceConfig]) -> Vec<DiscoveredOauth> {
 }
 
 /// Whether an authentication method is one of the OAuth 2.0 flows.
-fn is_oauth(method: &AuthMethod) -> bool {
+fn is_oauth(method: &DiscoveryAuthMethod) -> bool {
     matches!(
         method,
-        AuthMethod::OauthAuthorizationCodeGrant { .. }
-            | AuthMethod::OauthDeviceAuthorizationGrant { .. }
-            | AuthMethod::OauthIssuer(_)
+        DiscoveryAuthMethod::OauthAuthorizationCodeGrant { .. }
+            | DiscoveryAuthMethod::OauthDeviceAuthorizationGrant { .. }
+            | DiscoveryAuthMethod::OauthIssuer(_)
     )
 }
 
@@ -317,6 +372,147 @@ fn custom_client(config: &mut OauthConfig) -> Result<()> {
     Ok(())
 }
 
+/// The provider's RFC 7591 registration endpoint, when it advertises
+/// one in its RFC 8414 metadata.
+///
+/// No discovery mechanism carries this information (the compose
+/// layer keeps flow endpoints only, and the autoconfig sources never
+/// see server metadata), so the wizard asks the provider itself: the
+/// issuer is guessed from each endpoint host (https://<host>) and
+/// the first metadata advertising a registration endpoint wins.
+fn registration_endpoint(config: &OauthConfig) -> Option<Url> {
+    let spinner = Spinner::start("Checking for dynamic client registration");
+    let client = compose_client();
+
+    for host in endpoint_hosts(&config.endpoints) {
+        let Ok(issuer) = format!("https://{host}").parse::<Url>() else {
+            continue;
+        };
+
+        let Some(metadata) = client.oauth_server(&issuer) else {
+            continue;
+        };
+
+        if let Some(endpoint) = metadata.registration_endpoint {
+            spinner.success("Dynamic client registration advertised");
+            return Some(endpoint);
+        }
+    }
+
+    spinner.failure("No dynamic client registration advertised");
+    None
+}
+
+/// Registers ortie dynamically against the provider's registration
+/// endpoint (RFC 7591): a public client without secret
+/// (token_endpoint_auth_method none), the grant types of the
+/// discovered flow and the discovered scopes. The issued client id
+/// (and secret, when the server insists on one) land in the config
+/// fragment.
+///
+/// A loopback redirection is registered first, matching the runtime
+/// default; providers rejecting http redirections altogether
+/// (Fastmail notably) get a reverse-DNS private-use scheme instead,
+/// which the fragment then pins so auth resume can finish the flow
+/// by hand.
+fn register(config: &mut OauthConfig, endpoint: &Url) -> Result<()> {
+    let device = config.grant == Some("device");
+    let scopes = config.scopes.join(" ");
+
+    let mut params = Oauth20ClientRegisterParams {
+        redirect_uris: if device {
+            Vec::new()
+        } else {
+            vec![REDIRECT_LOOPBACK.to_string()]
+        },
+        token_endpoint_auth_method: Some("none".to_string()),
+        grant_types: if device {
+            vec![
+                "urn:ietf:params:oauth:grant-type:device_code".to_string(),
+                "refresh_token".to_string(),
+            ]
+        } else {
+            vec![
+                "authorization_code".to_string(),
+                "refresh_token".to_string(),
+            ]
+        },
+        response_types: if device {
+            Vec::new()
+        } else {
+            vec!["code".to_string()]
+        },
+        client_name: Some("Ortie".to_string()),
+        scope: (!scopes.is_empty()).then_some(scopes),
+        ..Default::default()
+    };
+
+    let tls = wizard_tls();
+    let spinner = Spinner::start("Registering ortie as a public client");
+
+    let mut response = register_once(endpoint, &tls, &params);
+
+    // NOTE: some providers (Fastmail) reject every http redirection,
+    // loopback included, and only accept a reverse-DNS private-use
+    // scheme (RFC 8252 section 7.1); retry with one before giving up.
+    if let Ok(Err(rejection)) = &response {
+        let redirect_rejected =
+            rejection.error == Oauth20ClientRegisterErrorCode::InvalidRedirectUri;
+
+        if redirect_rejected && !device {
+            params.redirect_uris = vec![REDIRECT_SCHEME.to_string()];
+            response = register_once(endpoint, &tls, &params);
+        }
+    }
+
+    match response {
+        Ok(Ok(client)) => {
+            spinner.success(format!("Registered client {}", client.client_id));
+
+            config.client_id = Some(client.client_id);
+            config.client_secret = client.client_secret.map(|secret| RawSecret {
+                raw: secret.expose_secret().to_string(),
+            });
+
+            // NOTE: the loopback registration matches the runtime
+            // default (ephemeral 127.0.0.1 port, free per RFC 8252
+            // section 7.3), so only the private-use scheme needs
+            // pinning.
+            if params.redirect_uris.first().map(String::as_str) == Some(REDIRECT_SCHEME) {
+                config.endpoints.redirection = Some(REDIRECT_SCHEME.to_string());
+            }
+
+            Ok(())
+        }
+        Ok(Err(rejection)) => {
+            let detail = rejection
+                .error_description
+                .unwrap_or_else(|| format!("{:?}", rejection.error));
+            spinner.failure(format!("Registration rejected: {detail}"));
+            bail!("Registration rejected: {detail}");
+        }
+        Err(err) => {
+            spinner.failure(format!("Registration failed: {err}"));
+            Err(err)
+        }
+    }
+}
+
+/// Posts one registration attempt over a fresh connection to the
+/// registration endpoint; servers rarely keep the socket alive, so
+/// the redirect-scheme retry reconnects instead of reusing a stream.
+fn register_once(
+    endpoint: &Url,
+    tls: &Tls,
+    params: &Oauth20ClientRegisterParams,
+) -> Result<Oauth20ClientRegisterResponse> {
+    // NOTE: no client id exists yet, registration is what issues it.
+    let mut client = Oauth20ClientStd::connect(endpoint.clone(), tls, "")?;
+    let response = client.register_client(endpoint, params)?;
+
+    Ok(response)
+}
+
 /// Prompts for the custom storage commands, run through the platform
 /// shell. The write prompt is skipped when the read command is left
 /// empty for later, and the fragment keeps empty placeholders.
@@ -345,14 +541,14 @@ fn custom_storage(config: &mut OauthConfig) -> Result<()> {
 /// One deduplicated OAuth 2.0 method and the services sharing it.
 #[derive(Debug, Eq, PartialEq)]
 struct DiscoveredOauth {
-    method: AuthMethod,
-    services: BTreeSet<Service>,
+    method: DiscoveryAuthMethod,
+    services: BTreeSet<DiscoveryService>,
 }
 
 impl DiscoveredOauth {
     fn into_config(self) -> OauthConfig {
         match self.method {
-            AuthMethod::OauthAuthorizationCodeGrant {
+            DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
                 authorization_endpoint,
                 token_endpoint,
                 scope,
@@ -372,7 +568,7 @@ impl DiscoveredOauth {
                 issuer: None,
                 storage: None,
             },
-            AuthMethod::OauthDeviceAuthorizationGrant {
+            DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
                 device_authorization_endpoint,
                 token_endpoint,
                 scope,
@@ -392,7 +588,7 @@ impl DiscoveredOauth {
                 issuer: None,
                 storage: None,
             },
-            AuthMethod::OauthIssuer(issuer) => OauthConfig {
+            DiscoveryAuthMethod::OauthIssuer(issuer) => OauthConfig {
                 name: String::new(),
                 client_id: None,
                 client_secret: None,
@@ -409,7 +605,7 @@ impl DiscoveredOauth {
     }
 }
 
-/// One entry in the service pick list: a discovered service, or the
+/// One entry in the grant pick list: a discovered grant, or the
 /// trailing manual entry.
 #[derive(Debug, Eq, PartialEq)]
 enum Choice {
@@ -432,15 +628,15 @@ impl fmt::Display for Choice {
             .join(", ");
 
         match &discovered.method {
-            AuthMethod::OauthAuthorizationCodeGrant { token_endpoint, .. } => {
+            DiscoveryAuthMethod::OauthAuthorizationCodeGrant { token_endpoint, .. } => {
                 write!(f, "OAuth 2.0 authorization code grant")?;
                 write!(f, " ({services}) via {token_endpoint}")
             }
-            AuthMethod::OauthDeviceAuthorizationGrant { token_endpoint, .. } => {
+            DiscoveryAuthMethod::OauthDeviceAuthorizationGrant { token_endpoint, .. } => {
                 write!(f, "OAuth 2.0 device authorization grant")?;
                 write!(f, " ({services}) via {token_endpoint}")
             }
-            AuthMethod::OauthIssuer(issuer) => {
+            DiscoveryAuthMethod::OauthIssuer(issuer) => {
                 write!(f, "OAuth 2.0 issuer {issuer} ({services})")
             }
             _ => Ok(()),
@@ -448,17 +644,33 @@ impl fmt::Display for Choice {
     }
 }
 
-/// One entry in the public application pick list: a well-known
-/// public application, or the trailing custom entry.
-#[derive(Debug, Eq, PartialEq)]
+/// One entry in the application pick list: dynamic registration
+/// against the provider's advertised endpoint, a well-known public
+/// application, or the trailing custom entry.
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum ClientChoice {
+    Dynamic(Url),
     Known(&'static KnownApp),
     Custom,
+}
+
+impl ClientChoice {
+    /// The io-oauth client source of the entry, whose derived order
+    /// (dynamic registration, public client, manual) is the
+    /// pick-list preference.
+    fn source(&self) -> Oauth20ClientSource {
+        match self {
+            Self::Dynamic(_) => Oauth20ClientSource::DynamicRegistration,
+            Self::Known(_) => Oauth20ClientSource::PublicClient,
+            Self::Custom => Oauth20ClientSource::Manual,
+        }
+    }
 }
 
 impl fmt::Display for ClientChoice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Dynamic(endpoint) => write!(f, "Dynamic registration via {endpoint}"),
             Self::Known(app) => write!(f, "{} ({})", app.name, app.covers),
             Self::Custom => write!(f, "Custom application"),
         }
@@ -547,19 +759,7 @@ const KNOWN_APPS: &[KnownApp] = &[
 /// The well-known public applications registered against the same
 /// authorization server as the config's endpoints.
 fn known_apps(config: &OauthConfig) -> Vec<&'static KnownApp> {
-    let endpoints = &config.endpoints;
-    let urls = [
-        &endpoints.authorization,
-        &endpoints.device_authorization,
-        &endpoints.token,
-    ];
-
-    let hosts: BTreeSet<String> = urls
-        .into_iter()
-        .flatten()
-        .filter_map(|url| Url::parse(url).ok())
-        .filter_map(|url| url.host_str().map(str::to_ascii_lowercase))
-        .collect();
+    let hosts = endpoint_hosts(&config.endpoints);
 
     KNOWN_APPS
         .iter()
@@ -902,6 +1102,21 @@ fn toml_key(name: &str) -> Cow<'_, str> {
     }
 }
 
+/// The distinct hosts of the config's endpoints, lowercased.
+fn endpoint_hosts(endpoints: &Endpoints) -> BTreeSet<String> {
+    let urls = [
+        &endpoints.authorization,
+        &endpoints.device_authorization,
+        &endpoints.token,
+    ];
+
+    urls.into_iter()
+        .flatten()
+        .filter_map(|url| Url::parse(url).ok())
+        .filter_map(|url| url.host_str().map(str::to_ascii_lowercase))
+        .collect()
+}
+
 /// Splits a space-separated scope string into the config list shape.
 fn split_scopes(scope: Option<String>) -> Vec<String> {
     scope
@@ -910,15 +1125,15 @@ fn split_scopes(scope: Option<String>) -> Vec<String> {
 }
 
 /// Lowercase wire name of a service, for the pick-list labels.
-fn service_name(service: Service) -> &'static str {
+fn service_name(service: DiscoveryService) -> &'static str {
     match service {
-        Service::Imap => "imap",
-        Service::Pop3 => "pop3",
-        Service::Smtp => "smtp",
-        Service::Jmap => "jmap",
-        Service::Caldav => "caldav",
-        Service::Carddav => "carddav",
-        Service::Webdav => "webdav",
-        Service::Managesieve => "managesieve",
+        DiscoveryService::Imap => "imap",
+        DiscoveryService::Pop3 => "pop3",
+        DiscoveryService::Smtp => "smtp",
+        DiscoveryService::Jmap => "jmap",
+        DiscoveryService::Caldav => "caldav",
+        DiscoveryService::Carddav => "carddav",
+        DiscoveryService::Webdav => "webdav",
+        DiscoveryService::Managesieve => "managesieve",
     }
 }

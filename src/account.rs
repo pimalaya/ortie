@@ -30,7 +30,7 @@ use secrecy::ExposeSecret;
 use url::Url;
 
 use io_oauth::rfc6749::issue_access_token::{
-    Oauth20IssueAccessTokenErrorParams, Oauth20IssueAccessTokenSuccessParams,
+    Oauth20AccessTokenErrorParams, Oauth20AccessTokenSuccessParams,
 };
 
 use crate::config::{
@@ -205,7 +205,7 @@ impl Account {
 
     /// Reads the persisted token by running the read storage command
     /// and parsing its stdout as the token response JSON.
-    pub fn read_from_storage(&mut self) -> Result<Oauth20IssueAccessTokenSuccessParams> {
+    pub fn read_from_storage(&mut self) -> Result<Oauth20AccessTokenSuccessParams> {
         let cmd = &mut self.read_storage_command;
 
         let output = cmd
@@ -222,7 +222,7 @@ impl Account {
             return Err(err.context("Read access token via command error"));
         }
 
-        let res = Oauth20IssueAccessTokenSuccessParams::try_from(output.stdout.as_slice())
+        let res = Oauth20AccessTokenSuccessParams::try_from(output.stdout.as_slice())
             .context("Parse access token from command error")?;
 
         Ok(res)
@@ -230,7 +230,7 @@ impl Account {
 
     /// Persists the token by running the write storage command and
     /// piping the token response JSON to its stdin.
-    pub fn write_to_storage(&mut self, res: &Oauth20IssueAccessTokenSuccessParams) -> Result<()> {
+    pub fn write_to_storage(&mut self, res: &Oauth20AccessTokenSuccessParams) -> Result<()> {
         let cmd = &mut self.write_storage_command;
         let json = String::try_from(res)?.into_bytes();
 
@@ -272,7 +272,7 @@ impl Account {
     }
 
     /// Fires the on-issue success hook with the issued token.
-    pub fn execute_on_issue_success_hook(&mut self, res: &Oauth20IssueAccessTokenSuccessParams) {
+    pub fn execute_on_issue_success_hook(&mut self, res: &Oauth20AccessTokenSuccessParams) {
         #[cfg(feature = "notify")]
         let notify = self.on_issue_success_hook_notify.as_ref();
         #[cfg(not(feature = "notify"))]
@@ -281,7 +281,7 @@ impl Account {
     }
 
     /// Fires the on-issue error hook with the server error.
-    pub fn execute_on_issue_error_hook(&mut self, res: &Oauth20IssueAccessTokenErrorParams) {
+    pub fn execute_on_issue_error_hook(&mut self, res: &Oauth20AccessTokenErrorParams) {
         #[cfg(feature = "notify")]
         let notify = self.on_issue_error_hook_notify.as_ref();
         #[cfg(not(feature = "notify"))]
@@ -290,7 +290,7 @@ impl Account {
     }
 
     /// Fires the on-refresh success hook with the refreshed token.
-    pub fn execute_on_refresh_success_hook(&mut self, res: &Oauth20IssueAccessTokenSuccessParams) {
+    pub fn execute_on_refresh_success_hook(&mut self, res: &Oauth20AccessTokenSuccessParams) {
         #[cfg(feature = "notify")]
         let notify = self.on_refresh_success_hook_notify.as_ref();
         #[cfg(not(feature = "notify"))]
@@ -299,7 +299,7 @@ impl Account {
     }
 
     /// Fires the on-refresh error hook with the server error.
-    pub fn execute_on_refresh_error_hook(&mut self, res: &Oauth20IssueAccessTokenErrorParams) {
+    pub fn execute_on_refresh_error_hook(&mut self, res: &Oauth20AccessTokenErrorParams) {
         #[cfg(feature = "notify")]
         let notify = self.on_refresh_error_hook_notify.as_ref();
         #[cfg(not(feature = "notify"))]
@@ -313,7 +313,7 @@ impl Account {
 fn execute_success_hook(
     cmd: Option<&mut Command>,
     #[cfg_attr(not(feature = "notify"), allow(unused))] notify: Option<&NotifyConfig>,
-    res: &Oauth20IssueAccessTokenSuccessParams,
+    res: &Oauth20AccessTokenSuccessParams,
 ) {
     trace!("execute success hook: {res:?}");
 
@@ -371,7 +371,7 @@ fn execute_success_hook(
 fn execute_error_hook(
     cmd: Option<&mut Command>,
     #[cfg_attr(not(feature = "notify"), allow(unused))] notify: Option<&NotifyConfig>,
-    res: &Oauth20IssueAccessTokenErrorParams,
+    res: &Oauth20AccessTokenErrorParams,
 ) {
     trace!("execute error hook: {res:?}");
 

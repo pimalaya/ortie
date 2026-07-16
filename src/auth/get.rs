@@ -18,9 +18,8 @@ use serde::{
 use url::Url;
 
 use io_oauth::{
-    rfc6749::{
-        auth_request::Oauth20AuthRequestParams, client::await_redirect, state::Oauth20State,
-    },
+    client::await_redirect,
+    rfc6749::{auth_request::Oauth20AuthRequestParams, state::Oauth20State},
     rfc7636::pkce::{
         Oauth20PkceCodeChallenge, Oauth20PkceCodeChallengeMethod, Oauth20PkceCodeVerifier,
     },

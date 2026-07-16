@@ -11,7 +11,7 @@ use humantime::format_duration;
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use io_oauth::rfc6749::issue_access_token::Oauth20IssueAccessTokenSuccessParams;
+use io_oauth::rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams;
 
 use crate::account::Account;
 
@@ -34,7 +34,7 @@ impl TokenInspectCommand {
 /// Printable metadata view over the stored token response.
 #[derive(Debug, Serialize)]
 #[serde(transparent)]
-pub struct Report(Oauth20IssueAccessTokenSuccessParams);
+pub struct Report(Oauth20AccessTokenSuccessParams);
 
 impl fmt::Display for Report {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

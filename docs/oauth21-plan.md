@@ -94,7 +94,7 @@ Rejected: toml_edit write-back into the config file. It would create a maintenan
 
 ## Milestones
 
-All milestones ship within v1. M0 through M3 make up the next minor release (M0 and M1 landed, see the Landed section); M4 through M6 follow as further minors, each independently releasable.
+All milestones ship within v1. M0 through M3 make up the next minor release (M0 and M1 landed, and M5 jumped the queue into it; see the Landed section); M4 and M6 follow as further minors, each independently releasable.
 
 ### M2: device authorization grant end-to-end
 
@@ -117,10 +117,6 @@ All milestones ship within v1. M0 through M3 make up the next minor release (M0 
 - Surface grant choice from metadata: grant_types_supported and device_authorization_endpoint drive which grants are offered; code_challenge_methods_supported drives the suggested pkce value.
 - Unresolvable bare OauthIssuer picks get a metadata-resolution retry instead of dead-ending.
 
-### M5: dynamic client registration in the wizard
-
-- When metadata advertises registration_endpoint and the client id prompt was left empty, offer RFC 7591 registration (io-oauth Oauth20RegisterClient: token_endpoint_auth_method none, grant_types from the chosen grant, loopback redirect URI) and print the issued client_id (and client_secret as a config secret shape) inside the fragment. Proven flow: Fastmail zero-registration in cardamum.
-
 ### M6: token revocation, RFC 7009
 
 - io-oauth first: revocation request coroutine + Oauth20ClientStd method.
@@ -128,6 +124,8 @@ All milestones ship within v1. M0 through M3 make up the next minor release (M0 
 
 ## Backlog (not scheduled)
 
+- Wizard: emit the extras a provider is known to require into the fragment (Fastmail's RFC 8707 resource, Google's access_type=offline), so a dynamically registered Fastmail account works without a manual D4 edit.
+- auth get: skip the loopback listener when the configured redirection is not an http URL (private-use scheme registrations) and point at auth resume instead of erroring after the browser opened.
 - Optional strict mode (refuse plain PKCE, refuse token endpoints over plain HTTP).
 - Client credentials grant: kept by 2.1, missing in io-oauth; machine-to-machine is off ortie's user-token focus for now.
 - RFC 7662 introspection: a `token inspect --remote` complement to the local metadata view.
@@ -166,3 +164,11 @@ All milestones ship within v1. M0 through M3 make up the next minor release (M0 
 - Every pub item carries a doc comment, first paragraph two lines at most: clap renders it as the `-h` summary and the remaining paragraphs as the `--help` page (verified on the built binary).
 - CONTRIBUTING rewritten for the pure-CLI reality (paragraph-style layout description, published-crates default with a patch-locally recipe); README intro converted to a paragraph and its tagline aligned with the Cargo description (CLI to manage OAuth tokens); docs/README.md index added.
 - CHANGELOG [Unreleased] compacted from a history log into a net diff against 1.1.0 (interior churn like the wizard output reshape and the intermediate cli-layer reorganisation folded into their final-state entries).
+
+### M5: dynamic client registration in the wizard (2026-07-15)
+
+- Landed ahead of M2 and M4, nothing in it depended on them. The application step now offers every way to obtain a client, sorted by a new io-oauth preference order: dynamic registration when the provider advertises it, well-known public applications registered against the same authorization server, then the custom entry. The list shows even when no known application matches, so the straight-to-custom fall-through became [Dynamic registration, Custom application].
+- Detection: no discovery mechanism hands the wizard registration support (the compose layer drops registration_endpoint when resolving issuers, and the fixed provider rules and autoconfig/ISPDB sources never see RFC 8414 metadata), so the wizard probes at the application step: issuer guessed from each endpoint host (https://<host>), metadata fetched via ComposeClientStd::oauth_server, entry hidden without a registration_endpoint. Google and Microsoft publish none, so their lists keep leading with Thunderbird; Fastmail advertises one. Rejected: extending the compose AuthMethod variants to carry registration_endpoint; it covers metadata-sourced entries only and ripples through every wizard consumer (himalaya, cardamum, calendula).
+- io-oauth grew rfc7591::source::Oauth20ClientSource (dynamic registration, public client, manual; declaration order is the preference order, the pick list sorts by it) and Oauth20ClientStd::register_client, inlining the RFC 7591 coroutine like the other per-operation methods; the std client moved to the crate-root client module along the way, since it spans the RFC modules. It keeps its version-scoped name and version-less methods (version-prefixed methods rejected as heavy); a future OAuth version would add a sibling client, unified behind a version-agnostic OauthClientStd wrapper only once one exists. Ortie path-patches io-oauth until the next release.
+- Registration runs at wizard time, keeping the print-only philosophy: token_endpoint_auth_method none, grant_types and response_types from the discovered grant, the discovered scopes, client_name Ortie; the issued client_id (and client_secret as the config secret shape) land inside the fragment. Deviation from the original design, found in cardamum's live notes: Fastmail rejects every http redirection at registration, loopback included, so the wizard registers http://127.0.0.1 first and retries with org.pimalaya.ortie://redirect on invalid_redirect_uri, pinning endpoints.redirection so auth resume finishes the flow by hand. A failed registration reports through its spinner and falls back to the remaining pick-list entries.
+- The grant step was relabeled while touching the wizard: discovery always reduced services to deduplicated grants tagged with the services sharing them, and the prompts now say so ("Choose an OAuth 2.0 grant:", "Found N OAuth 2.0 grant(s)").

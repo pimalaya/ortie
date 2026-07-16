@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added the account discovery wizard, run by bare `ortie` (alias of `auth discover`).
 
-  Prompts for an email address, a server or an issuer URI, discovers the reachable OAuth 2.0 services and prints the pick as a complete `[accounts.<name>]` fragment: valid TOML on stdout (`ortie >> <config>` appends it directly), or a JSON object with `--json`. Along the way it proposes well-known public applications (Thunderbird for Google, Microsoft and Fastmail) and plugs the token storage into a credential provider CLI known for your platform (secret-tool, kwallet-query, security, pass). Ortie never writes the config itself.
+  Prompts for an email address, a server or an issuer URI, discovers the reachable OAuth 2.0 grants and prints the pick as a complete `[accounts.<name>]` fragment: valid TOML on stdout (`ortie >> <config>` appends it directly), or a JSON object with `--json`. The application step then offers every way to obtain a client, most preferred first: dynamic registration (RFC 7591) when the provider advertises it in its RFC 8414 metadata (the wizard registers ortie on the spot, retrying with a reverse-DNS private-use redirection scheme for providers like Fastmail that reject http ones), a well-known public application (Thunderbird for Google, Microsoft and Fastmail), or a custom entry. The storage step plugs the token storage into a credential provider CLI known for your platform (secret-tool, kwallet-query, security, pass). Ortie never writes the config itself.
 
 - Added the `grant` account config field.
 

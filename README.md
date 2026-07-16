@@ -115,7 +115,7 @@ A configuration is loaded from the first valid path among:
 
 Override the path with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`; multiple paths can be passed at once, separated by `:`. The first one is the base and the rest are deep-merged on top.
 
-You will also need a registered OAuth 2.0 application: either use a public application (Thunderbird credentials cover most consumer providers) or register your own. The first option is simpler.
+You will also need a registered OAuth 2.0 application: let the wizard register one dynamically when your provider advertises RFC 7591 registration (Fastmail does), use a public application (Thunderbird credentials cover most consumer providers) or register your own. The options are listed in that order of preference.
 
 *See public Thunderbird application credentials for various providers at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).*
 
@@ -200,10 +200,12 @@ Bare `ortie` (an alias of `ortie auth discover`) walks you through creating an a
 $ ortie
 
 ? Email, server or URI: user@fastmail.com
-✓ Found 1 OAuth 2.0 service(s)
-? Choose an OAuth 2.0 service: OAuth 2.0 authorization code grant (jmap, caldav, carddav) via https://api.fastmail.com/oauth/refresh
+✓ Found 1 OAuth 2.0 grant(s)
+? Choose an OAuth 2.0 grant: OAuth 2.0 authorization code grant (jmap, caldav, carddav) via https://api.fastmail.com/oauth/refresh
 ? Account name: fastmail
-? Public application: Thunderbird (emails, contacts, calendars)
+✓ Dynamic client registration advertised
+? Application: Dynamic registration via https://api.fastmail.com/oauth/register
+✓ Registered client <issued-client-id>
 ? Token storage: pass (password store)
 
 # OAuth 2.0 account discovered by the ortie wizard.
@@ -212,7 +214,7 @@ $ ortie
 # …
 ```
 
-When the discovered endpoints match a well-known public application (Thunderbird is registered with Google, Microsoft and Fastmail), the client step proposes reusing it, client secret, redirection and scopes included. The storage step plugs the token read and write commands into a credential provider CLI known for your platform (secret-tool, kwallet-query, security, pass). Both steps end with a custom entry taking your own application details or shell commands instead.
+The application step lists every way to obtain a client, most preferred first: dynamic registration (RFC 7591) when the provider advertises a registration endpoint in its RFC 8414 metadata (the wizard registers ortie on the spot and prints the issued client id in the fragment), a well-known public application registered against the discovered endpoints (Thunderbird for Google, Microsoft and Fastmail; client secret, redirection and scopes included), or the trailing custom entry taking your own application details. The storage step plugs the token read and write commands into a credential provider CLI known for your platform (secret-tool, kwallet-query, security, pass), with the same custom fall-through for shell commands.
 
 The fragment is complete, valid TOML printed on stdout, while the prompts render on stderr; appending it to your config is therefore a one-liner:
 

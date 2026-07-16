@@ -16,10 +16,10 @@ use url::Url;
 use pimalaya_config::secret::Secret;
 
 use io_oauth::{
+    client::Oauth20ClientStd,
     rfc6749::{
-        access_token_request::Oauth20RequestAccessTokenParams,
+        access_token_request::Oauth20AccessTokenRequestParams,
         auth_response::{Oauth20AuthParams, Oauth20AuthParamsValidationError},
-        client::Oauth20ClientStd,
         state::Oauth20State,
     },
     rfc7636::pkce::Oauth20PkceCodeVerifier,
@@ -127,7 +127,7 @@ impl AuthResumeCommand {
             Oauth20ClientStd::connect(token_endpoint, &account.tls, account.client_id.clone())?;
         client.client_secret = client_secret;
 
-        let res = client.request_access_token(Oauth20RequestAccessTokenParams {
+        let res = client.request_access_token(Oauth20AccessTokenRequestParams {
             code,
             redirect_uri,
             client_id: account.client_id.as_str().into(),
