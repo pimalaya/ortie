@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-16
+
 ### Added
 
 - Added the account discovery wizard, run by bare `ortie` (alias of `auth discover`).
@@ -28,15 +30,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   The `pkce` config field accepts booleans (`true` = S256, `false` = off) and method strings (`"s256"`, `"plain"`); servers rejecting PKCE parameters need an explicit `pkce = false`.
 
+- Changed the storage and hook command shapes.
+
+  A string command runs through the platform shell with env-var expansion; an exec-style `[program, arg, ...]` array runs directly, without expansion. Configurations relying on env-var expansion inside array commands must switch to the string form.
+
 - Made every `endpoints.*` config field optional.
 
   Each command checks the endpoints it actually needs, so `token show` works on a minimal account holding only `client-id` and the storage commands.
 
 - Replaced the deprecated `--debug` and `--trace` CLI flags with `--log-level <level>` and `--log-file <path>`.
-
-- Changed the storage and hook command shapes.
-
-  A string command runs through the platform shell with env-var expansion; an exec-style `[program, arg, ...]` array runs directly, without expansion. Configurations relying on env-var expansion inside array commands must switch to the string form.
 
 - Re-licensed the project from AGPL-3.0-only to dual MIT OR Apache-2.0.
 

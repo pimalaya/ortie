@@ -895,6 +895,8 @@ dependencies = [
 [[package]]
 name = "io-pim-discovery"
 version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b0e97480f9e44a318af97fb630a40842cbb106a582a715e3b0ac26fe29f6033"
 dependencies = [
  "anyhow",
  "base64",
@@ -1355,7 +1357,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "ortie"
-version = "1.2.0"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "base64",

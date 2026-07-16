@@ -1,48 +1,58 @@
 # 🔑 Ortie [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-CLI to manage OAuth tokens, written in Rust.
+CLI to manage OAuth tokens
 
 ## Table of contents
 
 - [Features](#features)
+- [Coverage](#coverage)
 - [Installation](#installation)
   - [Pre-built binary](#pre-built-binary)
   - [Cargo](#cargo)
   - [Nix](#nix)
   - [Sources](#sources)
 - [Configuration](#configuration)
-  - [Google](#google)
-  - [Microsoft](#microsoft)
-  - [Microsoft Graph](#microsoft-graph)
 - [Usage](#usage)
-  - [Discover an account](#discover-an-account)
-  - [Request a new access token](#request-a-new-access-token)
-  - [Refresh an access token](#refresh-an-access-token)
-  - [Show an access token](#show-an-access-token)
-  - [Debugging](#debugging)
 - [Alternatives](#alternatives)
 - [AI disclosure](#ai-disclosure)
+- [License](#license)
 - [Social](#social)
+- [Contributing](#contributing)
 - [Sponsoring](#sponsoring)
 
 ## Features
 
-- **OAuth 2.0** Authorization Code Grant <sup>[rfc6749 #4.1](https://datatracker.ietf.org/doc/html/rfc6749#section-4.1)</sup> and refresh <sup>[rfc6749 #6](https://datatracker.ietf.org/doc/html/rfc6749#section-6)</sup>
-- **PKCE** <sup>[rfc7636](https://datatracker.ietf.org/doc/html/rfc7636)</sup>, S256 enabled by default (OAuth 2.1 posture; opt out with `pkce = false`)
-- Account discovery **wizard** (bare `ortie`), printing a ready-to-append config fragment
-- Extra authorization request **parameters** (`access_type`, `login_hint`, RFC 8707 `resource`, ...) via the `extras` config table
-- **TLS** support:
-  - [Rustls](https://crates.io/crates/rustls) with ring crypto (`rustls-ring` feature, default)
+- **Account discovery wizard**: run bare, it finds the OAuth 2.0 grants reachable for an email address and prints a ready-to-append account configuration.
+- **Dynamic client registration**: register a public client on the spot, with no provider console, when the provider advertises it.
+- **Authorization code grant**: sign in through the browser, with a built-in redirection server that captures the callback.
+- **Manual flow completion**: finish a flow by hand, from the URL your browser was sent to, when the redirection server cannot bind.
+- **Token refresh**: renew an expired access token from its refresh token, on demand or automatically when reading it.
+- **PKCE**: enabled with the S256 method by default, following the OAuth 2.1 posture; opt out for servers that reject it.
+- **Extra authorization parameters**: forward provider-specific knobs (Google offline access, login hints, resource indicators) verbatim.
+- **Token storage**: read and write tokens through your own shell commands, wiring into any credential manager.
+- **Hooks**: run a shell command or raise a system notification on token issuance and refresh, split by outcome.
+- **JSON output**: switch discovery and token commands to machine-readable output for scripts.
+- Full standard, blocking client with **TLS** support:
+  - [Rustls](https://crates.io/crates/rustls) with ring crypto (requires `rustls-ring` feature, enabled by default)
   - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)
   - [Native TLS](https://crates.io/crates/native-tls) (requires `native-tls` feature)
-- Fake HTTP **redirection server** during the interactive flow
-- Shell command **storages** for reading and writing access tokens
-- Shell command **hooks** on success and error of token issuance / refresh
-- System notification **hooks** (requires `notify` feature)
-- **JSON** output via `--json`
 
 > [!TIP]
-> Ortie is written in [Rust](https://www.rust-lang.org/) and uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional functionality. The default feature set is declared in [Cargo.toml](./Cargo.toml).
+> Ortie uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional functionality; the default set is declared in Cargo.toml.
+
+## Coverage
+
+| RFC    | What is covered |
+|--------|-----------------|
+| [6749] | The OAuth 2.0 framework: authorization code grant, access token issuance and refresh |
+| [7636] | PKCE: the S256 and plain code challenges protecting the authorization code in transit |
+| [7591] | Dynamic client registration: register a public client without any provider console |
+| [8414] | Authorization server metadata: the wizard reads it to discover a provider's endpoints and registration endpoint |
+
+[6749]: https://www.rfc-editor.org/rfc/rfc6749
+[7636]: https://www.rfc-editor.org/rfc/rfc7636
+[7591]: https://www.rfc-editor.org/rfc/rfc7591
+[8414]: https://www.rfc-editor.org/rfc/rfc8414
 
 ## Installation
 
@@ -64,7 +74,7 @@ curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | P
 
 These commands install the latest binary from the GitHub [releases](https://github.com/pimalaya/ortie/releases) section.
 
-For a more up-to-date version than the latest release, check out the [releases](https://github.com/pimalaya/ortie/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. These pre-built binaries are built from the `master` branch.
+For a more up-to-date version than the latest release, check out the [releases](https://github.com/pimalaya/ortie/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. These pre-built binaries are built from the master branch.
 
 > [!NOTE]
 > Such binaries are built with the default cargo features. If you need specific features, please use another installation method.
@@ -105,194 +115,32 @@ nix run
 
 ## Configuration
 
-Run bare `ortie` to launch the discovery wizard: it asks for an email address (or a server / issuer URI), discovers the OAuth 2.0 services reachable for it, and prints a complete account config fragment as valid TOML on stdout, with its guidance embedded as comments. Ortie never writes your config itself; prompts render on stderr, so appending the fragment is a one-liner: `ortie >> ~/.config/ortie/config.toml`. The full field reference lives in [config.sample.toml](./config.sample.toml).
+Run ortie with no argument to launch the discovery wizard: it asks for an email address (or a server or issuer URI), discovers the OAuth 2.0 services reachable for it, and prints a complete account fragment as valid TOML on stdout, its guidance embedded as comments. Ortie never writes your configuration itself; the prompts render on stderr, so appending the fragment is a one-liner, ortie >> ~/.config/ortie/config.toml.
 
 A configuration is loaded from the first valid path among:
 
-- `$XDG_CONFIG_HOME/ortie/config.toml`
-- `$HOME/.config/ortie/config.toml`
-- `$HOME/.ortierc`
+- $XDG_CONFIG_HOME/ortie/config.toml
+- $HOME/.config/ortie/config.toml
+- $HOME/.ortierc
 
-Override the path with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`; multiple paths can be passed at once, separated by `:`. The first one is the base and the rest are deep-merged on top.
+Override the path with -c <PATH> or ORTIE_CONFIG=<PATH>; multiple paths can be passed at once, separated by :. The first one is the base and the rest are deep-merged on top. The full field reference, with provider recipes for Google, Microsoft and Microsoft Graph, lives in [config.sample.toml](./config.sample.toml).
 
-You will also need a registered OAuth 2.0 application: let the wizard register one dynamically when your provider advertises RFC 7591 registration (Fastmail does), use a public application (Thunderbird credentials cover most consumer providers) or register your own. The options are listed in that order of preference.
-
-*See public Thunderbird application credentials for various providers at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).*
-
-### Google
-
-```toml
-endpoints.authorization = "https://accounts.google.com/o/oauth2/auth"
-endpoints.token = "https://www.googleapis.com/oauth2/v3/token"
-scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com"]
-extras.access_type = "offline"
-```
-
-Using the public Thunderbird application:
-
-```toml
-client-id = "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com"
-client-secret.raw = "kSmqreRr0qwBWJgbf5Y-PjSU"
-endpoints.redirection = "http://localhost"
-```
-
-Using your [own application](https://developers.google.com/identity/protocols/oauth2):
-
-```toml
-client-id = "<your-client-id>"
-client-secret.raw = "<your-client-secret>"
-```
-
-### Microsoft
-
-```toml
-endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-```
-
-Using the public Thunderbird application:
-
-```toml
-client-id = "9e5f94bc-e8a4-4e73-b8be-63364c29d753"
-endpoints.redirection = "https://localhost"
-```
-
-Using your [own application](https://learn.microsoft.com/en-us/exchange/client-developer/legacy-protocols/how-to-authenticate-an-imap-pop-smtp-application-by-using-oauth):
-
-```toml
-client-id = "<your-client-id>"
-client-secret.raw = "<your-client-secret>"
-```
-
-### Microsoft Graph
-
-The Thunderbird application above is registered for Outlook IMAP/SMTP, not for the Microsoft Graph API. To mint Graph tokens (used by the Microsoft Graph backend, e.g. Himalaya's `msgraph` backend), request Graph scopes from a client registered for Graph:
-
-```toml
-endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-scopes = ["https://graph.microsoft.com/User.Read", "https://graph.microsoft.com/Mail.ReadWrite", "https://graph.microsoft.com/Mail.Send", "offline_access"]
-```
-
-Using the public Microsoft Graph PowerShell application:
-
-```toml
-client-id = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
-endpoints.redirection = "http://localhost"
-```
-
-Using your [own application](https://learn.microsoft.com/en-us/graph/auth-register-app-v2) (set the redirection to a redirect URI registered for it):
-
-```toml
-client-id = "<your-client-id>"
-endpoints.redirection = "<your-registered-redirect-uri>"
-```
-
-Work or school (Entra ID) accounts receive a JWT access token the Graph API accepts; personal Microsoft accounts may be issued an opaque token the API rejects with `InvalidAuthenticationToken`, so prefer a work/school account or your own registered application.
+You will also need a registered OAuth 2.0 application. The wizard offers three ways, most preferred first: dynamic registration when your provider advertises it (Fastmail does), a public application (Thunderbird credentials cover most consumer providers), or your own registration. Public Thunderbird credentials for various providers are listed at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).
 
 ## Usage
 
-### Discover an account
-
-Bare `ortie` (an alias of `ortie auth discover`) walks you through creating an account with a minimum of questions:
+Every command and subcommand is documented through --help. The common flows:
 
 ```sh
-$ ortie
-
-? Email, server or URI: user@fastmail.com
-✓ Found 1 OAuth 2.0 grant(s)
-? Choose an OAuth 2.0 grant: OAuth 2.0 authorization code grant (jmap, caldav, carddav) via https://api.fastmail.com/oauth/refresh
-? Account name: fastmail
-✓ Dynamic client registration advertised
-? Application: Dynamic registration via https://api.fastmail.com/oauth/register
-✓ Registered client <issued-client-id>
-? Token storage: pass (password store)
-
-# OAuth 2.0 account discovered by the ortie wizard.
-# …
-[accounts.fastmail]
-# …
+ortie                       # discover an account and print a config fragment
+ortie auth get              # request a first access token through the browser
+ortie auth resume <url>     # finish the flow by hand when the redirection fails
+ortie token show            # print the stored access token
+ortie token refresh         # force a refresh
+ortie token inspect         # show token metadata (type, scopes, expiry)
 ```
 
-The application step lists every way to obtain a client, most preferred first: dynamic registration (RFC 7591) when the provider advertises a registration endpoint in its RFC 8414 metadata (the wizard registers ortie on the spot and prints the issued client id in the fragment), a well-known public application registered against the discovered endpoints (Thunderbird for Google, Microsoft and Fastmail; client secret, redirection and scopes included), or the trailing custom entry taking your own application details. The storage step plugs the token read and write commands into a credential provider CLI known for your platform (secret-tool, kwallet-query, security, pass), with the same custom fall-through for shell commands.
-
-The fragment is complete, valid TOML printed on stdout, while the prompts render on stderr; appending it to your config is therefore a one-liner:
-
-```sh
-ortie >> ~/.config/ortie/config.toml
-```
-
-The `--json` flag switches the fragment to a JSON object, for scripts and other tools.
-
-### Request a new access token
-
-```sh
-$ ortie auth get
-
-Created authorization request with:
- - state: RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4
- - pkce: oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6
-
-Sending authorization request to your browser:
-https://login.example.com/oauth/authorize?…
-Wait for redirection…
-```
-
-Follow the browser flow, then on success the terminal shows:
-
-```sh
-Access token successfully issued (expires in 1h)
-```
-
-If the redirection server cannot start (port permission denied, etc.), copy the URL you are redirected to and complete the flow manually:
-
-```sh
-ortie auth resume \
-  --state RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4 \
-  --pkce oJ-rEXNu9YzqpCWVIPOwD5KvMhLAT73dstk0jye8nZ6 \
-  https://localhost/?code=M.C521_BAY.2.U&state=RWdzST0ybUIzT1wtMSF9OCMmJHJUVmJrUmhhU0haLz4
-```
-
-### Refresh an access token
-
-```sh
-$ ortie token refresh
-
-Access token successfully refreshed (expires in 1h)
-```
-
-### Show an access token
-
-```sh
-$ ortie token show
-
-EwA4BOl3BAAUcDnR9grBJokeAHaUV8R3+rVHX+IAAQfw9oZLztQS8bo8NvyWmbs…
-```
-
-The `--auto-refresh` flag (or the `auto-refresh = true` config option) automatically refreshes expired tokens.
-
-Inspect token metadata:
-
-```sh
-$ ortie token inspect
-
-Token type: bearer
-Issued: 22h 51m 1s ago
-Expires in: 52m 38s
-With refresh token: true
-With scope: https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send
-```
-
-### Debugging
-
-The `--log-level <LEVEL>` flag controls log verbosity (`off`, `error`, `warn`, `info`, `debug`, `trace`). When omitted, `RUST_LOG` is consulted; it supports per-target filters (see the [env_logger](https://docs.rs/env_logger) docs). `RUST_BACKTRACE=1` enables the full error backtrace.
-
-Logs go to stderr by default; redirect them with `--log-file <PATH>` or shell redirection:
-
-```sh
-ortie token show --log-level debug --log-file /tmp/ortie.log
-ortie token show --log-level trace 2>/tmp/ortie.log
-```
+Logs go to stderr; --log-level and --log-file control verbosity and destination, and --json switches output to machine-readable objects.
 
 ## Alternatives
 
@@ -304,18 +152,31 @@ ortie token show --log-level trace 2>/tmp/ortie.log
 
 This project is developed with AI assistance. This section documents how, so users and downstream packagers can make informed decisions.
 
-- **Tools**: Claude Code (Anthropic), Opus 4.7, invoked locally with a persistent project-scoped memory and a small set of repo-specific rules.
+- **Tools**: Claude Code (Anthropic), invoked locally with a persistent project-scoped memory and a small set of repo-specific rules.
 - **Used for**: Refactors, mechanical multi-file edits, boilerplate (feature gates, error enums, derive macros, trait impls), test scaffolding, doc polish, exploratory design conversations.
 - **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
-- **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit (`nix develop --command cargo check / cargo test / cargo fmt`). Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
-- **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong: off-by-one errors, missed edge cases, plausible but nonexistent APIs, stale RFC references. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
-- **Last reviewed**: 30/05/2026
+- **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit. Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
+- **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
+- **Last reviewed**: 16/07/2026
+
+## License
+
+This project is licensed under either of:
+
+- [MIT license](LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
+
+at your option.
 
 ## Social
 
 - Chat on [Matrix](https://matrix.to/#/#pimalaya:matrix.org)
 - News on [Mastodon](https://fosstodon.org/@pimalaya) or [RSS](https://fosstodon.org/@pimalaya.rss)
 - Mail at [pimalaya.org@posteo.net](mailto:pimalaya.org@posteo.net)
+
+## Contributing
+
+Contributions are welcome: start with [CONTRIBUTING.md](./CONTRIBUTING.md), which opens with the Pimalaya-wide guides to read first.
 
 ## Sponsoring
 
