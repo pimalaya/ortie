@@ -8,11 +8,11 @@ Reference: [draft-ietf-oauth-v2-1-15](https://datatracker.ietf.org/doc/html/draf
 
 One grant flow (authorization code, optional PKCE, optional client secret), token show/inspect/refresh over external storage commands, issue/refresh hooks, and an auth discover wizard whose output is print-only. io-oauth already ships everything needed for the device grant (RFC 8628) and dynamic client registration (RFC 7591); io-pim-discovery already resolves RFC 8414 issuer metadata and can enable RFC 9728. The gaps are all in ortie's config shape, CLI surface and wiring.
 
-## Versioning: staying in v1.x
+## Versioning: v2.0.0
 
-No major release is needed. The library target is removed in a minor: nobody consumes it (io-oauth is the library story; the README and CHANGELOG redirect the rare lib user there), and the flat config design below parses every v1 config unchanged. Two behavioral changes ride the next minor, documented in the CHANGELOG: the pkce default flips to S256 (servers without PKCE support need an explicit `pkce = false`) and auth discover output becomes a config-shaped fragment. Everything else is additive.
+Originally scoped as a v1.x minor: the library removal alone is invisible (nobody consumes the lib target — io-oauth is the library story, and the README and CHANGELOG redirect the rare lib user there), and the flat config design below parses every v1 config unchanged. During release prep the accumulated breaking surface justified a major instead: the pkce default flips to S256 (accounts against servers without PKCE support now need an explicit `pkce = false`), the storage and hook array-command form stopped expanding env vars (string commands still do), the `--debug` / `--trace` flags were replaced by `--log-level` / `--log-file`, and the non-TLS cargo features (`oauth2` / its `rfc6749` alias, `command`, `cli`, `client`) were dropped. All of these are in the CHANGELOG under `[2.0.0]`. The relicense from AGPL-3.0-only to dual MIT OR Apache-2.0 rode the same release.
 
-What deliberately keeps working: v1 config files parse unchanged (`grant` defaults to authorization-code, endpoints.authorization merely becomes optional, `pkce = true`/`false` still accepted), every v1 CLI invocation keeps its shape (auth get/resume and token show/inspect/refresh, no new required flags), and the token storage JSON and hook environment variables are untouched. The only change an existing account can notice is PKCE-by-default.
+What still parses and runs unchanged: v1 config files (`grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, `pkce = true`/`false` still accepted), every v1 CLI subcommand shape (auth get/resume and token show/inspect/refresh, no new required flags), and the token storage JSON and hook environment variables. The behavioral changes an existing account can notice are PKCE-by-default and, if it relied on env-var expansion inside array-form storage/hook commands, the switch to the string form.
 
 Note that the token side (show/inspect/refresh, storage commands, hooks) is already grant-agnostic: every grant ends in the same token response shape. That is why multi-grant support costs nothing downstream of issuance.
 
@@ -94,7 +94,7 @@ Rejected: toml_edit write-back into the config file. It would create a maintenan
 
 ## Milestones
 
-All milestones ship within v1. M0 through M3 make up the next minor release (M0 and M1 landed, and M5 jumped the queue into it; see the Landed section); M4 and M6 follow as further minors, each independently releasable.
+M0, M1 and M5 landed in the 2.0.0 release (M5 jumped the queue; see the Landed section). The remaining milestones follow as further minors on top of 2.x, each independently releasable: M2 and M3 next, then M4 and M6.
 
 ### M2: device authorization grant end-to-end
 
