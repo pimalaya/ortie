@@ -12,6 +12,10 @@ CLI to manage OAuth tokens
   - [Nix](#nix)
   - [Sources](#sources)
 - [Configuration](#configuration)
+  - [Google](#google)
+  - [Microsoft (Outlook IMAP / SMTP)](#microsoft-outlook-imap--smtp)
+  - [Microsoft Graph](#microsoft-graph)
+  - [Fastmail](#fastmail)
 - [Usage](#usage)
 - [Alternatives](#alternatives)
 - [AI disclosure](#ai-disclosure)
@@ -115,17 +119,89 @@ nix run
 
 ## Configuration
 
-Run ortie with no argument to launch the discovery wizard: it asks for an email address (or a server or issuer URI), discovers the OAuth 2.0 services reachable for it, and prints a complete account fragment as valid TOML on stdout, its guidance embedded as comments. Ortie never writes your configuration itself; the prompts render on stderr, so appending the fragment is a one-liner, ortie >> ~/.config/ortie/config.toml.
+Run ortie with no argument to launch the discovery wizard: it asks for an email address (or a server or issuer URI), discovers the OAuth 2.0 services reachable for it, and prints a complete account fragment as valid TOML on stdout, its guidance embedded as comments. Ortie never writes your configuration itself; the prompts render on stderr, so appending the fragment is a one-liner, `ortie >> ~/.config/ortie/config.toml`.
 
 A configuration is loaded from the first valid path among:
 
-- $XDG_CONFIG_HOME/ortie/config.toml
-- $HOME/.config/ortie/config.toml
-- $HOME/.ortierc
+- `$XDG_CONFIG_HOME/ortie/config.toml`
+- `$HOME/.config/ortie/config.toml`
+- `$HOME/.ortierc`
 
-Override the path with -c <PATH> or ORTIE_CONFIG=<PATH>; multiple paths can be passed at once, separated by :. The first one is the base and the rest are deep-merged on top. The full field reference, with provider recipes for Google, Microsoft, Microsoft Graph and Fastmail, lives in [config.sample.toml](./config.sample.toml).
+Override the path with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`; multiple paths can be passed at once, separated by :. The first one is the base and the rest are deep-merged on top. The full field reference lives in [config.sample.toml](./config.sample.toml); ready-made per-provider blocks follow below.
 
-You will also need a registered OAuth 2.0 application. The wizard offers three ways, most preferred first: dynamic registration when your provider advertises it (Fastmail does), a public application (Thunderbird credentials cover most consumer providers), or your own registration. Public Thunderbird credentials for various providers are listed at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).
+You may also need a registered OAuth 2.0 application. The wizard offers three ways, most preferred first: dynamic registration when your provider advertises it (Fastmail does), a public application (Thunderbird credentials cover most consumer providers), or your own registration. Public Thunderbird credentials for various providers are listed at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).
+
+Ready-made configuration blocks for common providers follow. The discovery wizard fills most of these in for you; they are kept here for manual setups and for Microsoft Graph, which the wizard does not cover. Drop the relevant block under your `[accounts.<name>]` table and fill in the client credentials.
+
+### Google
+
+```toml
+endpoints.authorization = "https://accounts.google.com/o/oauth2/v2/auth"
+endpoints.token = "https://oauth2.googleapis.com/token"
+scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com"]
+extras.access_type = "offline"
+```
+
+Use these current endpoints, not the legacy `o/oauth2/auth` / `www.googleapis.com/oauth2/v3/token` pair, which Google can reject at consent with "This app is blocked"; the discovery wizard already fills the current ones. Gmail and CardDAV are sensitive scopes, so an unverified own application only works for accounts listed as test users on its OAuth consent screen; the public Thunderbird application below is verified.
+
+Public Thunderbird application:
+
+```toml
+client-id = "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com"
+client-secret.raw = "kSmqreRr0qwBWJgbf5Y-PjSU"
+endpoints.redirection = "http://localhost"
+```
+
+For your [own application](https://developers.google.com/identity/protocols/oauth2), set `client-id` and `client-secret.raw` to your registered values.
+
+### Microsoft (Outlook IMAP / SMTP)
+
+```toml
+endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+```
+
+Public Thunderbird application:
+
+```toml
+client-id = "9e5f94bc-e8a4-4e73-b8be-63364c29d753"
+endpoints.redirection = "https://localhost"
+```
+
+### Microsoft Graph
+
+The Thunderbird application above is registered for Outlook IMAP / SMTP, not for the Graph API. To mint Graph tokens (for example Himalaya's msgraph backend), request Graph scopes from a client registered for Graph:
+
+```toml
+endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+scopes = ["https://graph.microsoft.com/User.Read", "https://graph.microsoft.com/Mail.ReadWrite", "https://graph.microsoft.com/Mail.Send", "offline_access"]
+```
+
+Public Microsoft Graph PowerShell application:
+
+```toml
+client-id = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
+endpoints.redirection = "http://localhost"
+```
+
+Work or school (Entra ID) accounts receive a JWT the Graph API accepts; personal Microsoft accounts may be issued an opaque token the API rejects with InvalidAuthenticationToken, so prefer a work or school account, or your own registered application.
+
+### Fastmail
+
+Fastmail advertises RFC 7591 dynamic registration, so bare `ortie` can register a client for you. Two Fastmail specifics the wizard does not yet fill into the fragment, so add them by hand:
+
+1. RFC 8707 resource: Fastmail's authorize endpoint rejects the request with `invalid_target` (no consent screen, an instant bounce) unless a resource indicator is present. Its value is the JMAP session URL.
+2. Redirect: Fastmail's dynamic registration accepts only a reverse-DNS private-use scheme (it refuses http and loopback), so the wizard pins `endpoints.redirection = "org.pimalaya.ortie://redirect"`. A desktop browser cannot route that scheme back to ortie, so `auth get` prints a manual `auth resume` command to finish the flow by hand.
+
+```toml
+endpoints.authorization = "https://api.fastmail.com/oauth/authorize"
+endpoints.token = "https://api.fastmail.com/oauth/refresh"
+scopes = ["urn:ietf:params:oauth:scope:mail", "urn:ietf:params:oauth:scope:contacts", "urn:ietf:params:oauth:scope:calendars", "offline_access"]
+extras.resource = "https://api.fastmail.com/jmap/session"
+```
+
+The wizard selects all four advertised scopes by default (Fastmail cannot complete on a desktop anyway; trim them in the scope multi-select if you want). The pre-registered Thunderbird application offered by the wizard covers Fastmail with a loopback redirect instead, avoiding the manual resume; see [docs/providers.md](./docs/providers.md) and [docs/discovery-layering.md](./docs/discovery-layering.md) for why dynamic registration forces the private-use scheme.
 
 ## Usage
 
@@ -140,7 +216,7 @@ ortie token refresh         # force a refresh
 ortie token inspect         # show token metadata (type, scopes, expiry)
 ```
 
-Logs go to stderr; --log-level and --log-file control verbosity and destination, and --json switches output to machine-readable objects.
+Logs go to stderr; `--log-level` and `--log-file` control verbosity and destination, and `--json` switches output to machine-readable objects.
 
 ## Alternatives
 
