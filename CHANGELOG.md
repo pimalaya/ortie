@@ -12,7 +12,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added the account discovery wizard, run by bare `ortie` (alias of `auth discover`).
 
-  Prompts for an email address, a server or an issuer URI, discovers the reachable OAuth 2.0 grants and prints the pick as a complete `[accounts.<name>]` fragment: valid TOML on stdout (`ortie >> <config>` appends it directly), or a JSON object with `--json`. The application step then offers every way to obtain a client, most preferred first: dynamic registration (RFC 7591) when the provider advertises it in its RFC 8414 metadata (the wizard registers ortie on the spot, retrying with a reverse-DNS private-use redirection scheme for providers like Fastmail that reject http ones), a well-known public application (Thunderbird for Google, Microsoft and Fastmail), or a custom entry. The storage step plugs the token storage into a credential provider CLI known for your platform (secret-tool, kwallet-query, security, pass). Ortie never writes the config itself.
+  Prompts for an email address, a server or an issuer URI, discovers the reachable OAuth 2.0 grants and prints the pick as a complete `[accounts.<name>]` fragment: valid TOML on stdout (`ortie >> <config>` appends it directly), or a JSON object with `--json`. Grants sharing a flow and endpoints are grouped into a single choice that merges their per-service scopes, so one token can cover several services (Microsoft's IMAP and SMTP, say) instead of one grant line per service.
+
+  The application step then offers every way to obtain a client, most preferred first: dynamic registration (RFC 7591) when the provider advertises it in its RFC 8414 metadata (the wizard registers ortie on the spot, falling back to a reverse-DNS private-use redirection scheme for providers like Fastmail whose registration accepts only those, which `auth get` then completes through a manual `auth resume`), a well-known public application (Thunderbird for Google, Microsoft and Fastmail), or a custom entry.
+
+  It also fills the defaults a provider is known to need but discovery does not surface, such as Fastmail's RFC 8707 `resource` indicator and its scopes (without which Fastmail rejects the authorize request before any consent screen).
+
+  It then lets you pick the scopes in a multi-select (the discovered set, plus any extra the provider is known to advertise), so you can trim or extend what the token is granted.
+
+  The storage step plugs the token storage into a credential provider CLI known for your platform (secret-tool, kwallet-query, security, pass). Ortie never writes the config itself.
 
 - Added the `grant` account config field.
 

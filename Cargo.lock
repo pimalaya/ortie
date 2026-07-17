@@ -894,9 +894,9 @@ dependencies = [
 
 [[package]]
 name = "io-pim-discovery"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b0e97480f9e44a318af97fb630a40842cbb106a582a715e3b0ac26fe29f6033"
+checksum = "a94d5441f31e708c5aaa3b66f300e513dbd3d3b2eaf91c510649ca1167d144af"
 dependencies = [
  "anyhow",
  "base64",
@@ -1418,9 +1418,9 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pimalaya-cli"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5906730fb754abe7da401a3507f517ccf67642ee10c7d25701eff475b06aba9f"
+checksum = "2b2c2af3956b4e03b257ced65e98fba191f6307f3adc898ab445add688a40e7d"
 dependencies = [
  "anyhow",
  "clap",

@@ -15,7 +15,7 @@ use serde::{
     Deserialize, Serialize, Serializer,
     de::value::{Error, StringDeserializer},
 };
-use url::Url;
+use url::{Host, Url};
 
 use io_oauth::{
     client::await_redirect,
@@ -94,8 +94,19 @@ impl AuthGetCommand {
             interactive,
         };
 
+        // Non-interactive or JSON: print (or serialize) the request
+        // and hand off to a manual `auth resume`. JSON stays a clean
+        // structured object carrying the state and verifier, so only
+        // the human output appends the ready-to-run command.
         if printer.is_json() || !interactive {
-            return printer.out(authorization_uri);
+            printer.out(authorization_uri)?;
+
+            if !printer.is_json() {
+                println!();
+                print_manual_resume(&state, pkce_code_challenge.as_ref().map(|c| &c.verifier));
+            }
+
+            return Ok(());
         }
 
         println!("{authorization_uri}");
@@ -107,8 +118,37 @@ impl AuthGetCommand {
             println!("{msg}: {auth_uri}");
         }
 
+        // A redirection the local listener cannot bind (a reverse-DNS
+        // private-use scheme, as Fastmail's dynamic registration
+        // mandates) dead-ends in the browser: hand off to a manual
+        // `auth resume` rather than binding a listener that would fail
+        // on the unknown scheme (no host, no inferable port).
+        if !is_loopback_redirect(&redirect_uri) {
+            println!();
+            println!(
+                "Ortie cannot capture the redirection {} automatically.",
+                redirect_uri.as_str(),
+            );
+            print_manual_resume(&state, pkce_code_challenge.as_ref().map(|c| &c.verifier));
+
+            return Ok(());
+        }
+
         println!("Wait for redirection…");
-        let redirected_uri = await_redirect(&redirect_uri)?;
+
+        let redirected_uri = match await_redirect(&redirect_uri) {
+            Ok(redirected_uri) => redirected_uri,
+            // The listener could not bind or accept (a privileged or
+            // taken port, a closed browser): fall back to the manual
+            // flow instead of aborting the whole grant.
+            Err(err) => {
+                println!();
+                println!("Ortie could not capture the redirection automatically ({err}).");
+                print_manual_resume(&state, pkce_code_challenge.as_ref().map(|c| &c.verifier));
+
+                return Ok(());
+            }
+        };
 
         let cmd = AuthResumeCommand {
             redirected_uri,
@@ -119,6 +159,48 @@ impl AuthGetCommand {
 
         cmd.execute(printer, account)
     }
+}
+
+/// Prints the manual `auth resume` command that finishes the flow by
+/// hand, filled with the flow's state and (when PKCE is enabled) code
+/// verifier. Used whenever the local listener cannot capture the
+/// redirect: a non-interactive shell, a private-use redirection
+/// scheme, or a listener that failed to bind.
+fn print_manual_resume(state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifier>) {
+    let state = String::from_utf8_lossy(state.expose());
+
+    println!(
+        "Once authorized, copy the URL your browser was redirected to, \
+	 then run the resume subcommand:"
+    );
+    println!();
+
+    match pkce {
+        Some(verifier) => {
+            let verifier = String::from_utf8_lossy(verifier.expose());
+            println!("> ortie auth resume --state {state} --pkce {verifier} <REDIRECTED_URI>");
+        }
+        None => {
+            println!("> ortie auth resume <REDIRECTED_URI> --state {state} <REDIRECTED_URI>");
+        }
+    }
+}
+
+/// Whether the redirection can be serviced by the local listener:
+/// an http(s) URL bound to a loopback host. Any other redirection (a
+/// reverse-DNS private-use scheme, as Fastmail's dynamic registration
+/// mandates, or a remote host) dead-ends in the browser, so the flow
+/// finishes by hand through `auth resume`.
+fn is_loopback_redirect(uri: &Url) -> bool {
+    let http_scheme = matches!(uri.scheme(), "http" | "https");
+    let loopback_host = match uri.host() {
+        Some(Host::Domain(domain)) => domain == "localhost",
+        Some(Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(Host::Ipv6(ip)) => ip.is_loopback(),
+        None => false,
+    };
+
+    http_scheme && loopback_host
 }
 
 /// Printable outcome of the flow initiation: the authorization URI

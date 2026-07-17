@@ -123,7 +123,7 @@ A configuration is loaded from the first valid path among:
 - $HOME/.config/ortie/config.toml
 - $HOME/.ortierc
 
-Override the path with -c <PATH> or ORTIE_CONFIG=<PATH>; multiple paths can be passed at once, separated by :. The first one is the base and the rest are deep-merged on top. The full field reference, with provider recipes for Google, Microsoft and Microsoft Graph, lives in [config.sample.toml](./config.sample.toml).
+Override the path with -c <PATH> or ORTIE_CONFIG=<PATH>; multiple paths can be passed at once, separated by :. The first one is the base and the rest are deep-merged on top. The full field reference, with provider recipes for Google, Microsoft, Microsoft Graph and Fastmail, lives in [config.sample.toml](./config.sample.toml).
 
 You will also need a registered OAuth 2.0 application. The wizard offers three ways, most preferred first: dynamic registration when your provider advertises it (Fastmail does), a public application (Thunderbird credentials cover most consumer providers), or your own registration. Public Thunderbird credentials for various providers are listed at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).
 

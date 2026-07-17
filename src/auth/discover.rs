@@ -19,7 +19,11 @@
 //! embedded as comments, prompts on stderr), so `ortie >> <config>`
 //! appends it.
 
-use std::{borrow::Cow, collections::BTreeSet, fmt};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+};
 
 use anyhow::{Result, bail};
 use clap::Parser;
@@ -58,8 +62,9 @@ const REDIRECT_LOOPBACK: &str = "http://127.0.0.1";
 
 /// Reverse-DNS private-use redirection URI (RFC 8252 section 7.1),
 /// retried when the provider rejects http redirections altogether
-/// (Fastmail notably); the browser dead-ends on it, and auth resume
-/// finishes the flow by hand.
+/// (Fastmail's dynamic registration accepts only private-use
+/// schemes). The browser dead-ends on it, so `auth get` prints the
+/// manual `auth resume` steps rather than binding a listener.
 const REDIRECT_SCHEME: &str = "org.pimalaya.ortie://redirect";
 
 /// Discover OAuth 2.0 services and print a ready-to-append account
@@ -92,24 +97,8 @@ impl AuthDiscoverCommand {
             bail!("Empty input: enter an email address, a server or an issuer URI");
         }
 
-        // A server or an issuer carries a URI scheme and has nothing
-        // to discover, so it goes straight to manual entry. Anything
-        // else is an email address; a bare domain is discovered as
-        // `@domain`.
-        let mut config = if input.contains("://") {
-            manual(Some(input))?
-        } else {
-            let email = if input.contains('@') {
-                Cow::Borrowed(input)
-            } else {
-                Cow::Owned(format!("@{input}"))
-            };
-
-            choose(&email)?
-        };
-
-        // NOTE: suggest the first label of the input's domain (or
-        // URI host) as account name.
+        // Account name, prompted right after the input: suggest the
+        // first label of the input's domain (or URI host).
         let domain = if let Some((_, domain)) = input.rsplit_once('@') {
             Some(domain.to_string())
         } else if input.contains("://") {
@@ -132,7 +121,52 @@ impl AuthDiscoverCommand {
         if name.is_empty() {
             bail!("Empty account name");
         }
-        config.name = name.to_string();
+        let name = name.to_string();
+
+        // A server or an issuer carries a URI scheme and has nothing
+        // to discover, so it goes straight to manual entry. Anything
+        // else is an email address; a bare domain is discovered as
+        // `@domain`.
+        let mut config = if input.contains("://") {
+            manual(Some(input))?
+        } else {
+            let email = if input.contains('@') {
+                Cow::Borrowed(input)
+            } else {
+                Cow::Owned(format!("@{input}"))
+            };
+
+            choose(&email)?
+        };
+
+        // Fill the defaults a provider is known to need but discovery
+        // does not yet surface (Fastmail's RFC 8707 resource and its
+        // scopes). Stopgap; see docs/discovery-layering.md.
+        fill_provider_defaults(&mut config);
+        config.name = name;
+
+        // Let the user choose scopes: offer the discovered ones plus
+        // any extra the provider is known to advertise, with the
+        // discovered set selected by default. Skipped when there is
+        // nothing to choose from. The advertised extras are a stopgap
+        // until discovery carries scopes_supported; see
+        // docs/discovery-layering.md.
+        let mut options = config.scopes.clone();
+        for scope in advertised_scopes(&config.endpoints) {
+            if !options.iter().any(|option| option.as_str() == scope) {
+                options.push(scope.to_string());
+            }
+        }
+
+        if !options.is_empty() {
+            let selected: Vec<usize> = options
+                .iter()
+                .enumerate()
+                .filter_map(|(index, option)| config.scopes.contains(option).then_some(index))
+                .collect();
+
+            config.scopes = prompt::items("Scopes:", options, selected)?;
+        }
 
         // NOTE: the application step offers every way to obtain a
         // client registration, sorted by io-oauth's client source
@@ -284,8 +318,10 @@ fn wizard_tls() -> Tls {
 }
 
 /// Collects the OAuth 2.0 methods across every discovered config,
-/// deduplicated by method, each carrying the set of services it
-/// authenticates.
+/// grouped by flow and endpoints, each carrying the union of the
+/// scopes and the set of services it authenticates. Per-service grants
+/// that differ only in scope (Microsoft's IMAP and SMTP, say) merge
+/// into one entry, so a single token can cover every service.
 fn collect_oauth(configs: &[DiscoveryServiceConfig]) -> Vec<DiscoveredOauth> {
     let mut discovered: Vec<DiscoveredOauth> = Vec::new();
 
@@ -295,8 +331,12 @@ fn collect_oauth(configs: &[DiscoveryServiceConfig]) -> Vec<DiscoveredOauth> {
                 continue;
             }
 
-            match discovered.iter_mut().find(|d| &d.method == method) {
+            match discovered
+                .iter_mut()
+                .find(|d| same_grant(&d.method, method))
+            {
                 Some(existing) => {
+                    merge_scopes(&mut existing.method, method);
                     existing.services.insert(config.service);
                 }
                 None => discovered.push(DiscoveredOauth {
@@ -308,6 +348,71 @@ fn collect_oauth(configs: &[DiscoveryServiceConfig]) -> Vec<DiscoveredOauth> {
     }
 
     discovered
+}
+
+/// Whether two grants are the same flow against the same endpoints,
+/// ignoring their scope, so per-service grants merge into one.
+fn same_grant(a: &DiscoveryAuthMethod, b: &DiscoveryAuthMethod) -> bool {
+    match (a, b) {
+        (
+            DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
+                authorization_endpoint: a_authorization,
+                token_endpoint: a_token,
+                ..
+            },
+            DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
+                authorization_endpoint: b_authorization,
+                token_endpoint: b_token,
+                ..
+            },
+        ) => a_authorization == b_authorization && a_token == b_token,
+        (
+            DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
+                device_authorization_endpoint: a_device,
+                token_endpoint: a_token,
+                ..
+            },
+            DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
+                device_authorization_endpoint: b_device,
+                token_endpoint: b_token,
+                ..
+            },
+        ) => a_device == b_device && a_token == b_token,
+        (DiscoveryAuthMethod::OauthIssuer(a), DiscoveryAuthMethod::OauthIssuer(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// Unions the incoming grant's scope tokens into the existing grant's,
+/// preserving order and dropping duplicates, so a merged grant
+/// requests every grouped service's scopes at once.
+fn merge_scopes(existing: &mut DiscoveryAuthMethod, incoming: &DiscoveryAuthMethod) {
+    let existing_scope = match existing {
+        DiscoveryAuthMethod::OauthAuthorizationCodeGrant { scope, .. }
+        | DiscoveryAuthMethod::OauthDeviceAuthorizationGrant { scope, .. } => scope,
+        _ => return,
+    };
+
+    let incoming_scope = match incoming {
+        DiscoveryAuthMethod::OauthAuthorizationCodeGrant { scope, .. }
+        | DiscoveryAuthMethod::OauthDeviceAuthorizationGrant { scope, .. } => scope,
+        _ => return,
+    };
+
+    let mut tokens: Vec<String> = existing_scope
+        .as_deref()
+        .map(|scope| scope.split_whitespace().map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    if let Some(incoming) = incoming_scope.as_deref() {
+        for token in incoming.split_whitespace() {
+            if !tokens.iter().any(|existing| existing == token) {
+                tokens.push(token.to_string());
+            }
+        }
+    }
+
+    *existing_scope = (!tokens.is_empty()).then(|| tokens.join(" "));
 }
 
 /// Whether an authentication method is one of the OAuth 2.0 flows.
@@ -338,6 +443,7 @@ fn manual(issuer: Option<&str>) -> Result<OauthConfig> {
             redirection: None,
         },
         scopes: Vec::new(),
+        extras: BTreeMap::new(),
         auto_refresh: true,
         issuer: issuer.map(ToString::to_string),
         storage: None,
@@ -412,9 +518,9 @@ fn registration_endpoint(config: &OauthConfig) -> Option<Url> {
 ///
 /// A loopback redirection is registered first, matching the runtime
 /// default; providers rejecting http redirections altogether
-/// (Fastmail notably) get a reverse-DNS private-use scheme instead,
-/// which the fragment then pins so auth resume can finish the flow
-/// by hand.
+/// (Fastmail's dynamic registration accepts only private-use schemes)
+/// get a reverse-DNS private-use scheme instead, which the fragment
+/// then pins so `auth get` hands off to a manual `auth resume`.
 fn register(config: &mut OauthConfig, endpoint: &Url) -> Result<()> {
     let device = config.grant == Some("device");
     let scopes = config.scopes.join(" ");
@@ -564,6 +670,7 @@ impl DiscoveredOauth {
                     redirection: None,
                 },
                 scopes: split_scopes(scope),
+                extras: BTreeMap::new(),
                 auto_refresh: true,
                 issuer: None,
                 storage: None,
@@ -584,6 +691,7 @@ impl DiscoveredOauth {
                     redirection: None,
                 },
                 scopes: split_scopes(scope),
+                extras: BTreeMap::new(),
                 auto_refresh: true,
                 issuer: None,
                 storage: None,
@@ -595,6 +703,7 @@ impl DiscoveredOauth {
                 grant: None,
                 endpoints: Endpoints::default(),
                 scopes: Vec::new(),
+                extras: BTreeMap::new(),
                 auto_refresh: true,
                 issuer: Some(issuer),
                 storage: None,
@@ -919,6 +1028,11 @@ struct OauthConfig {
     /// The discovered scopes.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     scopes: Vec<String>,
+    /// Extra authorization-request parameters a provider is known to
+    /// require but discovery does not yet surface (Fastmail's RFC 8707
+    /// resource). Stopgap; see docs/discovery-layering.md.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    extras: BTreeMap<String, String>,
     /// Whether token show refreshes an expired token by itself; the
     /// wizard always enables it.
     auto_refresh: bool,
@@ -1063,6 +1177,16 @@ impl fmt::Display for OauthConfig {
             writeln!(f, "scopes = [{}]", scopes.join(", "))?;
         }
 
+        if !self.extras.is_empty() {
+            writeln!(
+                f,
+                "# Extra authorization parameters this provider requires."
+            )?;
+            for (key, value) in &self.extras {
+                writeln!(f, "extras.{key} = \"{value}\"")?;
+            }
+        }
+
         if let Some(issuer) = &self.issuer {
             writeln!(f, "# Discovery stopped at the OAuth 2.0 issuer below; fill")?;
             writeln!(f, "# the endpoints by hand.")?;
@@ -1100,6 +1224,51 @@ fn toml_key(name: &str) -> Cow<'_, str> {
     } else {
         Cow::Owned(format!("\"{name}\""))
     }
+}
+
+/// Fills the defaults a provider is known to need but discovery does
+/// not yet surface. Fastmail's authorization endpoint bounces the flow
+/// pre-consent (no password or scope screen, a straight redirect to
+/// the "close this window" page) unless the RFC 8707 resource
+/// indicator is present, and its discovered grant carries no scopes at
+/// all; supply the resource and, since Fastmail cannot complete on a
+/// desktop anyway, its full advertised scope set. Stopgap until
+/// discovery surfaces them; see docs/discovery-layering.md.
+fn fill_provider_defaults(config: &mut OauthConfig) {
+    let hosts = endpoint_hosts(&config.endpoints);
+
+    if hosts.contains("api.fastmail.com") {
+        config
+            .extras
+            .entry("resource".to_string())
+            .or_insert_with(|| "https://api.fastmail.com/jmap/session".to_string());
+
+        if config.scopes.is_empty() {
+            config.scopes = advertised_scopes(&config.endpoints)
+                .into_iter()
+                .map(ToString::to_string)
+                .collect();
+        }
+    }
+}
+
+/// The scopes a provider is known to advertise, offered to the user as
+/// a multi-select. Empty for providers whose scopes discovery already
+/// fills (their config keeps the discovered set). Stopgap until
+/// discovery carries scopes_supported; see docs/discovery-layering.md.
+fn advertised_scopes(endpoints: &Endpoints) -> Vec<&'static str> {
+    let hosts = endpoint_hosts(endpoints);
+
+    if hosts.contains("api.fastmail.com") {
+        return vec![
+            "urn:ietf:params:oauth:scope:mail",
+            "urn:ietf:params:oauth:scope:contacts",
+            "urn:ietf:params:oauth:scope:calendars",
+            "offline_access",
+        ];
+    }
+
+    Vec::new()
 }
 
 /// The distinct hosts of the config's endpoints, lowercased.

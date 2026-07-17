@@ -81,7 +81,7 @@ scopes = []
 #   extras.access_type = "offline"          # Google: required for a refresh token
 #   extras.prompt = "consent"               # Google: force the consent screen
 #   extras.login_hint = "user@example.com"
-#   extras.resource = "https://api.example.com/"  # RFC 8707 resource indicator
+#   extras.resource = "https://api.example.com/"  # RFC 8707 (Fastmail needs it)
 #extras.access_type = "offline"
 
 # TLS provider used for the HTTPS connection to the token endpoint.
@@ -173,10 +173,17 @@ storage.write.command = "pass insert -m -f ortie/example"
 # setups and for Microsoft Graph, which the wizard does not cover.
 #
 # Google
-#   endpoints.authorization = "https://accounts.google.com/o/oauth2/auth"
-#   endpoints.token = "https://www.googleapis.com/oauth2/v3/token"
+#   endpoints.authorization = "https://accounts.google.com/o/oauth2/v2/auth"
+#   endpoints.token = "https://oauth2.googleapis.com/token"
 #   scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com"]
 #   extras.access_type = "offline"
+#
+#   Use these current endpoints, not the legacy `o/oauth2/auth` /
+#   `www.googleapis.com/oauth2/v3/token` pair, which Google can reject at consent
+#   with "This app is blocked"; the discovery wizard already fills the current
+#   ones. Gmail and CardDAV are sensitive scopes, so an unverified own
+#   application only works for accounts listed as test users on its OAuth consent
+#   screen; the public Thunderbird application below is verified.
 #
 #   Public Thunderbird application:
 #     client-id = "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com"
@@ -212,3 +219,30 @@ storage.write.command = "pass insert -m -f ortie/example"
 #   personal Microsoft accounts may be issued an opaque token the API rejects
 #   with InvalidAuthenticationToken, so prefer a work / school account or your
 #   own registered application.
+#
+# Fastmail
+#   Fastmail advertises RFC 7591 dynamic registration, so bare `ortie` can
+#   register a client for you. Two Fastmail specifics the wizard does not yet
+#   fill into the fragment, so add them by hand:
+#
+#     1. RFC 8707 resource. Fastmail's authorize endpoint rejects the request
+#        with `invalid_target` (no consent screen, an instant bounce) unless a
+#        resource indicator is present. Its value is the JMAP session URL.
+#
+#     2. Redirect. Fastmail's dynamic registration accepts only a reverse-DNS
+#        private-use scheme (it refuses http and loopback), so the wizard pins
+#        `endpoints.redirection = "org.pimalaya.ortie://redirect"`. A desktop
+#        browser cannot route that scheme back to ortie, so `auth get` prints a
+#        manual `auth resume` command to finish the flow by hand.
+#
+#   endpoints.authorization = "https://api.fastmail.com/oauth/authorize"
+#   endpoints.token = "https://api.fastmail.com/oauth/refresh"
+#   scopes = ["urn:ietf:params:oauth:scope:mail", "urn:ietf:params:oauth:scope:contacts", "urn:ietf:params:oauth:scope:calendars", "offline_access"]
+#   extras.resource = "https://api.fastmail.com/jmap/session"
+#
+#   The wizard selects all four advertised scopes by default (Fastmail cannot
+#   complete on a desktop anyway; trim them in the scope multi-select if you
+#   want). The pre-registered Thunderbird application (offered by the wizard)
+#   covers Fastmail with a loopback redirect instead, avoiding the manual resume;
+#   see docs/providers.md and docs/discovery-layering.md for why dynamic
+#   registration forces the private-use scheme.
