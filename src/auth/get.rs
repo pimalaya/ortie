@@ -1,16 +1,21 @@
-//! `auth get` subcommand: initiate a new authorization code grant flow.
+//! `auth get` subcommand: initiate a new OAuth grant flow.
 
 use std::{
     borrow::Cow,
     collections::BTreeSet,
     fmt,
     io::{IsTerminal, stdout},
+    time::Duration,
 };
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
 use clap::Parser;
-use pimalaya_cli::printer::Printer;
+use humantime::format_duration;
+use log::debug;
+use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_config::secret::Secret;
+use secrecy::ExposeSecret;
 use serde::{
     Deserialize, Serialize, Serializer,
     de::value::{Error, StringDeserializer},
@@ -18,11 +23,19 @@ use serde::{
 use url::{Host, Url};
 
 use io_oauth::{
-    client::await_redirect,
-    rfc6749::{auth_request::Oauth20AuthRequestParams, state::Oauth20State},
+    client::{Oauth20ClientStd, Oauth20ClientStdError, await_redirect},
+    rfc6749::{
+        auth_request::Oauth20AuthRequestParams,
+        issue_access_token::{
+            Oauth20AccessTokenErrorCode, Oauth20AccessTokenErrorParams,
+            Oauth20AccessTokenSuccessParams,
+        },
+        state::Oauth20State,
+    },
     rfc7636::pkce::{
         Oauth20PkceCodeChallenge, Oauth20PkceCodeChallengeMethod, Oauth20PkceCodeVerifier,
     },
+    rfc8628::auth::{Oauth20DeviceAuthRequestParams, Oauth20DeviceAuthSuccessParams},
 };
 
 use crate::{
@@ -31,10 +44,11 @@ use crate::{
     config::{GrantConfig, PkceConfig},
 };
 
-/// Initiate a new OAuth 2.0 Authorization Code Grant from scratch.
+/// Initiate a new OAuth 2.0 grant from scratch.
 ///
-/// If this command is used in an interactive shell, a fake redirect
-/// server is spawned in order to intercept the OAuth 2.0 redirection.
+/// Runs the grant configured on the account (`authorization-code` or
+/// `device`). Interactive shells complete the flow; non-interactive
+/// and `--json` hand off to `auth resume`.
 #[derive(Debug, Parser)]
 pub struct AuthGetCommand;
 
@@ -42,10 +56,8 @@ impl AuthGetCommand {
     /// Runs the grant configured on the account and completes it into
     /// a stored access token (interactive shells chain into resume).
     pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
-        // FIXME: dispatch on the grant once the device authorization
-        // grant path lands.
         if account.grant == GrantConfig::Device {
-            bail!("The device authorization grant is not supported yet");
+            return execute_device(printer, account);
         }
 
         let Some(authorization_endpoint) = &account.authorization_endpoint else {
@@ -151,7 +163,7 @@ impl AuthGetCommand {
         };
 
         let cmd = AuthResumeCommand {
-            redirected_uri,
+            input: redirected_uri.to_string(),
             state: Some(state),
             pkce: pkce_code_challenge.map(|pkce| pkce.verifier),
             redirect_uri: Some(redirect_uri.into_owned()),
@@ -167,7 +179,7 @@ impl AuthGetCommand {
 /// redirect: a non-interactive shell, a private-use redirection
 /// scheme, or a listener that failed to bind.
 fn print_manual_resume(state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifier>) {
-    let state = String::from_utf8_lossy(state.expose());
+    let state = shell_single_quote(&String::from_utf8_lossy(state.expose()));
 
     println!(
         "Once authorized, copy the URL your browser was redirected to, \
@@ -177,11 +189,11 @@ fn print_manual_resume(state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifi
 
     match pkce {
         Some(verifier) => {
-            let verifier = String::from_utf8_lossy(verifier.expose());
+            let verifier = shell_single_quote(&String::from_utf8_lossy(verifier.expose()));
             println!("> ortie auth resume --state {state} --pkce {verifier} <REDIRECTED_URI>");
         }
         None => {
-            println!("> ortie auth resume <REDIRECTED_URI> --state {state} <REDIRECTED_URI>");
+            println!("> ortie auth resume --state {state} <REDIRECTED_URI>");
         }
     }
 }
@@ -258,5 +270,233 @@ impl fmt::Display for AuthorizationUri<'_> {
         }?;
 
         writeln!(f, "{}", self.authorization_uri)
+    }
+}
+
+fn execute_device(printer: &mut impl Printer, mut account: Account) -> Result<()> {
+    let Some(device_endpoint) = account.device_authorization_endpoint.clone() else {
+        bail!("Missing endpoints.device-authorization in the account config");
+    };
+    let Some(token_endpoint) = account.token_endpoint.clone() else {
+        bail!("Missing endpoints.token in the account config");
+    };
+
+    let interactive = stdout().is_terminal();
+    let params = Oauth20DeviceAuthRequestParams {
+        client_id: account.client_id.as_str().into(),
+        scope: BTreeSet::from_iter(account.scopes.iter().map(|s| Cow::from(s.as_str()))),
+    };
+
+    let client_secret = account.client_secret.clone().map(Secret::get).transpose()?;
+    let mut device_client = Oauth20ClientStd::connect(
+        device_endpoint.clone(),
+        &account.tls,
+        account.client_id.clone(),
+    )?;
+    device_client.client_secret = client_secret;
+
+    let device = match device_client.request_device_auth(&device_endpoint, params)? {
+        Ok(device) => device,
+        Err(res) => {
+            debug!("execute issue access token error hook");
+            account.execute_on_issue_error_hook(&res);
+            let err = anyhow!("Device authorization error (code {:?})", res.error);
+            return Err(match (res.error_description, res.error_uri) {
+                (None, None) => err,
+                (Some(desc), None) => anyhow!("{desc}").context(err),
+                (None, Some(uri)) => anyhow!("{uri}").context(err),
+                (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
+            });
+        }
+    };
+
+    let view = DeviceAuthorization {
+        device_code: device.device_code.expose_secret().to_owned(),
+        user_code: device.user_code.clone(),
+        verification_uri: device.verification_uri.clone(),
+        verification_uri_complete: device.verification_uri_complete.clone(),
+        expires_in: device.expires_in,
+        interval: device.interval,
+        interactive,
+    };
+
+    // D5: non-interactive or --json print and hand off to auth resume.
+    if printer.is_json() || !interactive {
+        printer.out(&view)?;
+        if !printer.is_json() {
+            println!();
+            println!("Once authorized, run:");
+            println!();
+            println!(
+                "> ortie auth resume {}",
+                shell_single_quote(&view.device_code)
+            );
+        }
+        return Ok(());
+    }
+
+    println!("{view}");
+    let open_uri = device
+        .verification_uri_complete
+        .as_deref()
+        .unwrap_or(device.verification_uri.as_str());
+    if let Err(err) = open::that(open_uri) {
+        println!("Cannot open your browser ({err})");
+        println!("Open {open_uri} and enter the code {}", device.user_code);
+    }
+    println!("Waiting for authorization…");
+    complete_device_token_poll(printer, &mut account, &token_endpoint, &device)
+}
+
+/// Polls the token endpoint until the device grant completes, then stores
+/// the token and fires on-issue hooks (shared with the code grant path).
+pub(crate) fn complete_device_token_poll(
+    printer: &mut impl Printer,
+    account: &mut Account,
+    token_endpoint: &Url,
+    device: &Oauth20DeviceAuthSuccessParams,
+) -> Result<()> {
+    let client_secret = account.client_secret.clone().map(Secret::get).transpose()?;
+    let mut client = Oauth20ClientStd::connect(
+        token_endpoint.clone(),
+        &account.tls,
+        account.client_id.clone(),
+    )?;
+    client.client_secret = client_secret;
+
+    // Outer Result: transport / client-side; inner: OAuth token body.
+    match client.await_device_access_token(&account.tls, device) {
+        Ok(Ok(res)) => report_token_issued(printer, account, &res),
+        Ok(Err(res)) => {
+            debug!("execute issue access token error hook");
+            account.execute_on_issue_error_hook(&res);
+            let err = anyhow!("Issue access token error (code {:?})", res.error);
+            Err(match (res.error_description, res.error_uri) {
+                (None, None) => err,
+                (Some(desc), None) => anyhow!("{desc}").context(err),
+                (None, Some(uri)) => anyhow!("{uri}").context(err),
+                (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
+            })
+        }
+        Err(err) => {
+            if let Some(params) = device_poll_client_error_hook_params(&err) {
+                debug!("execute issue access token error hook");
+                account.execute_on_issue_error_hook(&params);
+            }
+            Err(err.into())
+        }
+    }
+}
+
+/// Local poll deadline is the client twin of server `expired_token`.
+fn device_poll_client_error_hook_params(
+    err: &Oauth20ClientStdError,
+) -> Option<Oauth20AccessTokenErrorParams> {
+    match err {
+        Oauth20ClientStdError::DeviceCodeExpired => Some(Oauth20AccessTokenErrorParams {
+            error: Oauth20AccessTokenErrorCode::ExpiredToken,
+            error_description: Some(
+                "device code expired before the user completed authorization".into(),
+            ),
+            error_uri: None,
+        }),
+        _ => None,
+    }
+}
+
+/// Persist the token, fire on-issue success hooks, print the success
+/// message. Shared by the authorization-code and device grants.
+pub(crate) fn report_token_issued(
+    printer: &mut impl Printer,
+    account: &mut Account,
+    res: &Oauth20AccessTokenSuccessParams,
+) -> Result<()> {
+    account.write_to_storage(res)?;
+    debug!("execute issue access token success hook");
+    account.execute_on_issue_success_hook(res);
+    let msg = "Access token successfully issued";
+    let msg = match res.expires_in {
+        None => format!("{msg} (unknown expiry)"),
+        Some(exp) => {
+            let exp = Duration::from_secs(exp as u64 + 1);
+            format!("{msg} (expires in {})", format_duration(exp))
+        }
+    };
+    printer.out(Message::new(msg))
+}
+
+/// Single-quote for safe paste into a POSIX shell command line.
+fn shell_single_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for ch in s.chars() {
+        if ch == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
+}
+
+/// Printable / JSON device-authorization response for resume handoff.
+#[derive(Serialize)]
+struct DeviceAuthorization {
+    device_code: String,
+    user_code: String,
+    verification_uri: String,
+    verification_uri_complete: Option<String>,
+    expires_in: usize,
+    interval: usize,
+    interactive: bool,
+}
+
+impl fmt::Display for DeviceAuthorization {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Created device authorization request with:")?;
+        writeln!(f, " - user code: {}", self.user_code)?;
+        writeln!(f, " - verification URI: {}", self.verification_uri)?;
+        if let Some(uri) = &self.verification_uri_complete {
+            writeln!(f, " - complete URI: {uri}")?;
+        }
+        // Interactive sessions poll in-process; hide the device code.
+        if !self.interactive {
+            writeln!(f, " - device code: {}", self.device_code)?;
+        }
+        writeln!(f, " - expires in: {}s", self.expires_in)?;
+        writeln!(f, " - interval: {}s", self.interval)?;
+        writeln!(f)?;
+        writeln!(
+            f,
+            "Navigate to {} and enter the code {}",
+            self.verification_uri, self.user_code
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn device_code_expired_maps_to_expired_token_hook_params() {
+        let params =
+            device_poll_client_error_hook_params(&Oauth20ClientStdError::DeviceCodeExpired)
+                .expect("DeviceCodeExpired must fire on-issue error hook");
+        assert_eq!(params.error, Oauth20AccessTokenErrorCode::ExpiredToken);
+    }
+
+    #[test]
+    fn network_client_errors_do_not_synthesize_hook_params() {
+        let io_err = Oauth20ClientStdError::Io(std::io::Error::other("connection reset"));
+        assert!(device_poll_client_error_hook_params(&io_err).is_none());
+    }
+
+    #[test]
+    fn shell_single_quote_escapes_embedded_quotes() {
+        assert_eq!(shell_single_quote("plain"), "'plain'");
+        assert_eq!(shell_single_quote("a;b"), "'a;b'");
+        assert_eq!(shell_single_quote("it's"), "'it'\\''s'");
     }
 }

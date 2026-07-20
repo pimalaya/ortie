@@ -47,6 +47,7 @@ is an ortie-local stopgap rather than discovery-driven) lives in
   `https://graph.microsoft.com/*` scopes (see the Microsoft Graph recipe in
   `config.sample.toml`). Personal Microsoft accounts may receive an opaque token
   the Graph API rejects with `InvalidAuthenticationToken`.
+- Device grant: `grant = "device"` with `…/oauth2/v2.0/devicecode` and matching `…/token`.
 
 ## Fastmail
 

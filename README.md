@@ -29,6 +29,7 @@ CLI to manage OAuth tokens
 - **Account discovery wizard**: run bare, it finds the OAuth 2.0 grants reachable for an email address and prints a ready-to-append account configuration.
 - **Dynamic client registration**: register a public client on the spot, with no provider console, when the provider advertises it.
 - **Authorization code grant**: sign in through the browser, with a built-in redirection server that captures the callback.
+- **Device authorization grant**: sign in by typing a short code on another device, for hosts without a browser.
 - **Manual flow completion**: finish a flow by hand, from the URL your browser was sent to, when the redirection server cannot bind.
 - **Token refresh**: renew an expired access token from its refresh token, on demand or automatically when reading it.
 - **PKCE**: enabled with the S256 method by default, following the OAuth 2.1 posture; opt out for servers that reject it.
@@ -52,11 +53,13 @@ CLI to manage OAuth tokens
 | [7636] | PKCE: the S256 and plain code challenges protecting the authorization code in transit |
 | [7591] | Dynamic client registration: register a public client without any provider console |
 | [8414] | Authorization server metadata: the wizard reads it to discover a provider's endpoints and registration endpoint |
+| [8628] | Device authorization grant: device and user code request, token endpoint polling |
 
 [6749]: https://www.rfc-editor.org/rfc/rfc6749
 [7636]: https://www.rfc-editor.org/rfc/rfc7636
 [7591]: https://www.rfc-editor.org/rfc/rfc7591
 [8414]: https://www.rfc-editor.org/rfc/rfc8414
+[8628]: https://www.rfc-editor.org/rfc/rfc8628
 
 ## Installation
 
