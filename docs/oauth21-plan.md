@@ -94,7 +94,7 @@ Rejected: toml_edit write-back into the config file. It would create a maintenan
 
 ## Milestones
 
-M0, M1 and M5 landed in the 2.0.0 release (M5 jumped the queue; see the Landed section). The remaining milestones follow as further minors on top of 2.x, each independently releasable: M2 and M3 next, then M4 and M6.
+M0, M1 and M5 landed in the 2.0.0 release. M2 landed after 2.0.0 (see Landed). Remaining: M3, then M4 and M6.
 
 ### M2: device authorization grant end-to-end
 
@@ -171,3 +171,8 @@ M0, M1 and M5 landed in the 2.0.0 release (M5 jumped the queue; see the Landed s
 - io-oauth grew rfc7591::source::Oauth20ClientSource (dynamic registration, public client, manual; declaration order is the preference order, the pick list sorts by it) and Oauth20ClientStd::register_client, inlining the RFC 7591 coroutine like the other per-operation methods; the std client moved to the crate-root client module along the way, since it spans the RFC modules. It keeps its version-scoped name and version-less methods (version-prefixed methods rejected as heavy); a future OAuth version would add a sibling client, unified behind a version-agnostic OauthClientStd wrapper only once one exists. Ortie path-patches io-oauth until the next release.
 - Registration runs at wizard time, keeping the print-only philosophy: token_endpoint_auth_method none, grant_types and response_types from the discovered grant, the discovered scopes, client_name Ortie; the issued client_id (and client_secret as the config secret shape) land inside the fragment. Deviation from the original design, found in cardamum's live notes and confirmed against the live endpoint: Fastmail's dynamic registration rejects every http/https redirection (loopback, localhost and real domains all return invalid_redirect_uri "not valid scheme") and accepts only a reverse-DNS private-use scheme (RFC 8252 section 7.1). So the wizard registers http://127.0.0.1 first and retries with org.pimalaya.ortie://redirect on invalid_redirect_uri, pinning endpoints.redirection. A private-use scheme cannot be captured by a local listener (await_redirect cannot infer a port for the unknown scheme, so it used to error out), so auth get now detects a non-loopback redirection, skips the listener, and prints the manual auth resume command (state and PKCE included) after opening the browser; the user copies the dead-ended redirect URL and finishes by hand, and auth resume falls back to the pinned redirection so the token exchange matches. A failed registration reports through its spinner and falls back to the remaining pick-list entries.
 - The grant step was relabeled while touching the wizard: discovery always reduced services to deduplicated grants tagged with the services sharing them, and the prompts now say so ("Choose an OAuth 2.0 grant:", "Found N OAuth 2.0 grant(s)").
+
+### M2: device authorization grant end-to-end
+
+- `endpoints.device-authorization`; auth get/resume dispatch on `grant = "device"`.
+- Resume bare device code uses expires_in=1800 / interval=5; no device `extras` (io-oauth gap).

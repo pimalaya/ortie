@@ -121,6 +121,9 @@ pub struct EndpointsConfig {
     /// Authorization endpoint, where the authorization code grant
     /// sends the user's browser.
     pub authorization: Option<Url>,
+    /// Device authorization endpoint (RFC 8628), used when
+    /// `grant = "device"`.
+    pub device_authorization: Option<Url>,
     /// Token endpoint, where grants and refreshes exchange for a
     /// token.
     pub token: Option<Url>,

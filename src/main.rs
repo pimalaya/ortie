@@ -57,8 +57,7 @@
 //! the CLI help: the first paragraph (two lines at most) is the `-h`
 //! summary, the following paragraphs complete the `--help` page.
 //!
-//! The roadmap (device grant, discovery upgrades, revocation) lives
-//! in docs/oauth21-plan.md.
+//! Device grant is `grant = "device"`; further roadmap in docs/oauth21-plan.md.
 
 mod account;
 mod auth;

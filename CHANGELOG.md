@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added the device authorization grant (RFC 8628): `grant = "device"`
+  with `endpoints.device-authorization`. Interactive `auth get` polls;
+  non-interactive / `--json` hands off to `auth resume <DEVICE_CODE>`.
+
 ## [2.0.0] - 2026-07-17
 
 ### Added

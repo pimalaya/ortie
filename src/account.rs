@@ -61,6 +61,8 @@ pub struct Account {
 
     /// Authorization endpoint of the authorization code grant.
     pub authorization_endpoint: Option<Url>,
+    /// Device authorization endpoint of the device grant (RFC 8628).
+    pub device_authorization_endpoint: Option<Url>,
     /// Token endpoint shared by grants and refreshes.
     pub token_endpoint: Option<Url>,
     /// Redirection endpoint registered with the provider.
@@ -113,6 +115,7 @@ impl From<AccountConfig> for Account {
 
         let EndpointsConfig {
             authorization,
+            device_authorization,
             token,
             redirection,
         } = endpoints;
@@ -167,6 +170,7 @@ impl From<AccountConfig> for Account {
             extras,
             auto_refresh,
             authorization_endpoint: authorization,
+            device_authorization_endpoint: device_authorization,
             token_endpoint: token,
             redirection_endpoint: redirection,
             read_storage_command: read_cmd,

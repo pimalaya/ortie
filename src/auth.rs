@@ -16,13 +16,10 @@ use crate::{
     cli::take_account,
 };
 
-/// Discover OAuth 2.0 services or get a fresh access token by
-/// initiating or resuming an Authorization Code Grant flow.
+/// Discover OAuth 2.0 services or run the account's OAuth grant.
 ///
-/// This subcommand walks you through discovering OAuth 2.0 services
-/// for an email address, getting an authorization URI that needs to
-/// be opened by the user, or resuming an authorization flow with an
-/// existing redirect URI.
+/// Discover an issuer, start an authorization-code or device grant, or
+/// resume with a redirected URI or device code.
 #[derive(Subcommand, Debug)]
 pub enum AuthCommand {
     Discover(AuthDiscoverCommand),
