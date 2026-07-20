@@ -1377,7 +1377,9 @@ dependencies = [
  "rustls-platform-verifier",
  "secrecy",
  "serde",
+ "serde_json",
  "shellexpand",
+ "tempfile",
  "url",
 ]
 
