@@ -89,8 +89,10 @@ impl AuthResumeCommand {
             bail!("Missing endpoints.token in the account config");
         };
 
-        let redirected_uri = Url::parse(&self.input)
-            .map_err(|err| anyhow!("Invalid redirected URI `{}`: {err}", self.input))?;
+        // Trim paste whitespace (parity with device codes). Do not echo
+        // the URI: it may carry code= / state= query secrets.
+        let redirected_uri = Url::parse(self.input.trim())
+            .map_err(|err| anyhow!("Invalid redirected URI: {err}"))?;
 
         let code = match Oauth20AuthParams::from(&redirected_uri).validate(self.state.as_ref()) {
             Ok(code) => code,
@@ -107,11 +109,9 @@ impl AuthResumeCommand {
                 return Err(anyhow!("Authorization response is missing state"));
             }
             Err(Oauth20AuthParamsValidationError::StateMismatch) => {
-                let req = self.state.as_ref().map(|state| state.expose());
-                return Err(
-                    anyhow!("Request state {req:?} does not match response state")
-                        .context("Authorization request and response states do not match"),
-                );
+                return Err(anyhow!(
+                    "Authorization request and response states do not match"
+                ));
             }
         };
 
@@ -165,7 +165,29 @@ pub fn state_parser(state: &str) -> Result<Oauth20State, String> {
 }
 
 pub fn pkce_code_verifier_parser(verifier: &str) -> Result<Oauth20PkceCodeVerifier, String> {
+    // Omit the verifier body: clap surfaces this string on stderr.
     verifier
         .parse()
-        .map_err(|b| format!("Invalid 0x{b:x} found in PKCE code verifier: {verifier}"))
+        .map_err(|b| format!("Invalid 0x{b:x} found in PKCE code verifier"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pkce_code_verifier_parser_error_omits_verifier_body() {
+        let secret = "pkce-secret-value-with space";
+        let err = pkce_code_verifier_parser(secret).unwrap_err();
+        assert!(!err.contains(secret), "{err}");
+        assert!(err.contains("Invalid 0x"), "{err}");
+    }
+
+    #[test]
+    fn authorization_code_resume_trims_positional_input() {
+        let raw = "  http://127.0.0.1/cb?code=abc&state=s  ";
+        let trimmed = raw.trim();
+        assert_ne!(raw, trimmed);
+        assert!(Url::parse(trimmed).is_ok());
+    }
 }

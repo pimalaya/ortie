@@ -23,10 +23,14 @@ use serde::{
 use url::{Host, Url};
 
 use io_oauth::{
-    client::{Oauth20ClientStd, await_redirect},
+    client::{Oauth20ClientStd, Oauth20ClientStdError, await_redirect},
     rfc6749::{
         auth_request::Oauth20AuthRequestParams,
-        issue_access_token::Oauth20AccessTokenSuccessParams, state::Oauth20State,
+        issue_access_token::{
+            Oauth20AccessTokenErrorCode, Oauth20AccessTokenErrorParams,
+            Oauth20AccessTokenSuccessParams,
+        },
+        state::Oauth20State,
     },
     rfc7636::pkce::{
         Oauth20PkceCodeChallenge, Oauth20PkceCodeChallengeMethod, Oauth20PkceCodeVerifier,
@@ -173,7 +177,7 @@ impl AuthGetCommand {
 /// redirect: a non-interactive shell, a private-use redirection
 /// scheme, or a listener that failed to bind.
 fn print_manual_resume(state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifier>) {
-    let state = String::from_utf8_lossy(state.expose());
+    let state = shell_single_quote(&String::from_utf8_lossy(state.expose()));
 
     println!(
         "Once authorized, copy the URL your browser was redirected to, \
@@ -183,11 +187,11 @@ fn print_manual_resume(state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifi
 
     match pkce {
         Some(verifier) => {
-            let verifier = String::from_utf8_lossy(verifier.expose());
+            let verifier = shell_single_quote(&String::from_utf8_lossy(verifier.expose()));
             println!("> ortie auth resume --state {state} --pkce {verifier} <REDIRECTED_URI>");
         }
         None => {
-            println!("> ortie auth resume <REDIRECTED_URI> --state {state} <REDIRECTED_URI>");
+            println!("> ortie auth resume --state {state} <REDIRECTED_URI>");
         }
     }
 }
@@ -319,7 +323,10 @@ fn execute_device(printer: &mut impl Printer, mut account: Account) -> Result<()
             println!();
             println!("Once authorized, run:");
             println!();
-            println!("> ortie auth resume {}", view.device_code);
+            println!(
+                "> ortie auth resume {}",
+                shell_single_quote(&view.device_code)
+            );
         }
         return Ok(());
     }
@@ -351,9 +358,10 @@ pub(crate) fn complete_device_token_poll(
     )?;
     client.client_secret = client_secret;
 
-    match client.await_device_access_token(&account.tls, device)? {
-        Ok(res) => report_token_issued(printer, account, &res),
-        Err(res) => {
+    match client.await_device_access_token(&account.tls, device) {
+        Ok(Ok(res)) => report_token_issued(printer, account, &res),
+        Ok(Err(res)) => {
+            debug!("execute issue access token error hook");
             account.execute_on_issue_error_hook(&res);
             let err = anyhow!("Issue access token error (code {:?})", res.error);
             Err(match (res.error_description, res.error_uri) {
@@ -363,7 +371,46 @@ pub(crate) fn complete_device_token_poll(
                 (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
             })
         }
+        Err(err) => {
+            if let Some(params) = device_poll_client_error_hook_params(&err) {
+                debug!("execute issue access token error hook");
+                account.execute_on_issue_error_hook(&params);
+            }
+            Err(err.into())
+        }
     }
+}
+
+/// Local poll deadline is the client twin of server `expired_token`.
+fn device_poll_client_error_hook_params(
+    err: &Oauth20ClientStdError,
+) -> Option<Oauth20AccessTokenErrorParams> {
+    match err {
+        Oauth20ClientStdError::DeviceCodeExpired => Some(Oauth20AccessTokenErrorParams {
+            error: Oauth20AccessTokenErrorCode::ExpiredToken,
+            error_description: Some(
+                "device code expired before the user completed authorization".into(),
+            ),
+            error_uri: None,
+        }),
+        _ => None,
+    }
+}
+
+/// Single-quote for safe paste into a POSIX shell command line.
+fn shell_single_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for ch in s.chars() {
+        if ch == '\'' {
+            // End quote, escaped quote, reopen quote: '\''
+            out.push_str("'\\''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
 }
 
 pub(crate) fn report_token_issued(
@@ -414,5 +461,31 @@ impl fmt::Display for DeviceAuthorization {
             "Navigate to {} and enter the code {}",
             self.verification_uri, self.user_code
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn device_code_expired_maps_to_expired_token_hook_params() {
+        let params =
+            device_poll_client_error_hook_params(&Oauth20ClientStdError::DeviceCodeExpired)
+                .expect("DeviceCodeExpired must fire on-issue error hook");
+        assert_eq!(params.error, Oauth20AccessTokenErrorCode::ExpiredToken);
+    }
+
+    #[test]
+    fn network_client_errors_do_not_synthesize_hook_params() {
+        let io_err = Oauth20ClientStdError::Io(std::io::Error::other("connection reset"));
+        assert!(device_poll_client_error_hook_params(&io_err).is_none());
+    }
+
+    #[test]
+    fn shell_single_quote_escapes_embedded_quotes() {
+        assert_eq!(shell_single_quote("plain"), "'plain'");
+        assert_eq!(shell_single_quote("a;b"), "'a;b'");
+        assert_eq!(shell_single_quote("it's"), "'it'\\''s'");
     }
 }

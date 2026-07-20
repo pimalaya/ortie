@@ -12,6 +12,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   with `endpoints.device-authorization`. Interactive `auth get` polls;
   non-interactive / `--json` hands off to `auth resume <DEVICE_CODE>`.
 
+### Fixed
+
+- Fire on-issue error hooks when the local device poll deadline expires
+  (`DeviceCodeExpired` as `expired_token`).
+- Shell-quote secrets in printed `auth resume` examples; trim auth-code
+  resume input; omit redirect/state/PKCE bodies from resume errors.
+
 ## [2.0.0] - 2026-07-17
 
 ### Added
