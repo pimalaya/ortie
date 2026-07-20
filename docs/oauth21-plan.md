@@ -174,5 +174,20 @@ M0, M1 and M5 landed in the 2.0.0 release. M2 landed after 2.0.0 (see Landed). R
 
 ### M2: device authorization grant end-to-end
 
-- `endpoints.device-authorization`; auth get/resume dispatch on `grant = "device"`.
-- Resume bare device code uses expires_in=1800 / interval=5; no device `extras` (io-oauth gap).
+- Added `endpoints.device-authorization` to EndpointsConfig and
+  `device_authorization_endpoint` on Account.
+- auth get dispatches on `account.grant` (D1/D5): authorization-code path
+  unchanged; device path uses io-oauth `request_device_auth` and
+  `await_device_access_token`, then shared storage write and on-issue hooks.
+- Non-interactive and `--json` print the device response and exit; polling
+  resumes with `auth resume <DEVICE_CODE>`. Interactive get polls in-process
+  and prefers `verification_uri_complete` when present.
+- auth resume positional is grant-interpreted (`URI|DEVICE_CODE`);
+  `--state` / `--pkce` / `--redirect-uri` rejected on device accounts.
+- The grant = "device" bail placeholders in auth get / auth resume are gone.
+- Deviation: resume with a bare device code uses `expires_in = 1800` and
+  `interval = 5` (RFC 8628 example defaults); the original device response
+  is not re-hydrated from storage.
+- Deviation: account `extras` are not forwarded on the device authorization
+  request (`Oauth20DeviceAuthRequestParams` has no extras table in io-oauth);
+  they still apply only to the authorization-code path (D4 partial).

@@ -46,7 +46,9 @@ use crate::{
 
 /// Initiate a new OAuth 2.0 grant from scratch.
 ///
-/// Runs `authorization-code` or `device` from the account config.
+/// Runs the grant configured on the account (`authorization-code` or
+/// `device`). Interactive shells complete the flow; non-interactive
+/// and `--json` hand off to `auth resume`.
 #[derive(Debug, Parser)]
 pub struct AuthGetCommand;
 
@@ -296,6 +298,7 @@ fn execute_device(printer: &mut impl Printer, mut account: Account) -> Result<()
     let device = match device_client.request_device_auth(&device_endpoint, params)? {
         Ok(device) => device,
         Err(res) => {
+            debug!("execute issue access token error hook");
             account.execute_on_issue_error_hook(&res);
             let err = anyhow!("Device authorization error (code {:?})", res.error);
             return Err(match (res.error_description, res.error_uri) {
@@ -317,6 +320,7 @@ fn execute_device(printer: &mut impl Printer, mut account: Account) -> Result<()
         interactive,
     };
 
+    // D5: non-interactive or --json print and hand off to auth resume.
     if printer.is_json() || !interactive {
         printer.out(&view)?;
         if !printer.is_json() {
@@ -344,6 +348,8 @@ fn execute_device(printer: &mut impl Printer, mut account: Account) -> Result<()
     complete_device_token_poll(printer, &mut account, &token_endpoint, &device)
 }
 
+/// Polls the token endpoint until the device grant completes, then stores
+/// the token and fires on-issue hooks (shared with the code grant path).
 pub(crate) fn complete_device_token_poll(
     printer: &mut impl Printer,
     account: &mut Account,
@@ -358,6 +364,7 @@ pub(crate) fn complete_device_token_poll(
     )?;
     client.client_secret = client_secret;
 
+    // Outer Result: transport / client-side; inner: OAuth token body.
     match client.await_device_access_token(&account.tls, device) {
         Ok(Ok(res)) => report_token_issued(printer, account, &res),
         Ok(Err(res)) => {
@@ -397,13 +404,33 @@ fn device_poll_client_error_hook_params(
     }
 }
 
+/// Persist the token, fire on-issue success hooks, print the success
+/// message. Shared by the authorization-code and device grants.
+pub(crate) fn report_token_issued(
+    printer: &mut impl Printer,
+    account: &mut Account,
+    res: &Oauth20AccessTokenSuccessParams,
+) -> Result<()> {
+    account.write_to_storage(res)?;
+    debug!("execute issue access token success hook");
+    account.execute_on_issue_success_hook(res);
+    let msg = "Access token successfully issued";
+    let msg = match res.expires_in {
+        None => format!("{msg} (unknown expiry)"),
+        Some(exp) => {
+            let exp = Duration::from_secs(exp as u64 + 1);
+            format!("{msg} (expires in {})", format_duration(exp))
+        }
+    };
+    printer.out(Message::new(msg))
+}
+
 /// Single-quote for safe paste into a POSIX shell command line.
 fn shell_single_quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('\'');
     for ch in s.chars() {
         if ch == '\'' {
-            // End quote, escaped quote, reopen quote: '\''
             out.push_str("'\\''");
         } else {
             out.push(ch);
@@ -413,24 +440,7 @@ fn shell_single_quote(s: &str) -> String {
     out
 }
 
-pub(crate) fn report_token_issued(
-    printer: &mut impl Printer,
-    account: &mut Account,
-    res: &Oauth20AccessTokenSuccessParams,
-) -> Result<()> {
-    account.write_to_storage(res)?;
-    debug!("execute issue access token success hook");
-    account.execute_on_issue_success_hook(res);
-    let msg = match res.expires_in {
-        None => "Access token successfully issued (unknown expiry)".into(),
-        Some(exp) => format!(
-            "Access token successfully issued (expires in {})",
-            format_duration(Duration::from_secs(exp as u64 + 1))
-        ),
-    };
-    printer.out(Message::new(msg))
-}
-
+/// Printable / JSON device-authorization response for resume handoff.
 #[derive(Serialize)]
 struct DeviceAuthorization {
     device_code: String,
@@ -450,6 +460,7 @@ impl fmt::Display for DeviceAuthorization {
         if let Some(uri) = &self.verification_uri_complete {
             writeln!(f, " - complete URI: {uri}")?;
         }
+        // Interactive sessions poll in-process; hide the device code.
         if !self.interactive {
             writeln!(f, " - device code: {}", self.device_code)?;
         }

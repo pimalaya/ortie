@@ -62,7 +62,9 @@ scopes = []
 #   pkce = false   # disable, for servers rejecting PKCE parameters
 #pkce = "s256"
 
-# Extra parameters forwarded verbatim to the authorization request query.
+# Extra parameters forwarded verbatim to the authorization request query
+# (authorization-code grant). The device grant does not yet forward extras
+# (io-oauth device request params have no extras table).
 # Keys are wire parameter names (no kebab-case renaming). This is the place
 # for provider-specific knobs:
 #
