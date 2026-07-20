@@ -8,16 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- Added the device authorization grant (RFC 8628): `grant = "device"`
-  with `endpoints.device-authorization`. Interactive `auth get` polls;
-  non-interactive / `--json` hands off to `auth resume <DEVICE_CODE>`.
+- Added the device authorization grant (RFC 8628).
+
+  `grant = "device"` with `endpoints.device-authorization`. Interactive `auth get` polls; non-interactive / `--json` hands off to `auth resume <DEVICE_CODE>`.
 
 ### Fixed
 
-- Fire on-issue error hooks when the local device poll deadline expires
-  (`DeviceCodeExpired` as `expired_token`).
-- Shell-quote secrets in printed `auth resume` examples; trim auth-code
-  resume input; omit redirect/state/PKCE bodies from resume errors.
+- Fired on-issue error hooks when the local device poll deadline expires (`DeviceCodeExpired` as `expired_token`).
+- Shell-quoted secrets in printed `auth resume` examples; trimmed auth-code resume input; omitted redirect/state/PKCE bodies from resume errors.
 
 ## [2.0.0] - 2026-07-17
 

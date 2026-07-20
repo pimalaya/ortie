@@ -94,9 +94,7 @@ Rejected: toml_edit write-back into the config file. It would create a maintenan
 
 ## Milestones
 
-M0, M1 and M5 landed in the 2.0.0 release. M2 landed after 2.0.0 (see
-Landed). Remaining milestones follow as further minors on top of 2.x:
-M3 next, then M4 and M6.
+M0, M1 and M5 landed in the 2.0.0 release. M2 landed after 2.0.0 (see Landed). Remaining milestones follow as further minors on top of 2.x: M3 next, then M4 and M6.
 
 ### M3: release polish
 
@@ -169,20 +167,9 @@ M3 next, then M4 and M6.
 
 ### M2: device authorization grant end-to-end
 
-- Added `endpoints.device-authorization` (deferred from M1) and the Account
-  counterpart. auth get / auth resume dispatch on `grant = "device"`; the
-  bail placeholders are gone.
-- Device path: `request_device_auth`, user-code display, poll via
-  `await_device_access_token`, then the same storage write and on-issue
-  hooks as the authorization-code path. No io-oauth work; RFC 8628 was
-  already covered there.
-- Non-interactive and `--json` print the device response and exit;
-  polling finishes with `auth resume <DEVICE_CODE>`. Interactive get
-  polls in-process and prefers `verification_uri_complete` when present.
-- auth resume positional is grant-interpreted (`URI|DEVICE_CODE`);
-  `--state` / `--pkce` / `--redirect-uri` rejected on device accounts.
-- Resume with a bare device code uses `expires_in = 1800` and
-  `interval = 5` (RFC 8628 example defaults); the original device
-  response is not re-hydrated from storage.
-- Account `extras` stay on the authorization-code request only:
-  `Oauth20DeviceAuthRequestParams` has no extras table in io-oauth.
+- Added `endpoints.device-authorization` (deferred from M1) and the Account counterpart. auth get / auth resume dispatch on `grant = "device"`; the bail placeholders are gone.
+- Device path: `request_device_auth`, user-code display, poll via `await_device_access_token`, then the same storage write and on-issue hooks as the authorization-code path. No io-oauth work; RFC 8628 was already covered there.
+- Non-interactive and `--json` print the device response and exit; polling finishes with `auth resume <DEVICE_CODE>`. Interactive get polls in-process and prefers `verification_uri_complete` when present.
+- auth resume positional is grant-interpreted (`URI|DEVICE_CODE`); `--state` / `--pkce` / `--redirect-uri` rejected on device accounts.
+- Resume with a bare device code uses `expires_in = 1800` and `interval = 5` (RFC 8628 example defaults); the original device response is not re-hydrated from storage.
+- Account `extras` stay on the authorization-code request only: `Oauth20DeviceAuthRequestParams` has no extras table in io-oauth.
