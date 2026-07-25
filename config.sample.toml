@@ -36,13 +36,12 @@ client-id = ""
 
 # The OAuth 2.0 grant flow run by the auth commands.
 #
-# Possible values: "authorization-code" (default)
+# Possible values: "authorization-code" (default), "device" (RFC 8628)
 #grant = "authorization-code"
 
-# Endpoints given by your OAuth 2.0 provider. All optional at parse time:
-# each command checks the ones it actually needs (auth get needs
-# authorization + token, token refresh only token, token show none).
+# Endpoints given by your OAuth 2.0 provider. All optional at parse time.
 endpoints.authorization = ""
+#endpoints.device-authorization = ""  # required when grant = "device"
 endpoints.token = ""
 
 # Optional redirection endpoint. When omitted, defaults to
@@ -63,7 +62,9 @@ scopes = []
 #   pkce = false   # disable, for servers rejecting PKCE parameters
 #pkce = "s256"
 
-# Extra parameters forwarded verbatim to the authorization request query.
+# Extra parameters forwarded verbatim to the authorization request query
+# (authorization-code grant). The device grant does not yet forward extras
+# (io-oauth device request params have no extras table).
 # Keys are wire parameter names (no kebab-case renaming). This is the place
 # for provider-specific knobs:
 #

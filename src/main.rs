@@ -57,9 +57,10 @@
 //! the CLI help: the first paragraph (two lines at most) is the `-h`
 //! summary, the following paragraphs complete the `--help` page.
 //!
-//! The roadmap (device grant, discovery upgrades, revocation) lives
-//! in cairn/changes/; current truth is in cairn/spec/ and landed
-//! history in cairn/log/ (see <https://github.com/pimalaya/cairn>).
+//! Device authorization (RFC 8628) is selected with `grant = "device"`.
+//! The remaining roadmap (discovery upgrades, revocation) lives in
+//! cairn/changes/; current truth is in cairn/spec/ and landed history
+//! in cairn/log/ (see <https://github.com/pimalaya/cairn>).
 
 mod account;
 mod auth;

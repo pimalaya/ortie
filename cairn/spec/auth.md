@@ -17,5 +17,8 @@ When the account's redirection uses a non-loopback scheme the local listener can
 ### Requirement: Redirection resolution
 When `endpoints.redirection` is set it SHALL be used verbatim; otherwise Ortie binds `127.0.0.1:0` and uses the resulting `http://127.0.0.1:<port>` URL as an exact-match loopback redirect (the permitted variable-port exception).
 
-### Requirement: Device grant parses but does not run
-`grant = "device"` SHALL parse, but `auth get` and `auth resume` currently bail on a device account. Making the device grant runnable is tracked as an in-flight change.
+### Requirement: Device authorization endpoint
+An account SHALL accept `endpoints.device-authorization`, checked by `auth get` only on a device account.
+
+### Requirement: Device grant runs
+On a device account, `auth get` SHALL request device authorization, display the user code and verification URI (preferring `verification_uri_complete` when present), and either poll to completion (interactive) or print the device response and hand off (non-interactive / `--json`), then write storage and fire the on-issue hooks shared with the code grant. `auth resume` SHALL interpret its positional as the device code, and the authorization-code-only flags (`--state`, `--pkce`, `--redirect-uri`) SHALL be rejected on device accounts. Account `extras` are not forwarded on the device authorization request.
