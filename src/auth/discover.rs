@@ -28,7 +28,7 @@ use std::{
 use anyhow::{Result, bail};
 use clap::Parser;
 use log::debug;
-use pimalaya_cli::{printer::Printer, prompt, spinner::Spinner};
+use pimalaya_cli::{printer::Printer, prompt, spinner::Spinner, wizard::keyring::KeyringProvider};
 use pimalaya_stream::tls::{Rustls, Tls};
 use secrecy::ExposeSecret;
 use serde::Serialize;
@@ -221,7 +221,7 @@ impl AuthDiscoverCommand {
 
         // NOTE: plug the token storage into a credential provider
         // CLI known for the running OS, or take custom commands.
-        let providers = KnownStorage::available();
+        let providers = KeyringProvider::available();
 
         if providers.is_empty() {
             custom_storage(&mut config)?;
@@ -234,10 +234,17 @@ impl AuthDiscoverCommand {
                 StorageChoice::Known(provider) => {
                     config.storage = Some(Storage {
                         read: StorageEntry {
-                            command: provider.read(&config.name),
+                            // `read_command` returns an argv; ortie stores
+                            // its commands as shell strings, so join it
+                            // (the entries never contain whitespace).
+                            command: StorageCommand::Shell(
+                                provider.read_command(Some("ortie"), &config.name).join(" "),
+                            ),
                         },
                         write: StorageEntry {
-                            command: provider.write(&config.name),
+                            command: StorageCommand::Shell(
+                                provider.write_command(Some("ortie"), &config.name),
+                            ),
                         },
                     });
                 }
@@ -880,7 +887,7 @@ fn known_apps(config: &OauthConfig) -> Vec<&'static KnownApp> {
 /// provider CLI, or the trailing custom entry.
 #[derive(Debug, Eq, PartialEq)]
 enum StorageChoice {
-    Known(KnownStorage),
+    Known(KeyringProvider),
     Custom,
 }
 
@@ -889,118 +896,6 @@ impl fmt::Display for StorageChoice {
         match self {
             Self::Known(provider) => write!(f, "{}", provider.name()),
             Self::Custom => write!(f, "Custom commands"),
-        }
-    }
-}
-
-/// A well-known credential provider CLI the wizard can plug the
-/// token storage into.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum KnownStorage {
-    /// pass, the standard unix password manager.
-    Pass,
-    /// secret-tool, over the Secret Service (GNOME Keyring).
-    SecretTool,
-    /// kwallet-query, over the KDE Wallet.
-    KwalletQuery,
-    /// security, over the macOS Keychain.
-    Security,
-}
-
-impl KnownStorage {
-    /// The providers relevant on the running OS. Empty on platforms
-    /// without a known stdin-friendly provider (Windows), where the
-    /// wizard goes straight to custom commands.
-    fn available() -> Vec<Self> {
-        let mut providers = Vec::new();
-
-        if cfg!(target_os = "linux") {
-            providers.push(Self::SecretTool);
-            providers.push(Self::KwalletQuery);
-        }
-
-        if cfg!(target_os = "macos") {
-            providers.push(Self::Security);
-        }
-
-        if cfg!(unix) {
-            providers.push(Self::Pass);
-        }
-
-        providers
-    }
-
-    /// Display name of the provider, for the pick-list labels.
-    fn name(self) -> &'static str {
-        match self {
-            Self::Pass => "pass (password store)",
-            Self::SecretTool => "secret-tool (GNOME Keyring / Secret Service)",
-            Self::KwalletQuery => "kwallet-query (KDE Wallet)",
-            Self::Security => "security (macOS Keychain)",
-        }
-    }
-
-    /// The command printing the persisted token on stdout.
-    fn read(self, account: &str) -> StorageCommand {
-        let exec =
-            |args: &[&str]| StorageCommand::Exec(args.iter().map(|s| s.to_string()).collect());
-
-        match self {
-            Self::Pass => exec(&["pass", "show", &format!("ortie/{account}")]),
-            Self::SecretTool => exec(&[
-                "secret-tool",
-                "lookup",
-                "service",
-                "ortie",
-                "account",
-                account,
-            ]),
-            Self::KwalletQuery => exec(&[
-                "kwallet-query",
-                "-r",
-                &format!("ortie/{account}"),
-                "kdewallet",
-            ]),
-            Self::Security => exec(&[
-                "security",
-                "find-generic-password",
-                "-s",
-                "ortie",
-                "-a",
-                account,
-                "-w",
-            ]),
-        }
-    }
-
-    /// The command persisting the token it receives on stdin.
-    fn write(self, account: &str) -> StorageCommand {
-        let exec =
-            |args: &[&str]| StorageCommand::Exec(args.iter().map(|s| s.to_string()).collect());
-
-        match self {
-            Self::Pass => StorageCommand::Shell(format!("pass insert -m -f ortie/{account}")),
-            Self::SecretTool => exec(&[
-                "secret-tool",
-                "store",
-                "--label",
-                &format!("ortie/{account}"),
-                "service",
-                "ortie",
-                "account",
-                account,
-            ]),
-            Self::KwalletQuery => exec(&[
-                "kwallet-query",
-                "-w",
-                &format!("ortie/{account}"),
-                "kdewallet",
-            ]),
-            // NOTE: security takes the secret as an argument, not on
-            // stdin; the shell form bridges it with $(cat).
-            Self::Security => StorageCommand::Shell(format!(
-                "security add-generic-password -U -s ortie -a {account} -w \"$(cat)\""
-            )),
         }
     }
 }
@@ -1069,22 +964,15 @@ struct StorageEntry {
 #[derive(Debug, Eq, PartialEq, Serialize)]
 #[serde(untagged)]
 enum StorageCommand {
-    Exec(Vec<String>),
     Shell(String),
 }
 
 impl fmt::Display for StorageCommand {
-    /// Renders the command as its TOML value: a double-quoted string
-    /// array for the exec form, a literal (single-quoted) string for
-    /// the shell form so embedded quotes need no escaping.
+    /// Renders the command as its TOML value: a literal (single-quoted)
+    /// string, so embedded quotes need no escaping.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Exec(args) => {
-                let args: Vec<String> = args.iter().map(|arg| format!("\"{arg}\"")).collect();
-                write!(f, "[{}]", args.join(", "))
-            }
-            Self::Shell(command) => write!(f, "'{command}'"),
-        }
+        let Self::Shell(command) = self;
+        write!(f, "'{command}'")
     }
 }
 
