@@ -58,7 +58,8 @@
 //! summary, the following paragraphs complete the `--help` page.
 //!
 //! The roadmap (device grant, discovery upgrades, revocation) lives
-//! in docs/oauth21-plan.md.
+//! in cairn/changes/; current truth is in cairn/spec/ and landed
+//! history in cairn/log/ (see <https://github.com/pimalaya/cairn>).
 
 mod account;
 mod auth;

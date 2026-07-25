@@ -201,7 +201,7 @@ scopes = ["urn:ietf:params:oauth:scope:mail", "urn:ietf:params:oauth:scope:conta
 extras.resource = "https://api.fastmail.com/jmap/session"
 ```
 
-The wizard selects all four advertised scopes by default (Fastmail cannot complete on a desktop anyway; trim them in the scope multi-select if you want). The pre-registered Thunderbird application offered by the wizard covers Fastmail with a loopback redirect instead, avoiding the manual resume; see [docs/providers.md](./docs/providers.md) and [docs/discovery-layering.md](./docs/discovery-layering.md) for why dynamic registration forces the private-use scheme.
+The wizard selects all four advertised scopes by default (Fastmail cannot complete on a desktop anyway; trim them in the scope multi-select if you want). The pre-registered Thunderbird application offered by the wizard covers Fastmail with a loopback redirect instead, avoiding the manual resume; see [cairn/spec/provider-quirks.md](./cairn/spec/provider-quirks.md) and [cairn/changes/discovery-layering/](./cairn/changes/discovery-layering/) for why dynamic registration forces the private-use scheme.
 
 ## Usage
 

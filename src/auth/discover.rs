@@ -141,7 +141,7 @@ impl AuthDiscoverCommand {
 
         // Fill the defaults a provider is known to need but discovery
         // does not yet surface (Fastmail's RFC 8707 resource and its
-        // scopes). Stopgap; see docs/discovery-layering.md.
+        // scopes). Stopgap; see cairn/changes/discovery-layering/.
         fill_provider_defaults(&mut config);
         config.name = name;
 
@@ -150,7 +150,7 @@ impl AuthDiscoverCommand {
         // discovered set selected by default. Skipped when there is
         // nothing to choose from. The advertised extras are a stopgap
         // until discovery carries scopes_supported; see
-        // docs/discovery-layering.md.
+        // cairn/changes/discovery-layering/.
         let mut options = config.scopes.clone();
         for scope in advertised_scopes(&config.endpoints) {
             if !options.iter().any(|option| option.as_str() == scope) {
@@ -925,7 +925,7 @@ struct OauthConfig {
     scopes: Vec<String>,
     /// Extra authorization-request parameters a provider is known to
     /// require but discovery does not yet surface (Fastmail's RFC 8707
-    /// resource). Stopgap; see docs/discovery-layering.md.
+    /// resource). Stopgap; see cairn/changes/discovery-layering/.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     extras: BTreeMap<String, String>,
     /// Whether token show refreshes an expired token by itself; the
@@ -1121,7 +1121,7 @@ fn toml_key(name: &str) -> Cow<'_, str> {
 /// indicator is present, and its discovered grant carries no scopes at
 /// all; supply the resource and, since Fastmail cannot complete on a
 /// desktop anyway, its full advertised scope set. Stopgap until
-/// discovery surfaces them; see docs/discovery-layering.md.
+/// discovery surfaces them; see cairn/changes/discovery-layering/.
 fn fill_provider_defaults(config: &mut OauthConfig) {
     let hosts = endpoint_hosts(&config.endpoints);
 
@@ -1143,7 +1143,7 @@ fn fill_provider_defaults(config: &mut OauthConfig) {
 /// The scopes a provider is known to advertise, offered to the user as
 /// a multi-select. Empty for providers whose scopes discovery already
 /// fills (their config keeps the discovered set). Stopgap until
-/// discovery carries scopes_supported; see docs/discovery-layering.md.
+/// discovery carries scopes_supported; see cairn/changes/discovery-layering/.
 fn advertised_scopes(endpoints: &Endpoints) -> Vec<&'static str> {
     let hosts = endpoint_hosts(endpoints);
 
