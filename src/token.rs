@@ -29,7 +29,7 @@ pub enum TokenCommand {
 
 impl TokenCommand {
     /// Dispatches the token leaf on the resolved account.
-    pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         match self {
             Self::Show(cmd) => cmd.execute(printer, account),
             Self::Inspect(cmd) => cmd.execute(printer, account),

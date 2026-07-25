@@ -137,7 +137,7 @@ impl AuthResumeCommand {
 
         match res {
             Ok(res) => {
-                account.write_to_storage(&res)?;
+                let res = account.write_to_storage(res)?;
 
                 debug!("execute issue access token success hook");
                 account.execute_on_issue_success_hook(&res);

@@ -18,6 +18,10 @@ use crate::{account::Account, token::refresh::TokenRefreshCommand};
 /// than handed out and rejected mid-request.
 const EXPIRY_SKEW_SECS: u64 = 60;
 
+/// Default access token lifetime assumed when the server sends no
+/// `expires_in`, so a session refreshes roughly hourly instead of never.
+const DEFAULT_EXPIRES_IN_SECS: u64 = 3600;
+
 /// Display the raw access token.
 ///
 /// This command allows you to see your access token. It can easily be
@@ -35,8 +39,8 @@ pub struct TokenShowCommand {
 impl TokenShowCommand {
     /// Reads the token from storage, refreshing it first when expired
     /// and auto-refresh is requested, then prints it raw.
-    pub fn execute(self, printer: &mut impl Printer, mut account: Account) -> Result<()> {
-        let mut token = account.read_from_storage()?;
+    pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
+        let mut token = account.resolve_token()?;
 
         if (self.auto_refresh || account.auto_refresh)
             && let Some(refresh_token) = token.refresh_token.clone()
@@ -56,19 +60,23 @@ impl TokenShowCommand {
 ///
 /// `expires_in` alone is the lifetime granted at issuance (e.g. 3599s),
 /// not a live countdown, so it must be added to `issued_at` and
-/// compared against the wall clock. When either is unknown, the token
-/// is assumed still valid (refreshing blindly would defeat caching).
+/// compared against the wall clock. When `issued_at` is unknown the
+/// token is assumed still valid; a missing `expires_in` defaults to
+/// [`DEFAULT_EXPIRES_IN_SECS`] rather than never expiring.
 fn is_expired(issued_at: Option<u64>, expires_in: Option<usize>) -> bool {
-    let (Some(issued_at), Some(expires_in)) = (issued_at, expires_in) else {
+    let Some(issued_at) = issued_at else {
         return false;
     };
+    let expires_in = expires_in
+        .map(|exp| exp as u64)
+        .unwrap_or(DEFAULT_EXPIRES_IN_SECS);
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    issued_at + expires_in as u64 <= now + EXPIRY_SKEW_SECS
+    issued_at + expires_in <= now + EXPIRY_SKEW_SECS
 }
 
 /// Printable raw access token, exposed for piping.

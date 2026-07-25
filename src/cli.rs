@@ -15,7 +15,9 @@ use pimalaya_cli::{
 };
 use pimalaya_config::toml::TomlConfig;
 
-use crate::{account::Account, auth::AuthCommand, config::Config, token::TokenCommand};
+use crate::{
+    account::Account, auth::AuthCommand, config::Config, repl::ReplCommand, token::TokenCommand,
+};
 
 /// Top-level command-line interface for the `ortie` binary.
 #[derive(Parser, Debug)]
@@ -55,6 +57,8 @@ pub enum Command {
     #[command(subcommand)]
     Token(TokenCommand),
 
+    Repl(ReplCommand),
+
     #[command(alias = "mans")]
     Manuals(ManualCommand),
     Completions(CompletionCommand),
@@ -72,6 +76,10 @@ impl Command {
         match self {
             Self::Auth(cmd) => cmd.execute(printer, config_paths, account_name),
             Self::Token(cmd) => {
+                let mut account = take_account(config_paths, account_name)?;
+                cmd.execute(printer, &mut account)
+            }
+            Self::Repl(cmd) => {
                 let account = take_account(config_paths, account_name)?;
                 cmd.execute(printer, account)
             }

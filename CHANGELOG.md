@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added the `repl` command: a persistent session bound to one account that reads the secret store once and answers `token` commands (show, inspect, refresh) over stdin/stdout.
+
+  One-shot commands re-read the secret store on every run, so a keyring that confirms disclosure per process prompts again and again. The REPL resolves the token once, holds it in memory for the life of the process, and reuses it, collapsing those prompts into a single unlock (plus one per refresh, which must persist a rotated refresh token). It shows a prompt on a terminal and uses a plain line protocol when piped (one flushed result per command on stdout, errors on stderr), so an application can drive it without reimplementing the OAuth flow.
+
+### Changed
+
+- A refreshed or issued token now stamps its issuance time from the local clock (instead of relying on the server `Date` header), and a missing `expires_in` defaults to one hour, so auto-refresh stays reliable across a long-lived session.
+
 ## [2.0.0] - 2026-07-17
 
 ### Added

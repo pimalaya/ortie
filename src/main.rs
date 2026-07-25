@@ -65,6 +65,7 @@ mod account;
 mod auth;
 mod cli;
 mod config;
+mod repl;
 mod token;
 
 use clap::Parser;

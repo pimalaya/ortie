@@ -33,8 +33,8 @@ pub struct TokenRefreshCommand;
 impl TokenRefreshCommand {
     /// Reads the stored refresh token, exchanges it for a fresh
     /// access token and reports the new expiry.
-    pub fn execute(self, printer: &mut impl Printer, mut account: Account) -> Result<()> {
-        let token = account.read_from_storage()?;
+    pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
+        let token = account.resolve_token()?;
 
         let Some(refresh_token) = token.refresh_token else {
             bail!("Missing refresh token");
@@ -58,7 +58,7 @@ impl TokenRefreshCommand {
     /// the outcome (keeping the previous refresh token when the
     /// server omits a rotated one) and fires the on-refresh hooks.
     pub fn refresh(
-        mut account: Account,
+        account: &mut Account,
         refresh_token: SecretBox<str>,
     ) -> Result<Oauth20AccessTokenSuccessParams> {
         let Some(token_endpoint) = account.token_endpoint.clone() else {
@@ -81,10 +81,10 @@ impl TokenRefreshCommand {
         match res {
             Ok(mut res) => {
                 if res.refresh_token.is_none() {
-                    res.refresh_token = account.read_from_storage()?.refresh_token;
+                    res.refresh_token = account.resolve_token()?.refresh_token;
                 }
 
-                account.write_to_storage(&res)?;
+                let res = account.write_to_storage(res)?;
 
                 debug!("execute refresh access token success hook");
                 account.execute_on_refresh_success_hook(&res);

@@ -25,8 +25,8 @@ pub struct TokenInspectCommand;
 
 impl TokenInspectCommand {
     /// Reads the token from storage and prints its metadata.
-    pub fn execute(self, printer: &mut impl Printer, mut account: Account) -> Result<()> {
-        let response = account.read_from_storage()?;
+    pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
+        let response = account.resolve_token()?;
         printer.out(Report(response))
     }
 }

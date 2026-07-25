@@ -15,7 +15,10 @@ The `token` command tree works on the access token already persisted in storage:
 The token response persisted to and read from storage SHALL be the OAuth 2.0 success-params JSON, carrying at least the access token, token type, optional expiry lifetime, optional refresh token, and the issuance timestamp.
 
 ### Requirement: Expiry with skew
-`token show` SHALL treat a token as expired when `issued_at + expires_in` is within a fixed skew (60 seconds) of the wall clock, so a token about to lapse is refreshed rather than handed out and rejected mid-request. When either `issued_at` or `expires_in` is unknown, the token is assumed still valid.
+`token show` SHALL treat a token as expired when `issued_at + expires_in` is within a fixed skew (60 seconds) of the wall clock. When `expires_in` is absent it SHALL default to one hour (3600 seconds). When `issued_at` is absent the token is assumed still valid.
+
+### Requirement: Local issuance timestamp
+On every successful issuance or refresh, Ortie SHALL stamp `issued_at` with its own wall clock at receipt on the token it persists and caches, overriding any server `Date` header, so expiry is computed against a single clock. On refresh the new token SHALL be persisted to storage before the in-memory token is replaced.
 
 ### Requirement: Auto-refresh on show
 When auto-refresh is enabled (per-command `--auto-refresh` or the account's `auto-refresh` setting) and the stored token is expired and a refresh token is present, `token show` SHALL refresh before printing.

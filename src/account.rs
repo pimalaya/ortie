@@ -4,7 +4,7 @@
 //! by flattening every `storage.*.command` and
 //! `hooks.*.*.{command,notify}` into a direct field on this type.
 //! Commands consume `Account` and call the driver methods
-//! (`read_from_storage`, `write_to_storage`,
+//! (`resolve_token`, `write_to_storage`,
 //! `execute_on_{issue,refresh}_{success,error}_hook`,
 //! `redirection`) instead of walking the original config tree.
 
@@ -16,6 +16,7 @@ use std::{
     io::Write,
     net::TcpListener,
     process::{Command, Stdio},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -70,6 +71,9 @@ pub struct Account {
     pub read_storage_command: Command,
     /// Command receiving the token JSON on its stdin.
     pub write_storage_command: Command,
+
+    /// Token resolved from storage, memoized for the session.
+    pub token: Option<Oauth20AccessTokenSuccessParams>,
 
     /// Command hook fired when a token is successfully issued.
     pub on_issue_success_hook_command: Option<Command>,
@@ -171,6 +175,7 @@ impl From<AccountConfig> for Account {
             redirection_endpoint: redirection,
             read_storage_command: read_cmd,
             write_storage_command: write_cmd,
+            token: None,
             on_issue_success_hook_command,
             on_issue_error_hook_command,
             on_refresh_success_hook_command,
@@ -203,9 +208,21 @@ impl Account {
         Ok(Cow::Owned(url))
     }
 
+    /// Resolves the account token, reading it from storage on first
+    /// use and memoizing it so the read storage command runs once.
+    pub fn resolve_token(&mut self) -> Result<Oauth20AccessTokenSuccessParams> {
+        if let Some(token) = &self.token {
+            return Ok(token.clone());
+        }
+
+        let token = self.read_storage()?;
+        self.token = Some(token.clone());
+        Ok(token)
+    }
+
     /// Reads the persisted token by running the read storage command
     /// and parsing its stdout as the token response JSON.
-    pub fn read_from_storage(&mut self) -> Result<Oauth20AccessTokenSuccessParams> {
+    fn read_storage(&mut self) -> Result<Oauth20AccessTokenSuccessParams> {
         let cmd = &mut self.read_storage_command;
 
         let output = cmd
@@ -229,10 +246,16 @@ impl Account {
     }
 
     /// Persists the token by running the write storage command and
-    /// piping the token response JSON to its stdin.
-    pub fn write_to_storage(&mut self, res: &Oauth20AccessTokenSuccessParams) -> Result<()> {
+    /// piping the token response JSON to its stdin. The local issuance
+    /// time is stamped first and the token is cached in memory after.
+    pub fn write_to_storage(
+        &mut self,
+        mut res: Oauth20AccessTokenSuccessParams,
+    ) -> Result<Oauth20AccessTokenSuccessParams> {
+        res.issued_at = Some(now_secs());
+
         let cmd = &mut self.write_storage_command;
-        let json = String::try_from(res)?.into_bytes();
+        let json = String::try_from(&res)?.into_bytes();
 
         let mut child = cmd
             .stdin(Stdio::piped())
@@ -268,7 +291,8 @@ impl Account {
             return Err(err2.context(err));
         }
 
-        Ok(())
+        self.token = Some(res.clone());
+        Ok(res)
     }
 
     /// Fires the on-issue success hook with the issued token.
@@ -306,6 +330,14 @@ impl Account {
         let notify = None;
         execute_error_hook(self.on_refresh_error_hook_command.as_mut(), notify, res);
     }
+}
+
+/// Current Unix epoch seconds, stamped as the local token issuance time.
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 /// Runs a success hook: the command with the token exposed as

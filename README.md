@@ -214,9 +214,12 @@ ortie auth resume <url>     # finish the flow by hand when the redirection fails
 ortie token show            # print the stored access token
 ortie token refresh         # force a refresh
 ortie token inspect         # show token metadata (type, scopes, expiry)
+ortie repl                  # persistent session: unlock once, answer token commands
 ```
 
 Logs go to stderr; `--log-level` and `--log-file` control verbosity and destination, and `--json` switches output to machine-readable objects.
+
+`ortie repl` starts a persistent session for one account (the `-a` or default one). It reads the secret store once and holds the token in memory, then answers `token` commands read line by line from stdin, so the keyring is unlocked a single time instead of on every call. On a terminal it shows a prompt; when piped it writes one result per line on stdout (errors on stderr), so an application can drive it (`printf 'token show\n' | ortie repl`) without reimplementing the OAuth flow.
 
 ## Alternatives
 
