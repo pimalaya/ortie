@@ -10,7 +10,7 @@
 //! Ortie is a thin, config-driven front-end. The OAuth engine itself
 //! (I/O-free coroutines organised per RFC, plus the std-blocking
 //! Oauth20ClientStd pump) lives in [io-oauth]; PIM service discovery
-//! (consumed by the auth discover wizard) lives in
+//! (consumed by the discovery wizard) lives in
 //! [io-pim-discovery]. This repository only contains the CLI glue
 //! between the user's config and those two crates.
 //!
@@ -21,7 +21,7 @@
 //! subcommand) runs the discovery wizard, the natural first contact
 //! with the tool; otherwise it routes into two command trees:
 //! [`auth`] obtains tokens by running the OAuth grant configured on
-//! the account (discover, get, resume), while [`token`] works on the
+//! the account (get, resume), while [`token`] works on the
 //! token already persisted in storage (show, inspect, refresh).
 //!
 //! The wizard never writes any file: it prints a complete, valid
@@ -86,7 +86,7 @@ fn main() {
             let account_name = cli.account.name.as_deref();
             cmd.execute(&mut printer, config_paths, account_name)
         }
-        None => AuthDiscoverCommand { input: None }.execute(&mut printer),
+        None => AuthDiscoverCommand.execute(&mut printer),
     };
 
     ErrorReport::eval(&mut printer, result)

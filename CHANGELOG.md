@@ -20,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - A refreshed or issued token now stamps its issuance time from the local clock (instead of relying on the server `Date` header), and a missing `expires_in` defaults to one hour, so auto-refresh stays reliable across a long-lived session.
 
+### Removed
+
+- Removed the `auth discover` subcommand: bare `ortie` already runs the same wizard. Run `ortie` (it prompts for the email, server or issuer input).
+
 ### Fixed
 
 - Fired on-issue error hooks when the local device poll deadline expires (`DeviceCodeExpired` as `expired_token`).

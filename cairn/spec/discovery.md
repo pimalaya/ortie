@@ -6,10 +6,10 @@ status: current
 
 # Discovery
 
-The discovery wizard is the natural first contact with Ortie: bare `ortie` runs it (an alias of `auth discover`). It resolves OAuth 2.0 services for an email address or issuer and emits a ready-to-use account config. It leans on io-pim-discovery for resolution and io-oauth for client registration.
+The discovery wizard is the natural first contact with Ortie: bare `ortie` runs it. It resolves OAuth 2.0 services for an email address or issuer and emits a ready-to-use account config. It leans on io-pim-discovery for resolution and io-oauth for client registration.
 
 ### Requirement: Wizard is the default command
-Bare `ortie` (no subcommand) SHALL run the discovery wizard; `ortie auth discover` remains the explicit spelling.
+Bare `ortie` (no subcommand) SHALL run the discovery wizard, prompting for the input. There is no separate `auth discover` subcommand.
 
 ### Requirement: Prints, never writes
 The wizard SHALL NOT write any file. It prints a complete, valid `[accounts.<name>]` TOML fragment on stdout with its guidance embedded as leading comments, while prompts render on stderr, so `ortie >> <config>` is the write-back. Under `--json` it emits a JSON object instead so scripts can consume the discovery.

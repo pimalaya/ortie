@@ -1,5 +1,4 @@
-//! `auth discover` subcommand: interactive OAuth 2.0 account wizard,
-//! also run by bare `ortie`.
+//! Interactive OAuth 2.0 account wizard, run by bare `ortie`.
 //!
 //! Prompts for an email address, a server or an issuer URI, discovers
 //! the PIM services reachable for it through io-pim-discovery,
@@ -26,7 +25,6 @@ use std::{
 };
 
 use anyhow::{Result, bail};
-use clap::Parser;
 use log::debug;
 use pimalaya_cli::{printer::Printer, prompt, spinner::Spinner, wizard::keyring::KeyringProvider};
 use pimalaya_stream::tls::{Rustls, Tls};
@@ -76,21 +74,14 @@ const REDIRECT_SCHEME: &str = "org.pimalaya.ortie://redirect";
 /// manually), then prints the resulting account as valid TOML on
 /// stdout. It never writes any file: append the fragment to your
 /// config yourself, e.g. `ortie >> <config>`.
-#[derive(Debug, Parser)]
-pub struct AuthDiscoverCommand {
-    /// Email address, server or issuer URI to discover OAuth 2.0
-    /// services for. Prompted interactively when omitted.
-    pub input: Option<String>,
-}
+#[derive(Debug)]
+pub struct AuthDiscoverCommand;
 
 impl AuthDiscoverCommand {
     /// Runs the wizard: discover, pick, name, then print the account
     /// config fragment.
     pub fn execute(self, printer: &mut impl Printer) -> Result<()> {
-        let input = match self.input {
-            Some(input) => input,
-            None => prompt::text::<&str>("Email, server or URI:", None)?,
-        };
+        let input = prompt::text::<&str>("Email, server or URI:", None)?;
         let input = input.trim();
 
         if input.is_empty() {
