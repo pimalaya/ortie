@@ -22,14 +22,19 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use pimalaya_cli::printer::Printer;
 
-use crate::{account::Account, token::TokenCommand};
+use crate::{
+    account::Account,
+    auth::{get::AuthGetCommand, resume::AuthResumeCommand},
+    token::TokenCommand,
+};
 
 /// Start a persistent REPL session for one account.
 ///
 /// The account token is read from storage once, on first use, and held
 /// in memory for the session, so the keyring is unlocked a single time
-/// instead of on every command. Each input line is a `token` subcommand
-/// (show, inspect, refresh); type `quit` (or send EOF) to end.
+/// instead of on every command. Each input line is a `token` or `auth`
+/// subcommand (e.g. `token show`, `auth get`); type `quit` (or send EOF)
+/// to end.
 #[derive(Debug, Parser)]
 pub struct ReplCommand;
 
@@ -43,11 +48,15 @@ struct ReplLine {
 }
 
 /// The subset of the CLI command tree available inside the REPL: the
-/// `token` commands, which run against the in-memory account.
+/// `token` and `auth` commands, which run against the in-memory
+/// account. The account-less `auth discover` wizard has no REPL form
+/// (bare `ortie` runs it).
 #[derive(Debug, Subcommand)]
 enum ReplCommandTree {
     #[command(subcommand)]
     Token(TokenCommand),
+    #[command(subcommand)]
+    Auth(ReplAuthCommand),
 }
 
 impl ReplCommandTree {
@@ -55,6 +64,26 @@ impl ReplCommandTree {
     fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         match self {
             Self::Token(cmd) => cmd.execute(printer, account),
+            Self::Auth(cmd) => cmd.execute(printer, account),
+        }
+    }
+}
+
+/// The account-scoped `auth` leaves usable inside the REPL: `get` and
+/// `resume`, dispatched against the session's account so a token they
+/// issue is immediately visible to the following `token` commands.
+#[derive(Debug, Subcommand)]
+enum ReplAuthCommand {
+    Get(AuthGetCommand),
+    #[command(visible_alias = "continue")]
+    Resume(AuthResumeCommand),
+}
+
+impl ReplAuthCommand {
+    fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
+        match self {
+            Self::Get(cmd) => cmd.execute(printer, account),
+            Self::Resume(cmd) => cmd.execute(printer, account),
         }
     }
 }

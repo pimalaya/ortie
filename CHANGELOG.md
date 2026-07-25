@@ -8,9 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- Added the `repl` command: a persistent session bound to one account that reads the secret store once and answers `token` commands (show, inspect, refresh) over stdin/stdout.
+- Added the `repl` command: a persistent session bound to one account that reads the secret store once and answers `token` and `auth` commands over stdin/stdout.
 
-  One-shot commands re-read the secret store on every run, so a keyring that confirms disclosure per process prompts again and again. The REPL resolves the token once, holds it in memory for the life of the process, and reuses it, collapsing those prompts into a single unlock (plus one per refresh, which must persist a rotated refresh token). It shows a prompt on a terminal and uses a plain line protocol when piped (one flushed result per command on stdout, errors on stderr), so an application can drive it without reimplementing the OAuth flow.
+  One-shot commands re-read the secret store on every run, so a keyring that confirms disclosure per process prompts again and again. The REPL resolves the token once, holds it in memory for the life of the process, and reuses it, collapsing those prompts into a single unlock (plus one per refresh, which must persist a rotated refresh token). It shows a prompt on a terminal and uses a plain line protocol when piped (one flushed result per command on stdout, errors on stderr), so an application can drive it without reimplementing the OAuth flow. `auth get` and `auth resume` run against the same in-memory account, so a token they issue is immediately served by a following `token show`.
 
 - Added the device authorization grant (RFC 8628).
 

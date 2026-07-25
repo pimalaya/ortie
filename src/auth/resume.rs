@@ -78,7 +78,7 @@ pub struct AuthResumeCommand {
 
 impl AuthResumeCommand {
     /// Completes the account's configured grant into a stored token.
-    pub fn execute(self, printer: &mut impl Printer, mut account: Account) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         if account.grant == GrantConfig::Device {
             return self.execute_device(printer, account);
         }
@@ -138,7 +138,7 @@ impl AuthResumeCommand {
         })?;
 
         match res {
-            Ok(res) => report_token_issued(printer, &mut account, &res),
+            Ok(res) => report_token_issued(printer, account, &res),
             Err(res) => {
                 debug!("execute issue access token error hook");
                 account.execute_on_issue_error_hook(&res);
@@ -155,7 +155,7 @@ impl AuthResumeCommand {
     }
 
     /// Device grant: treat `input` as the device code and poll.
-    fn execute_device(self, printer: &mut impl Printer, mut account: Account) -> Result<()> {
+    fn execute_device(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         if self.state.is_some() || self.pkce.is_some() || self.redirect_uri.is_some() {
             bail!(
                 "The --state, --pkce and --redirect-uri flags are only valid \
@@ -182,7 +182,7 @@ impl AuthResumeCommand {
             interval: 5,
         };
 
-        complete_device_token_poll(printer, &mut account, &token_endpoint, &device)
+        complete_device_token_poll(printer, account, &token_endpoint, &device)
     }
 }
 

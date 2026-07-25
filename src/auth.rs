@@ -36,8 +36,14 @@ impl AuthCommand {
         account_name: Option<&str>,
     ) -> Result<()> {
         match self {
-            Self::Get(cmd) => cmd.execute(printer, take_account(config_paths, account_name)?),
-            Self::Resume(cmd) => cmd.execute(printer, take_account(config_paths, account_name)?),
+            Self::Get(cmd) => {
+                let mut account = take_account(config_paths, account_name)?;
+                cmd.execute(printer, &mut account)
+            }
+            Self::Resume(cmd) => {
+                let mut account = take_account(config_paths, account_name)?;
+                cmd.execute(printer, &mut account)
+            }
         }
     }
 }

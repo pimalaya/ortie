@@ -17,7 +17,10 @@ status: current
 - THEN each prints the access token without re-running the read storage command
 
 ### Requirement: Command grammar reuse
-Each stdin line SHALL be parsed with the same `token` command grammar as the one-shot CLI. A parse error or a command error SHALL be reported and the loop SHALL continue, never terminating the process.
+Each stdin line SHALL be parsed with the same `token` and `auth` command grammar as the one-shot CLI (the account-less `auth discover` wizard has no REPL form; bare `ortie` runs it). A parse error or a command error SHALL be reported and the loop SHALL continue, never terminating the process.
+
+### Requirement: Auth runs against the session account
+`auth get` and `auth resume` in the REPL SHALL run against the session's in-memory account, so a token they issue updates the cached token and is served by a following `token show` without re-reading storage.
 
 ### Requirement: Interactive versus piped output
 When stdin is a TTY the session SHALL render a prompt on stderr; when piped it SHALL write results on stdout and errors on stderr, one flushed result per command, so an application can drive it.

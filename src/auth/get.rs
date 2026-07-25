@@ -56,7 +56,7 @@ pub struct AuthGetCommand;
 impl AuthGetCommand {
     /// Runs the grant configured on the account and completes it into
     /// a stored access token (interactive shells chain into resume).
-    pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         if account.grant == GrantConfig::Device {
             return execute_device(printer, account);
         }
@@ -274,7 +274,7 @@ impl fmt::Display for AuthorizationUri<'_> {
     }
 }
 
-fn execute_device(printer: &mut impl Printer, mut account: Account) -> Result<()> {
+fn execute_device(printer: &mut impl Printer, account: &mut Account) -> Result<()> {
     let Some(device_endpoint) = account.device_authorization_endpoint.clone() else {
         bail!("Missing endpoints.device-authorization in the account config");
     };
@@ -346,7 +346,7 @@ fn execute_device(printer: &mut impl Printer, mut account: Account) -> Result<()
         println!("Open {open_uri} and enter the code {}", device.user_code);
     }
     println!("Waiting for authorization…");
-    complete_device_token_poll(printer, &mut account, &token_endpoint, &device)
+    complete_device_token_poll(printer, account, &token_endpoint, &device)
 }
 
 /// Polls the token endpoint until the device grant completes, then stores
