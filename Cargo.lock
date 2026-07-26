@@ -922,6 +922,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "io-proxy"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea1200e73a98f7a2500af468bb7857a1c78b5b4b453c8d69760c2a61b9df5303"
+dependencies = [
+ "base64 0.23.0",
+ "log",
+ "thiserror",
+]
+
+[[package]]
 name = "ipconfig"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -967,9 +978,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jiff"
-version = "0.2.34"
+version = "0.2.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e184d09547b80eb7e20d141ba2fb1fbac843ca53f4cf1b31210adc4c1adc6e16"
+checksum = "668b7183bd07af9a4885f5c35b0cc5c83c4607a913c16b7e17291832910d2dcc"
 dependencies = [
  "defmt",
  "jiff-core",
@@ -991,9 +1002,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-static"
-version = "0.2.34"
+version = "0.2.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "323da076b7a6faf914dc677cb05a4b907742ff7375c8322c9e7f5061e5e0e9de"
+checksum = "3a69dcb3a21cfb32ce1cd056169337ca284af0766dd766e7878819b251a49204"
 dependencies = [
  "jiff-core",
  "proc-macro2",
@@ -1437,9 +1448,9 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pimalaya-cli"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1779a51cbbf66fe262f51d96ea2b3b3d26b099cfe30f22244a0427b288c77a9d"
+checksum = "bb05b9ef98361452d3124547bb43d7f4ee6e8fbc753a2f00b4645fa96a56ed7c"
 dependencies = [
  "anyhow",
  "clap",
@@ -1461,9 +1472,9 @@ dependencies = [
 
 [[package]]
 name = "pimalaya-config"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8c4c5ba0b6f9da606f1ee5af080173ed81ca9bcef2789d55167c951e7fb10b4"
+checksum = "cb8003d82767b0337f8b73b908d022d41ca7a7a41a789a9bd1e6544f8d80338b"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1477,11 +1488,12 @@ dependencies = [
 
 [[package]]
 name = "pimalaya-stream"
-version = "0.1.0"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c2d8d3db56f71dc69095d6de94c4231fec970be8e86e8c84fd9c49cde782128"
+checksum = "a6f95d38d529870b6ef4ca97d17a3abd371505d0e5c4337e97200d00b4c72ce2"
 dependencies = [
  "anyhow",
+ "io-proxy",
  "log",
  "native-tls",
  "rustls",

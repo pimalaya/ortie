@@ -115,7 +115,7 @@ impl ReplCommand {
                 break;
             }
 
-            // Commands write their result to stdout without a trailing
+            // NOTE: commands write their result to stdout without a trailing
             // newline (so one-shot output pipes cleanly); in the loop we
             // terminate and flush each result, otherwise the line-buffered
             // stdout holds it until the session ends. A parse or command

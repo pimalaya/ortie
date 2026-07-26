@@ -88,7 +88,7 @@ impl AuthDiscoverCommand {
             bail!("Empty input: enter an email address, a server or an issuer URI");
         }
 
-        // Account name, prompted right after the input: suggest the
+        // NOTE: account name, prompted right after the input: suggest the
         // first label of the input's domain (or URI host).
         let domain = if let Some((_, domain)) = input.rsplit_once('@') {
             Some(domain.to_string())
@@ -114,7 +114,7 @@ impl AuthDiscoverCommand {
         }
         let name = name.to_string();
 
-        // A server or an issuer carries a URI scheme and has nothing
+        // NOTE: a server or an issuer carries a URI scheme and has nothing
         // to discover, so it goes straight to manual entry. Anything
         // else is an email address; a bare domain is discovered as
         // `@domain`.
@@ -130,13 +130,13 @@ impl AuthDiscoverCommand {
             choose(&email)?
         };
 
-        // Fill the defaults a provider is known to need but discovery
+        // NOTE: fill the defaults a provider is known to need but discovery
         // does not yet surface (Fastmail's RFC 8707 resource and its
         // scopes). Stopgap; see cairn/changes/discovery-layering/.
         fill_provider_defaults(&mut config);
         config.name = name;
 
-        // Let the user choose scopes: offer the discovered ones plus
+        // NOTE: let the user choose scopes: offer the discovered ones plus
         // any extra the provider is known to advertise, with the
         // discovered set selected by default. Skipped when there is
         // nothing to choose from. The advertised extras are a stopgap
@@ -225,9 +225,9 @@ impl AuthDiscoverCommand {
                 StorageChoice::Known(provider) => {
                     config.storage = Some(Storage {
                         read: StorageEntry {
-                            // `read_command` returns an argv; ortie stores
-                            // its commands as shell strings, so join it
-                            // (the entries never contain whitespace).
+                            // NOTE: `read_command` returns an argv, but
+                            // ortie stores its commands as shell strings, so
+                            // join it (the entries never contain whitespace).
                             command: StorageCommand::Shell(
                                 provider.read_command(Some("ortie"), &config.name).join(" "),
                             ),
@@ -276,7 +276,7 @@ fn choose(email: &str) -> Result<OauthConfig> {
 fn discover(email: &str) -> Result<Vec<DiscoveredOauth>> {
     let client = compose_client();
 
-    // The OAuth-capable PIM services; POP3, WebDAV and ManageSieve
+    // NOTE: the OAuth-capable PIM services; POP3, WebDAV and ManageSieve
     // never advertise an OAuth flow of their own.
     let services = BTreeSet::from([
         DiscoveryService::Imap,

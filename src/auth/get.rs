@@ -107,7 +107,7 @@ impl AuthGetCommand {
             interactive,
         };
 
-        // Non-interactive or JSON: print (or serialize) the request
+        // NOTE: non-interactive or JSON: print (or serialize) the request
         // and hand off to a manual `auth resume`. JSON stays a clean
         // structured object carrying the state and verifier, so only
         // the human output appends the ready-to-run command.
@@ -131,7 +131,7 @@ impl AuthGetCommand {
             println!("{msg}: {auth_uri}");
         }
 
-        // A redirection the local listener cannot bind (a reverse-DNS
+        // NOTE: a redirection the local listener cannot bind (a reverse-DNS
         // private-use scheme, as Fastmail's dynamic registration
         // mandates) dead-ends in the browser: hand off to a manual
         // `auth resume` rather than binding a listener that would fail
@@ -151,7 +151,7 @@ impl AuthGetCommand {
 
         let redirected_uri = match await_redirect(&redirect_uri) {
             Ok(redirected_uri) => redirected_uri,
-            // The listener could not bind or accept (a privileged or
+            // NOTE: the listener could not bind or accept (a privileged or
             // taken port, a closed browser): fall back to the manual
             // flow instead of aborting the whole grant.
             Err(err) => {
@@ -321,7 +321,7 @@ fn execute_device(printer: &mut impl Printer, account: &mut Account) -> Result<(
         interactive,
     };
 
-    // D5: non-interactive or --json print and hand off to auth resume.
+    // NOTE: D5, non-interactive or --json print and hand off to auth resume.
     if printer.is_json() || !interactive {
         printer.out(&view)?;
         if !printer.is_json() {
@@ -365,7 +365,7 @@ pub(crate) fn complete_device_token_poll(
     )?;
     client.client_secret = client_secret;
 
-    // Outer Result: transport / client-side; inner: OAuth token body.
+    // NOTE: outer Result is transport / client-side; inner is the token body.
     match client.await_device_access_token(&account.tls, device) {
         Ok(Ok(res)) => report_token_issued(printer, account, &res),
         Ok(Err(res)) => {
@@ -461,7 +461,7 @@ impl fmt::Display for DeviceAuthorization {
         if let Some(uri) = &self.verification_uri_complete {
             writeln!(f, " - complete URI: {uri}")?;
         }
-        // Interactive sessions poll in-process; hide the device code.
+        // NOTE: interactive sessions poll in-process; hide the device code.
         if !self.interactive {
             writeln!(f, " - device code: {}", self.device_code)?;
         }

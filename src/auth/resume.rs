@@ -87,7 +87,7 @@ impl AuthResumeCommand {
             bail!("Missing endpoints.token in the account config");
         };
 
-        // Trim paste whitespace; do not echo the URI (may carry code=).
+        // NOTE: trim paste whitespace; do not echo the URI (may carry code=).
         let redirected_uri = Url::parse(self.input.trim())
             .map_err(|err| anyhow!("Invalid redirected URI: {err}"))?;
 
@@ -172,7 +172,7 @@ impl AuthResumeCommand {
             bail!("Missing endpoints.token in the account config");
         };
 
-        // Bare device code: RFC 8628 example defaults for the poll loop.
+        // NOTE: bare device code, RFC 8628 example defaults for the poll loop.
         let device = Oauth20DeviceAuthSuccessParams {
             device_code: SecretString::from(device_code),
             user_code: String::new(),
@@ -201,7 +201,7 @@ pub fn state_parser(state: &str) -> Result<Oauth20State, String> {
 
 /// Clap value parser for the PKCE code verifier argument.
 pub fn pkce_code_verifier_parser(verifier: &str) -> Result<Oauth20PkceCodeVerifier, String> {
-    // Omit the verifier body: clap surfaces this string on stderr.
+    // NOTE: omit the verifier body: clap surfaces this string on stderr.
     match verifier.parse() {
         Ok(verifier) => Ok(verifier),
         Err(b) => Err(format!("Invalid 0x{b:x} found in PKCE code verifier")),
