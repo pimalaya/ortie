@@ -36,6 +36,7 @@ CLI to manage OAuth tokens
 - **Extra authorization parameters**: forward provider-specific knobs (Google offline access, login hints, resource indicators) verbatim.
 - **Token storage**: read and write tokens through your own shell commands, wiring into any credential manager.
 - **Hooks**: run a shell command or raise a system notification on token issuance and refresh, split by outcome.
+- **Persistent session**: unlock the secret store once and answer token commands over stdin/stdout, so an application drives ortie without reimplementing the OAuth flow.
 - **JSON output**: switch discovery and token commands to machine-readable output for scripts.
 - Full standard, blocking client with **TLS** support:
   - [Rustls](https://crates.io/crates/rustls) with ring crypto (requires `rustls-ring` feature, enabled by default)
@@ -239,7 +240,7 @@ This project is developed with AI assistance. This section documents how, so use
 - **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
 - **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit. Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
 - **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
-- **Last reviewed**: 16/07/2026
+- **Last reviewed**: 26/07/2026
 
 ## License
 
