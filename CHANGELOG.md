@@ -2,11 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [2.1.0] - 2026-07-26
+## [2.1.0] - 2026-08-06
 
 ### Added
 
@@ -18,18 +19,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   `grant = "device"` with `endpoints.device-authorization`. Interactive `auth get` polls; non-interactive / `--json` hands off to `auth resume <DEVICE_CODE>`.
 
+- Added the headless client credentials grants, so OAuth-ignorant tools (a sync daemon, a cron job) can exec `ortie token show --auto-refresh` and always read a valid bearer token.
+
+  `grant = "client-credentials"` (RFC 6749 section 4.4) authenticates with the existing `client-secret`; `grant = "client-credentials-jwt"` (RFC 7523 section 2.2, the Microsoft certificate credentials flow) authenticates with a JWT assertion signed by the new `client-key` (PKCS#8 or PKCS#1 PEM path), carrying the `x5t` thumbprint of the new `client-certificate` (PEM or DER path). Both run `auth get` headlessly in one shot; `auth resume` has nothing to resume and says so.
+
+  Neither grant issues a refresh token, so auto-refresh (`token show --auto-refresh` and `token refresh`) branches per grant: refresh-token exchange where one exists, silent re-acquisition (a re-run of the grant) for the client credentials kinds, including when the stored token is missing, so the very first run needs no prior `auth get`. Each JWT re-acquisition mints a fresh 10 minute assertion (unique `jti`, key and certificate re-read from disk); assertions are never stored.
+
+  A provider `invalid_client` on the JWT kind now hints that the certificate credential may be expired and need renewal.
+
 ### Changed
 
 - A refreshed or issued token now stamps its issuance time from the local clock (instead of relying on the server `Date` header), and a missing `expires_in` defaults to one hour, so auto-refresh stays reliable across a long-lived session.
-
-### Removed
-
-- Removed the `auth discover` subcommand: bare `ortie` already runs the same wizard. Run `ortie` (it prompts for the email, server or issuer input).
+- Bumped io-oauth to 0.2.1, for the RFC 7523 support behind its `jwt-bearer` feature.
 
 ### Fixed
 
 - Fired on-issue error hooks when the local device poll deadline expires (`DeviceCodeExpired` as `expired_token`).
 - Shell-quoted secrets in printed `auth resume` examples; trimmed auth-code resume input; omitted redirect/state/PKCE bodies from resume errors.
+
+### Removed
+
+- Removed the `auth discover` subcommand: bare `ortie` already runs the same wizard. Run `ortie` (it prompts for the email, server or issuer input).
 
 ## [2.0.0] - 2026-07-17
 

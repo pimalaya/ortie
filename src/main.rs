@@ -58,6 +58,12 @@
 //! summary, the following paragraphs complete the `--help` page.
 //!
 //! Device authorization (RFC 8628) is selected with `grant = "device"`.
+//! The headless client credentials grants are selected with
+//! `grant = "client-credentials"` (RFC 6749 section 4.4, secret) and
+//! `grant = "client-credentials-jwt"` (RFC 7523 section 2.2, JWT
+//! client assertion signed with `client-key`, `x5t` thumbprint from
+//! `client-certificate`); they issue no refresh token, so auto-refresh
+//! silently re-runs the grant instead of exchanging a refresh token.
 //! The remaining roadmap (discovery upgrades, revocation) lives in
 //! cairn/changes/; current truth is in cairn/spec/ and landed history
 //! in cairn/log/ (see <https://github.com/pimalaya/cairn>).

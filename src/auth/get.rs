@@ -3,13 +3,16 @@
 use std::{
     borrow::Cow,
     collections::BTreeSet,
-    fmt,
+    fmt, fs,
     io::{IsTerminal, stdout},
     time::Duration,
 };
 
-use anyhow::{Result, anyhow, bail};
-use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
+use anyhow::{Context, Result, anyhow, bail};
+use base64::{
+    Engine,
+    prelude::{BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD},
+};
 use clap::Parser;
 use humantime::format_duration;
 use log::debug;
@@ -27,11 +30,16 @@ use io_oauth::{
     client::{Oauth20ClientStd, Oauth20ClientStdError, await_redirect},
     rfc6749::{
         auth_request::Oauth20AuthRequestParams,
+        client_credentials::Oauth20ClientCredentialsRequestParams,
         issue_access_token::{
             Oauth20AccessTokenErrorCode, Oauth20AccessTokenErrorParams,
             Oauth20AccessTokenSuccessParams,
         },
         state::Oauth20State,
+    },
+    rfc7523::{
+        assertion::{Oauth20JwtBearerClaims, Oauth20JwtBearerKey, x5t_from_der},
+        client_auth::Oauth20JwtBearerClientCredentialsRequestParams,
     },
     rfc7636::pkce::{
         Oauth20PkceCodeChallenge, Oauth20PkceCodeChallengeMethod, Oauth20PkceCodeVerifier,
@@ -47,9 +55,11 @@ use crate::{
 
 /// Initiate a new OAuth 2.0 grant from scratch.
 ///
-/// Runs the grant configured on the account (`authorization-code` or
-/// `device`). Interactive shells complete the flow; non-interactive
-/// and `--json` hand off to `auth resume`.
+/// Runs the grant configured on the account: `authorization-code`,
+/// `device`, `client-credentials` or `client-credentials-jwt`.
+/// Interactive shells complete the flow; non-interactive and `--json`
+/// hand off to `auth resume`. The client credentials kinds complete
+/// headlessly in one shot.
 #[derive(Debug, Parser)]
 pub struct AuthGetCommand;
 
@@ -59,6 +69,10 @@ impl AuthGetCommand {
     pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         if account.grant == GrantConfig::Device {
             return execute_device(printer, account);
+        }
+
+        if account.grant.is_client_credentials() {
+            return execute_client_credentials(printer, account);
         }
 
         let Some(authorization_endpoint) = &account.authorization_endpoint else {
@@ -402,6 +416,168 @@ fn device_poll_client_error_hook_params(
             error_uri: None,
         }),
         _ => None,
+    }
+}
+
+/// Lifetime of a freshly minted JWT client assertion. Short by
+/// design: the assertion only needs to survive one token request, and
+/// a narrow window limits replay.
+const JWT_ASSERTION_VALIDITY: Duration = Duration::from_secs(600);
+
+/// Runs the client credentials grant headlessly in one shot: no
+/// browser, no user code, no resume. Fires the on-issue hooks and
+/// persists the token like the interactive grants.
+fn execute_client_credentials(printer: &mut impl Printer, account: &mut Account) -> Result<()> {
+    match request_client_credentials_token(account)? {
+        Ok(res) => report_token_issued(printer, account, &res),
+        Err(res) => {
+            debug!("execute issue access token error hook");
+            account.execute_on_issue_error_hook(&res);
+            Err(client_credentials_error(
+                account.grant,
+                "Issue access token error",
+                res,
+            ))
+        }
+    }
+}
+
+/// Runs the configured client credentials exchange against the token
+/// endpoint and returns the raw token response: Basic auth from the
+/// client secret on the plain kind, a freshly minted JWT assertion on
+/// the JWT kind. Shared by `auth get` (issue) and the token
+/// re-acquisition path (refresh).
+pub(crate) fn request_client_credentials_token(
+    account: &mut Account,
+) -> Result<Result<Oauth20AccessTokenSuccessParams, Oauth20AccessTokenErrorParams>> {
+    let Some(token_endpoint) = account.token_endpoint.clone() else {
+        bail!("Missing endpoints.token in the account config");
+    };
+
+    let mut client =
+        Oauth20ClientStd::connect(token_endpoint, &account.tls, account.client_id.clone())?;
+
+    if account.grant == GrantConfig::ClientCredentialsJwt {
+        let Some(key_path) = account.client_key.clone() else {
+            bail!("Missing client-key in the account config");
+        };
+
+        // NOTE: everything is re-derived at every mint: the key
+        // re-read from disk, the x5t recomputed from the certificate,
+        // fresh iat/exp on a short validity and a unique jti. The
+        // assertion lives only for this request and is never stored.
+        let pem = fs::read_to_string(&key_path)
+            .with_context(|| format!("Read client key from {}", key_path.display()))?;
+        let key = Oauth20JwtBearerKey::from_pkcs8_pem(&pem).or_else(|_| {
+            Oauth20JwtBearerKey::from_pkcs1_pem(&pem)
+                .context("Parse client key as a PKCS#8 or PKCS#1 PEM private key")
+        })?;
+
+        let x5t = match &account.client_certificate {
+            None => None,
+            Some(path) => {
+                let bytes = fs::read(path)
+                    .with_context(|| format!("Read client certificate from {}", path.display()))?;
+                Some(x5t_from_der(&certificate_der(bytes)?))
+            }
+        };
+
+        // NOTE: reuse the CSRF state generator as the random source
+        // for the unique jti, re-encoded in URL-safe base64.
+        let jti = BASE64_URL_SAFE_NO_PAD.encode(Oauth20State::default().expose());
+
+        let claims = Oauth20JwtBearerClaims {
+            iss: account.client_id.as_str().into(),
+            sub: Some(account.client_id.as_str().into()),
+            jti: Some(jti.into()),
+            ..Default::default()
+        };
+
+        let assertion = client.sign_jwt_bearer_assertion(
+            &key,
+            claims,
+            x5t.as_deref(),
+            JWT_ASSERTION_VALIDITY,
+        )?;
+
+        // NOTE: the assertion authenticates the client, so the client
+        // secret stays unset: the Basic header it would produce
+        // conflicts with the assertion authentication.
+        let res = client.request_jwt_bearer_client_credentials(
+            Oauth20JwtBearerClientCredentialsRequestParams {
+                client_id: Some(account.client_id.as_str().into()),
+                scope: account.scopes.iter().map(Into::into).collect(),
+                client_assertion: assertion,
+            },
+        )?;
+
+        Ok(res)
+    } else {
+        let client_secret = account.client_secret.clone().map(Secret::get).transpose()?;
+        client.client_secret = client_secret;
+
+        let res = client.request_client_credentials(Oauth20ClientCredentialsRequestParams {
+            scope: account.scopes.iter().map(Into::into).collect(),
+        })?;
+
+        Ok(res)
+    }
+}
+
+/// Returns the DER bytes of a PEM or DER encoded certificate,
+/// decoding the PEM armor when present.
+fn certificate_der(bytes: Vec<u8>) -> Result<Vec<u8>> {
+    let Ok(text) = core::str::from_utf8(&bytes) else {
+        return Ok(bytes);
+    };
+
+    if !text.contains("-----BEGIN") {
+        return Ok(bytes);
+    }
+
+    let body: String = text
+        .lines()
+        .filter(|line| !line.starts_with("-----"))
+        .map(str::trim)
+        .collect();
+
+    BASE64_STANDARD
+        .decode(body)
+        .context("Decode PEM client certificate body")
+}
+
+/// Maps a client credentials error response into the reported error,
+/// hinting at certificate renewal when a JWT-authenticated client is
+/// rejected as invalid_client, the typical symptom of an expired or
+/// revoked certificate credential.
+pub(crate) fn client_credentials_error(
+    grant: GrantConfig,
+    action: &str,
+    res: Oauth20AccessTokenErrorParams,
+) -> anyhow::Error {
+    let Oauth20AccessTokenErrorParams {
+        error,
+        error_description,
+        error_uri,
+    } = res;
+
+    let hint = (grant == GrantConfig::ClientCredentialsJwt
+        && error == Oauth20AccessTokenErrorCode::InvalidClient)
+        .then_some("The certificate credential may be expired and need renewal");
+
+    let top = format!("{action} (code {error:?})");
+    let detail = match (error_description, error_uri) {
+        (None, None) => None,
+        (Some(desc), None) => Some(desc),
+        (None, Some(uri)) => Some(uri),
+        (Some(desc), Some(uri)) => Some(format!("{desc}: {uri}")),
+    };
+
+    match (hint, detail) {
+        (None, None) => anyhow!("{top}"),
+        (None, Some(detail)) => anyhow!("{detail}").context(top),
+        (Some(hint), None) => anyhow!("{hint}").context(top),
+        (Some(hint), Some(detail)) => anyhow!("{hint}").context(detail).context(top),
     }
 }
 

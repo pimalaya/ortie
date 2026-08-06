@@ -36,8 +36,23 @@ client-id = ""
 
 # The OAuth 2.0 grant flow run by the auth commands.
 #
-# Possible values: "authorization-code" (default), "device" (RFC 8628)
+# Possible values:
+#   "authorization-code"     # browser redirect flow (default)
+#   "device"                 # user-code flow (RFC 8628)
+#   "client-credentials"     # headless machine flow, secret-authenticated (RFC 6749 section 4.4)
+#   "client-credentials-jwt" # headless machine flow, JWT-assertion-authenticated (RFC 7523 section 2.2)
 #grant = "authorization-code"
+
+# Credentials of the "client-credentials-jwt" grant, the Microsoft
+# certificate credentials flow. `client-key` is the path to the
+# private key (PKCS#8 or PKCS#1 PEM) signing the JWT client
+# assertion; `client-certificate` is the path to the matching
+# certificate (PEM or DER), whose SHA-1 thumbprint rides as the
+# assertion `x5t` header (required by Microsoft). Both are re-read at
+# every mint, so a renewed certificate is picked up without restart;
+# the assertion itself is short-lived and never stored.
+#client-key = "/etc/ortie/example.key.pem"
+#client-certificate = "/etc/ortie/example.crt.pem"
 
 # Endpoints given by your OAuth 2.0 provider. All optional at parse time.
 endpoints.authorization = ""
@@ -144,6 +159,43 @@ storage.write.command = "pass insert -m -f ortie/example"
 
 #hooks.on-refresh.error.notify.summary = "Ortie"
 #hooks.on-refresh.error.notify.body = "[$ERROR] Refresh access token error\n$ERROR_DESCRIPTION"
+
+# --------------------------------------------------------------------------------
+# Headless service accounts
+# --------------------------------------------------------------------------------
+#
+# The client credentials grants run without any user interaction:
+# `auth get` completes in one shot, and expired tokens silently
+# re-acquire (these grants issue no refresh token), so
+# `ortie token show --auto-refresh` always prints a valid token.
+# Both examples are Microsoft Entra shaped: the tenanted token
+# endpoint and the resource `.default` scope.
+
+# Secret-authenticated (RFC 6749 section 4.4):
+#
+#[accounts.graph-daemon]
+#grant = "client-credentials"
+#client-id = "<application-id>"
+#client-secret.command = ["secret-tool", "lookup", "oauth", "graph-daemon"]
+#endpoints.token = "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token"
+#scopes = ["https://graph.microsoft.com/.default"]
+#storage.read.command = ["secret-tool", "lookup", "token", "graph-daemon"]
+#storage.write.command = "secret-tool store --label ortie token graph-daemon"
+
+# Certificate credentials (RFC 7523 section 2.2), authenticated by a
+# JWT assertion signed with the private key; Microsoft requires the
+# certificate thumbprint, so `client-certificate` must be set and
+# `client-secret` must stay unset:
+#
+#[accounts.graph-cert-daemon]
+#grant = "client-credentials-jwt"
+#client-id = "<application-id>"
+#client-key = "/etc/ortie/graph.key.pem"
+#client-certificate = "/etc/ortie/graph.crt.pem"
+#endpoints.token = "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token"
+#scopes = ["https://graph.microsoft.com/.default"]
+#storage.read.command = ["secret-tool", "lookup", "token", "graph-cert-daemon"]
+#storage.write.command = "secret-tool store --label ortie token graph-cert-daemon"
 
 # --------------------------------------------------------------------------------
 # Provider recipes

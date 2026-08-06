@@ -11,7 +11,10 @@ use pimalaya_cli::printer::Printer;
 use secrecy::ExposeSecret;
 use serde::Serialize;
 
-use crate::{account::Account, token::refresh::TokenRefreshCommand};
+use crate::{
+    account::Account,
+    token::refresh::{RefreshAction, TokenRefreshCommand, refresh_action},
+};
 
 /// Seconds of slack before the real expiry at which a token is treated
 /// as expired, so a token that is about to lapse is refreshed rather
@@ -37,16 +40,38 @@ pub struct TokenShowCommand {
 }
 
 impl TokenShowCommand {
-    /// Reads the token from storage, refreshing it first when expired
-    /// and auto-refresh is requested, then prints it raw.
+    /// Reads the token from storage, making it fresh first when
+    /// auto-refresh is requested (refresh-token exchange, or client
+    /// credentials re-acquisition), then prints it raw.
     pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
-        let mut token = account.resolve_token()?;
+        let auto_refresh = self.auto_refresh || account.auto_refresh;
 
-        if (self.auto_refresh || account.auto_refresh)
-            && let Some(refresh_token) = token.refresh_token.clone()
-            && is_expired(token.issued_at, token.expires_in)
-        {
-            token = TokenRefreshCommand::refresh(account, refresh_token)?;
+        // NOTE: on an auto-refreshing client credentials account a
+        // missing or unreadable stored token re-acquires instead of
+        // failing, so the very first run needs no prior auth get.
+        let mut token = match account.resolve_token() {
+            Ok(token) => token,
+            Err(_)
+                if auto_refresh
+                    && refresh_action(account.grant, false) == RefreshAction::Reacquire =>
+            {
+                TokenRefreshCommand::reacquire(account)?
+            }
+            Err(err) => return Err(err),
+        };
+
+        if auto_refresh && is_expired(token.issued_at, token.expires_in) {
+            match refresh_action(account.grant, token.refresh_token.is_some()) {
+                RefreshAction::Reacquire => {
+                    token = TokenRefreshCommand::reacquire(account)?;
+                }
+                RefreshAction::Refresh => {
+                    if let Some(refresh_token) = token.refresh_token.clone() {
+                        token = TokenRefreshCommand::refresh(account, refresh_token)?;
+                    }
+                }
+                RefreshAction::Keep => (),
+            }
         }
 
         printer.out(AccessToken {

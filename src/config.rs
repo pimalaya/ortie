@@ -12,9 +12,9 @@
 //!
 //! Override with `-c, --config <PATH>` or `ORTIE_CONFIG=<PATH>`.
 
-use std::{collections::HashMap, fmt, process::Command};
+use std::{collections::HashMap, fmt, path::PathBuf, process::Command};
 
-use pimalaya_config::{command, secret::Secret, toml::TomlConfig};
+use pimalaya_config::{command, secret::Secret, toml, toml::TomlConfig};
 use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsProvider};
 #[cfg(feature = "notify")]
 use serde::Serialize;
@@ -65,6 +65,16 @@ pub struct AccountConfig {
     /// Optional OAuth 2.0 client secret; PKCE-only public clients
     /// skip it.
     pub client_secret: Option<Secret>,
+    /// Path to the private key signing JWT client assertions
+    /// (PKCS#8 or PKCS#1 PEM), used by `grant =
+    /// "client-credentials-jwt"`. Re-read at every mint.
+    #[serde(default, deserialize_with = "opt_shell_expanded_path")]
+    pub client_key: Option<PathBuf>,
+    /// Path to the client certificate (PEM or DER) whose SHA-1
+    /// thumbprint rides as the assertion `x5t` header, required by
+    /// Microsoft certificate credentials. Recomputed at every mint.
+    #[serde(default, deserialize_with = "opt_shell_expanded_path")]
+    pub client_certificate: Option<PathBuf>,
 
     /// OAuth 2.0 grant flow run by the auth commands.
     #[serde(default)]
@@ -108,6 +118,22 @@ pub enum GrantConfig {
     /// The device authorization grant (RFC 8628), the user-code flow
     /// for input-constrained hosts.
     Device,
+    /// The client credentials grant (RFC 6749 section 4.4), the
+    /// headless machine flow authenticated by the client secret.
+    ClientCredentials,
+    /// The client credentials grant authenticated by a signed JWT
+    /// client assertion (RFC 7523 section 2.2), the Microsoft
+    /// certificate credentials flow.
+    ClientCredentialsJwt,
+}
+
+impl GrantConfig {
+    /// Whether this grant is a client credentials kind: fully
+    /// headless, no refresh token issued, refreshed by re-running
+    /// the grant.
+    pub fn is_client_credentials(self) -> bool {
+        matches!(self, Self::ClientCredentials | Self::ClientCredentialsJwt)
+    }
 }
 
 /// Endpoints of the OAuth 2.0 authorization server.
@@ -254,6 +280,10 @@ fn deserialize_opt_command<'de, D: Deserializer<'de>>(de: D) -> Result<Option<Co
     command::deserialize(de).map(Some)
 }
 
+fn opt_shell_expanded_path<'de, D: Deserializer<'de>>(de: D) -> Result<Option<PathBuf>, D::Error> {
+    toml::shell_expanded_path(de).map(Some)
+}
+
 /// TLS provider selector, converted into the pimalaya-stream config.
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -293,4 +323,79 @@ impl From<TlsConfig> for Tls {
 
 fn tls<'de, D: Deserializer<'de>>(d: D) -> Result<Tls, D::Error> {
     Ok(TlsConfig::deserialize(d)?.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{io::Write, path::PathBuf};
+
+    use super::*;
+
+    fn parse(toml: &str) -> AccountConfig {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        file.write_all(toml.as_bytes()).unwrap();
+
+        let mut config = Config::from_paths(&[file.path().to_path_buf()]).unwrap();
+        config.take_named_account("test").unwrap().1
+    }
+
+    #[test]
+    fn client_credentials_account_parses() {
+        let account = parse(
+            r#"
+[accounts.test]
+client-id = "app-id"
+client-secret.raw = "s3cret"
+grant = "client-credentials"
+endpoints.token = "https://login.example.com/token"
+scopes = ["https://graph.microsoft.com/.default"]
+storage.read.command = ["cat", "token.json"]
+storage.write.command = ["tee", "token.json"]
+"#,
+        );
+
+        assert_eq!(account.grant, GrantConfig::ClientCredentials);
+        assert!(account.grant.is_client_credentials());
+        assert!(account.client_secret.is_some());
+        assert_eq!(account.scopes, ["https://graph.microsoft.com/.default"]);
+        assert_eq!(
+            account.endpoints.token.unwrap().as_str(),
+            "https://login.example.com/token"
+        );
+    }
+
+    #[test]
+    fn client_credentials_jwt_account_parses() {
+        let account = parse(
+            r#"
+[accounts.test]
+client-id = "app-id"
+grant = "client-credentials-jwt"
+client-key = "/etc/ortie/key.pem"
+client-certificate = "/etc/ortie/cert.pem"
+endpoints.token = "https://login.example.com/token"
+scopes = ["https://graph.microsoft.com/.default"]
+storage.read.command = ["cat", "token.json"]
+storage.write.command = ["tee", "token.json"]
+"#,
+        );
+
+        assert_eq!(account.grant, GrantConfig::ClientCredentialsJwt);
+        assert!(account.grant.is_client_credentials());
+        assert!(account.client_secret.is_none());
+        assert_eq!(
+            account.client_key,
+            Some(PathBuf::from("/etc/ortie/key.pem"))
+        );
+        assert_eq!(
+            account.client_certificate,
+            Some(PathBuf::from("/etc/ortie/cert.pem"))
+        );
+    }
+
+    #[test]
+    fn interactive_grants_are_not_client_credentials() {
+        assert!(!GrantConfig::AuthorizationCode.is_client_credentials());
+        assert!(!GrantConfig::Device.is_client_credentials());
+    }
 }

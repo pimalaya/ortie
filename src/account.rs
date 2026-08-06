@@ -15,6 +15,7 @@ use std::{
     collections::HashMap,
     io::Write,
     net::TcpListener,
+    path::PathBuf,
     process::{Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -46,6 +47,12 @@ pub struct Account {
     pub client_id: String,
     /// Optional OAuth 2.0 client secret.
     pub client_secret: Option<Secret>,
+    /// Path to the private key signing JWT client assertions,
+    /// re-read at every mint.
+    pub client_key: Option<PathBuf>,
+    /// Path to the client certificate deriving the assertion `x5t`
+    /// thumbprint, recomputed at every mint.
+    pub client_certificate: Option<PathBuf>,
     /// OAuth 2.0 grant flow run by the auth commands.
     pub grant: GrantConfig,
     /// TLS provider used for the HTTPS connections.
@@ -105,6 +112,8 @@ impl From<AccountConfig> for Account {
         let AccountConfig {
             client_id,
             client_secret,
+            client_key,
+            client_certificate,
             grant,
             endpoints,
             tls,
@@ -167,6 +176,8 @@ impl From<AccountConfig> for Account {
         Self {
             client_id,
             client_secret,
+            client_key,
+            client_certificate,
             grant,
             tls,
             scopes,

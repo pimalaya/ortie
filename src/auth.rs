@@ -18,8 +18,8 @@ use crate::{
 
 /// Get a fresh access token by running the account's OAuth grant.
 ///
-/// Start an authorization-code or device grant, or resume one with a
-/// redirected URI or device code.
+/// Start an authorization-code, device or client-credentials grant,
+/// or resume one with a redirected URI or device code.
 #[derive(Subcommand, Debug)]
 pub enum AuthCommand {
     Get(AuthGetCommand),

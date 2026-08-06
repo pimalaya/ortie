@@ -30,6 +30,7 @@ CLI to manage OAuth tokens
 - **Dynamic client registration**: register a public client on the spot, with no provider console, when the provider advertises it.
 - **Authorization code grant**: sign in through the browser, with a built-in redirection server that captures the callback.
 - **Device authorization grant**: sign in by typing a short code on another device, for hosts without a browser.
+- **Client credentials grants**: obtain machine tokens fully headlessly, authenticated by the client secret or by a JWT assertion signed with a certificate credential (Microsoft style); expired tokens silently re-acquire, so scripts always read a valid one.
 - **Manual flow completion**: finish a flow by hand, from the URL your browser was sent to, when the redirection server cannot bind.
 - **Token refresh**: renew an expired access token from its refresh token, on demand or automatically when reading it.
 - **PKCE**: enabled with the S256 method by default, following the OAuth 2.1 posture; opt out for servers that reject it.
@@ -50,13 +51,15 @@ CLI to manage OAuth tokens
 
 | RFC    | What is covered |
 |--------|-----------------|
-| [6749] | The OAuth 2.0 framework: authorization code grant, access token issuance and refresh |
+| [6749] | The OAuth 2.0 framework: authorization code and client credentials grants, access token issuance and refresh |
+| [7523] | JWT client authentication on the client credentials grant: assertion signed with a private key, certificate `x5t` thumbprint (Microsoft certificate credentials) |
 | [7636] | PKCE: the S256 and plain code challenges protecting the authorization code in transit |
 | [7591] | Dynamic client registration: register a public client without any provider console |
 | [8414] | Authorization server metadata: the wizard reads it to discover a provider's endpoints and registration endpoint |
 | [8628] | Device authorization grant: device and user code request, token endpoint polling |
 
 [6749]: https://www.rfc-editor.org/rfc/rfc6749
+[7523]: https://www.rfc-editor.org/rfc/rfc7523
 [7636]: https://www.rfc-editor.org/rfc/rfc7636
 [7591]: https://www.rfc-editor.org/rfc/rfc7591
 [8414]: https://www.rfc-editor.org/rfc/rfc8414

@@ -37,7 +37,9 @@ use crate::{
 /// Completes the grant configured on the account: the redirected URI
 /// for the authorization code grant, or the device code for the
 /// device grant. Authorization-code-only flags (`--state`, `--pkce`,
-/// `--redirect-uri`) are rejected on device accounts.
+/// `--redirect-uri`) are rejected on device accounts. The client
+/// credentials grants complete in a single auth get and are rejected
+/// here.
 #[derive(Debug, Parser)]
 pub struct AuthResumeCommand {
     /// Redirected URI (authorization-code grant) or device code
@@ -79,6 +81,10 @@ pub struct AuthResumeCommand {
 impl AuthResumeCommand {
     /// Completes the account's configured grant into a stored token.
     pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
+        if account.grant.is_client_credentials() {
+            bail!("The client credentials grants complete in a single auth get, nothing to resume");
+        }
+
         if account.grant == GrantConfig::Device {
             return self.execute_device(printer, account);
         }

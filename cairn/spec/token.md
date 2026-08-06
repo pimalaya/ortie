@@ -25,3 +25,6 @@ When auto-refresh is enabled (per-command `--auto-refresh` or the account's `aut
 
 ### Requirement: Refresh rotation ordering
 On refresh, Ortie SHALL persist the new token to storage before the old one can be lost, and SHALL keep the previous refresh token when the server omits a rotated one. A refresh failure fires the on-refresh error hook and reports the server error code.
+
+### Requirement: Auto-refresh branches per grant
+When auto-refresh triggers, Ortie SHALL exchange the refresh token where one exists and SHALL silently re-acquire (re-run the configured grant) on the client credentials kinds, which issue no refresh token. `token refresh` SHALL follow the same decision. On an auto-refreshing client credentials account, a stored token that is missing or unreadable SHALL re-acquire instead of failing, so `token show --auto-refresh` transparently produces a valid token for every grant.
