@@ -27,8 +27,8 @@ use crate::{
 #[command(long_version = long_version!())]
 #[command(propagate_version = true, infer_subcommands = true)]
 pub struct Cli {
-    /// The subcommand to run; bare `ortie` runs the discovery wizard
-    /// (auth discover).
+    /// The subcommand to run; bare `ortie` runs the configuration
+    /// wizard.
     #[command(subcommand)]
     pub cmd: Option<Command>,
 

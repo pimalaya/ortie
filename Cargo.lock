@@ -977,12 +977,12 @@ dependencies = [
 
 [[package]]
 name = "io-pim-discovery"
-version = "0.3.3"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a94d5441f31e708c5aaa3b66f300e513dbd3d3b2eaf91c510649ca1167d144af"
+checksum = "6fec19a28017d4826dde9ed9a48a5fee9b40f4edb5f5bc073e7c26620d87bcca"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "domain",
  "io-http",
  "ipconfig",

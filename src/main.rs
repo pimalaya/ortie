@@ -1,9 +1,9 @@
 //! # Ortie
 //!
-//! CLI to manage OAuth tokens, configured through TOML. This header
-//! is the architecture document of the repository: it explains how
-//! the binary is layered and where each concern lives, the same way
-//! the io-oauth lib.rs does for the engine.
+//! CLI to manage OAuth 2.0 tokens, configured through TOML. This header is the
+//! architecture document of the repository: it explains how the binary is
+//! layered and where each concern lives, the same way the io-oauth lib.rs does
+//! for the engine.
 //!
 //! ## Layering
 //!
@@ -18,17 +18,21 @@
 //! [io-pim-discovery]: https://docs.rs/io-pim-discovery
 //!
 //! Parsing starts in [`cli`], the root clap parser. Bare `ortie` (no
-//! subcommand) runs the discovery wizard, the natural first contact
-//! with the tool; otherwise it routes into two command trees:
+//! subcommand) runs the configuration wizard, the natural first
+//! contact with the tool; otherwise it routes into two command trees:
 //! [`auth`] obtains tokens by running the OAuth grant configured on
 //! the account (get, resume), while [`token`] works on the
 //! token already persisted in storage (show, inspect, refresh).
 //!
-//! The wizard never writes any file: it prints a complete, valid
-//! TOML fragment on stdout with its guidance embedded as comments,
-//! and prompts render on stderr, so `ortie >> <config>` is the
-//! write-back. The config stays entirely user-owned; there is no
-//! account management command tree and none is planned.
+//! The [`wizard`] ends on a bare, valid TOML fragment: appended to a
+//! config file when it offers to (writing to a terminal), printed on
+//! stdout otherwise, so `ortie >> <config>` still works as the
+//! write-back. Its banner, prompts and spinners render on stderr. An
+//! existing config is appended to, never rewritten, so the config
+//! stays user-owned; there is no account management command tree and
+//! none is planned. The wizard configures only what it can discover,
+//! and runs no grant of its own: authorizing the account it produced
+//! is what `auth get` is for.
 //!
 //! Configuration is a two-layer affair. [`config`] holds the pure
 //! TOML DTOs: every type ends in `*Config`, mirrors the nested
@@ -74,11 +78,12 @@ mod cli;
 mod config;
 mod repl;
 mod token;
+mod wizard;
 
 use clap::Parser;
 use pimalaya_cli::{error::ErrorReport, log::Logger, printer::StdoutPrinter};
 
-use crate::{auth::discover::AuthDiscoverCommand, cli::Cli};
+use crate::cli::Cli;
 
 fn main() {
     let cli = Cli::parse();
@@ -92,7 +97,7 @@ fn main() {
             let account_name = cli.account.name.as_deref();
             cmd.execute(&mut printer, config_paths, account_name)
         }
-        None => AuthDiscoverCommand.execute(&mut printer),
+        None => wizard::run(&mut printer),
     };
 
     ErrorReport::eval(&mut printer, result)

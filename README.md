@@ -1,21 +1,13 @@
 # 🔑 Ortie [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-CLI to manage OAuth tokens
+CLI to manage OAuth 2.0 tokens, written in Rust
 
 ## Table of contents
 
 - [Features](#features)
 - [Coverage](#coverage)
 - [Installation](#installation)
-  - [Pre-built binary](#pre-built-binary)
-  - [Cargo](#cargo)
-  - [Nix](#nix)
-  - [Sources](#sources)
 - [Configuration](#configuration)
-  - [Google](#google)
-  - [Microsoft (Outlook IMAP / SMTP)](#microsoft-outlook-imap--smtp)
-  - [Microsoft Graph](#microsoft-graph)
-  - [Fastmail](#fastmail)
 - [Usage](#usage)
 - [Alternatives](#alternatives)
 - [AI disclosure](#ai-disclosure)
@@ -26,7 +18,7 @@ CLI to manage OAuth tokens
 
 ## Features
 
-- **Account discovery wizard**: run bare, it finds the OAuth 2.0 grants reachable for an email address and prints a ready-to-append account configuration.
+- **Account configuration wizard**: run bare, it finds the OAuth 2.0 grants reachable for an email address and appends the resulting account to your configuration, or prints it for you to place yourself.
 - **Dynamic client registration**: register a public client on the spot, with no provider console, when the provider advertises it.
 - **Authorization code grant**: sign in through the browser, with a built-in redirection server that captures the callback.
 - **Device authorization grant**: sign in by typing a short code on another device, for hosts without a browser.
@@ -126,7 +118,11 @@ nix run
 
 ## Configuration
 
-Run ortie with no argument to launch the discovery wizard: it asks for an email address (or a server or issuer URI), discovers the OAuth 2.0 services reachable for it, and prints a complete account fragment as valid TOML on stdout, its guidance embedded as comments. Ortie never writes your configuration itself; the prompts render on stderr, so appending the fragment is a one-liner, `ortie >> ~/.config/ortie/config.toml`.
+Run ortie with no argument to launch the configuration wizard. It asks for one thing, an email address (or a bare domain, or an issuer URL), then discovers the OAuth 2.0 grants reachable for it, walks you through the application, the scopes that application may request, and the token storage, and hands you the account as a complete TOML fragment. It configures only what it can discover: when nothing is found it stops and points at the sample configuration rather than asking you to type endpoints by hand.
+
+The account is printed at the end, then you are offered to save it to a config file. An existing file is appended to, never rewritten: the fragment is one `[accounts.<name>]` table, so the accounts and comments already in it are left alone, and appending to a file that already holds something is confirmed first. Decline and you keep the printed fragment to place yourself. The welcome banner and the prompts render on stderr and stdout carries nothing but the fragment, so a redirect keeps working without any prompt at all, `ortie >> ~/.config/ortie/config.toml`.
+
+Run `ortie auth get` afterwards to authorize the account and store its first token.
 
 A configuration is loaded from the first valid path among:
 
@@ -136,7 +132,7 @@ A configuration is loaded from the first valid path among:
 
 Override the path with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`; multiple paths can be passed at once, separated by :. The first one is the base and the rest are deep-merged on top. The full field reference lives in [config.sample.toml](./config.sample.toml); ready-made per-provider blocks follow below.
 
-You may also need a registered OAuth 2.0 application. The wizard offers three ways, most preferred first: dynamic registration when your provider advertises it (Fastmail does), a public application (Thunderbird credentials cover most consumer providers), or your own registration. Public Thunderbird credentials for various providers are listed at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).
+You may also need a registered OAuth 2.0 application. The wizard offers three ways, most preferred first: dynamic registration when your provider advertises it (Fastmail does), a public application (Thunderbird credentials cover most consumer providers), or your own registration. The last one is not prompted for: you already hold those values and are about to edit the config anyway, so the wizard hands you the account with an empty `client-id` and tells you what to fill in. Public Thunderbird credentials for various providers are listed at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).
 
 Ready-made configuration blocks for common providers follow. The discovery wizard fills most of these in for you; they are kept here for manual setups and for Microsoft Graph, which the wizard does not cover. Drop the relevant block under your `[accounts.<name>]` table and fill in the client credentials.
 
@@ -145,11 +141,13 @@ Ready-made configuration blocks for common providers follow. The discovery wizar
 ```toml
 endpoints.authorization = "https://accounts.google.com/o/oauth2/v2/auth"
 endpoints.token = "https://oauth2.googleapis.com/token"
-scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com"]
+scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com/"]
 extras.access_type = "offline"
 ```
 
 Use these current endpoints, not the legacy `o/oauth2/auth` / `www.googleapis.com/oauth2/v3/token` pair, which Google can reject at consent with "This app is blocked"; the discovery wizard already fills the current ones. Gmail and CardDAV are sensitive scopes, so an unverified own application only works for accounts listed as test users on its OAuth consent screen; the public Thunderbird application below is verified.
+
+Google splits contacts across two scopes that are not interchangeable: `https://www.googleapis.com/auth/carddav` authorizes the CardDAV endpoint (RFC 6352), while `https://www.googleapis.com/auth/contacts` authorizes the People API, a JSON REST interface. Calendars have no such split, CalDAV being authorized by the plain `https://www.googleapis.com/auth/calendar` scope. A client id is verified for a fixed set of scopes, so asking the Thunderbird application (registered for mail, CardDAV and CalDAV) for a People API scope fails at consent.
 
 Public Thunderbird application:
 
@@ -196,7 +194,7 @@ Work or school (Entra ID) accounts receive a JWT the Graph API accepts; personal
 
 ### Fastmail
 
-Fastmail advertises RFC 7591 dynamic registration, so bare `ortie` can register a client for you. Two Fastmail specifics the wizard does not yet fill into the fragment, so add them by hand:
+Fastmail advertises RFC 7591 dynamic registration, so bare `ortie` can register a client for you. Two Fastmail specifics the wizard fills in for you, worth knowing about when writing the block by hand:
 
 1. RFC 8707 resource: Fastmail's authorize endpoint rejects the request with `invalid_target` (no consent screen, an instant bounce) unless a resource indicator is present. Its value is the JMAP session URL.
 2. Redirect: Fastmail's dynamic registration accepts only a reverse-DNS private-use scheme (it refuses http and loopback), so the wizard pins `endpoints.redirection = "org.pimalaya.ortie://redirect"`. A desktop browser cannot route that scheme back to ortie, so `auth get` prints a manual `auth resume` command to finish the flow by hand.

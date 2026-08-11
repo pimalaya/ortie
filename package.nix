@@ -97,7 +97,7 @@ rustPlatform.buildRustPackage {
     '';
 
   meta = {
-    description = "CLI to manage OAuth tokens";
+    description = "CLI to manage OAuth 2.0 tokens";
     mainProgram = "ortie";
     homepage = "https://github.com/pimalaya/ortie";
     changelog = "https://github.com/pimalaya/ortie/blob/master/CHANGELOG.md";

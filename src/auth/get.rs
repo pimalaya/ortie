@@ -193,6 +193,13 @@ impl AuthGetCommand {
 /// verifier. Used whenever the local listener cannot capture the
 /// redirect: a non-interactive shell, a private-use redirection
 /// scheme, or a listener that failed to bind.
+///
+/// The values are attached to their flag with `=` and single quoted.
+/// Both halves matter: a PKCE verifier is drawn from the RFC 7636
+/// unreserved set and a state from URL-safe base64, so either can
+/// begin with `-` and be read as a flag rather than a value, which the
+/// `=` form settles before the parser sees it; the quotes keep the
+/// shell from expanding a leading `~`.
 fn print_manual_resume(state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifier>) {
     let state = shell_single_quote(&String::from_utf8_lossy(state.expose()));
 
@@ -205,10 +212,10 @@ fn print_manual_resume(state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifi
     match pkce {
         Some(verifier) => {
             let verifier = shell_single_quote(&String::from_utf8_lossy(verifier.expose()));
-            println!("> ortie auth resume --state {state} --pkce {verifier} <REDIRECTED_URI>");
+            println!("> ortie auth resume --state={state} --pkce={verifier} <REDIRECTED_URI>");
         }
         None => {
-            println!("> ortie auth resume --state {state} <REDIRECTED_URI>");
+            println!("> ortie auth resume --state={state} <REDIRECTED_URI>");
         }
     }
 }

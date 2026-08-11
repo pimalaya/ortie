@@ -49,7 +49,7 @@ struct ReplLine {
 
 /// The subset of the CLI command tree available inside the REPL: the
 /// `token` and `auth` commands, which run against the in-memory
-/// account. The account-less `auth discover` wizard has no REPL form
+/// account. The account-less configuration wizard has no REPL form
 /// (bare `ortie` runs it).
 #[derive(Debug, Subcommand)]
 enum ReplCommandTree {

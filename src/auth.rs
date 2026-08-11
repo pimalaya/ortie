@@ -1,7 +1,6 @@
 //! `auth` subcommand tree: obtain OAuth 2.0 access tokens by running
 //! the grant configured on the account.
 
-pub mod discover;
 pub mod get;
 pub mod resume;
 
