@@ -46,6 +46,8 @@ let
 
 in
 rustPlatform.buildRustPackage {
+  __structuredAttrs = true;
+
   inherit
     version
     cargoHash
@@ -98,6 +100,9 @@ rustPlatform.buildRustPackage {
         --fish "$out"/share/completions/ortie.fish \
         --zsh "$out"/share/completions/_ortie
     '';
+
+  # Disable impure integration tests
+  cargoTestFlags = [ "--bins" ];
 
   meta = {
     description = "CLI to manage OAuth 2.0 tokens";
