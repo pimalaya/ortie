@@ -13,11 +13,11 @@ repository = "https://github.com/pimalaya/ortie"
 
 [features]
 default = ["rustls-ring"]
+notify = ["dep:notify-rust"]
 native-tls = ["pimalaya-stream/native-tls", "io-oauth/native-tls", "io-pim-discovery/native-tls"]
 rustls-aws = ["pimalaya-stream/rustls-aws", "io-oauth/rustls-aws", "io-pim-discovery/rustls-aws"]
 rustls-ring = ["pimalaya-stream/rustls-ring", "io-oauth/rustls-ring", "io-pim-discovery/rustls-ring"]
 vendored = ["pimalaya-stream/vendored", "io-oauth/vendored", "io-pim-discovery/vendored", "notify-rust?/d_vendored"]
-notify = ["dep:notify-rust"]
 
 [profile.release]
 lto = "fat"
@@ -26,7 +26,7 @@ strip = "symbols"
 panic = "abort"
 
 [build-dependencies]
-pimalaya-cli = { version = "0.1", default-features = false, features = ["build"] }
+pimalaya-cli = { version = "0.2", default-features = false, features = ["build"] }
 
 [dev-dependencies]
 env_logger = "0.11"
@@ -46,7 +46,7 @@ io-pim-discovery = { version = "0.5", default-features = false, features = ["str
 log = "0.4"
 notify-rust = { version = "4.18", default-features = false, features = ["d"], optional = true }
 open = "5.3"
-pimalaya-cli = { version = "0.1", default-features = false, features = ["terminal", "prompt", "spinner", "wizard"] }
+pimalaya-cli = { version = "0.2", default-features = false, features = ["terminal", "prompt", "spinner", "wizard"] }
 pimalaya-config = { version = "0.1", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.1", default-features = false, features = ["std"] }
 secrecy = { version = "0.10", default-features = false, features = ["serde"] }
