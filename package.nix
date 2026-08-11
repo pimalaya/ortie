@@ -18,7 +18,7 @@
 }:
 
 let
-  version = "2.0.0";
+  version = "2.1.0";
   hash = "sha256-I1lE+0crzjz6qzPifsIbOhVXiiBIQ6BomkTaG2Wkj1I=";
   cargoHash = "sha256-WteGukTwrUAVcbAqmP/HedHY+/KmRP0s8zKQhZ82lnM=";
 
