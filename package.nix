@@ -18,9 +18,9 @@
 }:
 
 let
-  version = "1.0.0";
-  hash = "";
-  cargoHash = "";
+  version = "2.0.0";
+  hash = "sha256-I1lE+0crzjz6qzPifsIbOhVXiiBIQ6BomkTaG2Wkj1I=";
+  cargoHash = "sha256-WteGukTwrUAVcbAqmP/HedHY+/KmRP0s8zKQhZ82lnM=";
 
   inherit (stdenv.hostPlatform)
     isLinux
@@ -45,7 +45,11 @@ let
 
 in
 rustPlatform.buildRustPackage {
-  inherit cargoHash version buildNoDefaultFeatures;
+  inherit
+    version
+    cargoHash
+    buildNoDefaultFeatures
+    ;
 
   pname = "ortie";
 
@@ -57,7 +61,7 @@ rustPlatform.buildRustPackage {
   };
 
   # OpenSSL should not be provided by vendors, not even on Windows
-  env.OPENSSL_NO_VENDOR = true;
+  env.OPENSSL_NO_VENDOR = 1;
 
   nativeBuildInputs = [
     pkg-config
@@ -73,8 +77,6 @@ rustPlatform.buildRustPackage {
     buildFeatures
     # D-Bus is provided by vendors on Windows
     ++ lib.optional (hasNotifyFeature && isWindows) "vendored";
-
-  doCheck = false;
 
   postInstall =
     lib.optionalString (lib.hasInfix "wine" emulator) ''
@@ -100,10 +102,10 @@ rustPlatform.buildRustPackage {
     description = "CLI to manage OAuth 2.0 tokens";
     mainProgram = "ortie";
     homepage = "https://github.com/pimalaya/ortie";
-    changelog = "https://github.com/pimalaya/ortie/blob/master/CHANGELOG.md";
-    license = [
-      lib.licenses.mit
-      lib.licenses.asl20
+    changelog = "https://github.com/pimalaya/ortie/blob/v${version}/CHANGELOG.md";
+    license = with lib.licenses; [
+      asl20
+      mit
     ];
     maintainers = with lib.maintainers; [ soywod ];
   };
