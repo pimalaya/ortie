@@ -1,3 +1,14 @@
+[advisories]
+ignore = [
+  # rsa reaches ortie through io-oauth's jwt-bearer feature, which
+  # backs the client-credentials-jwt grant. It is only ever used to
+  # sign an RS256 assertion with the account's own local key on an
+  # outbound token request, never to decrypt, so no attacker can
+  # submit ciphertexts or time the private-key operation. RustCrypto
+  # has no constant-time release to upgrade to yet.
+  { id = "RUSTSEC-2023-0071", reason = "local RS256 signing only, no decryption oracle exposed" },
+]
+
 [sources]
 allow-org.github = ["pimalaya"]
 unknown-registry = "deny"
