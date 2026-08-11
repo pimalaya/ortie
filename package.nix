@@ -38,7 +38,8 @@ let
     env = (old.env or { }) // {
       NIX_CFLAGS_COMPILE =
         (old.env.NIX_CFLAGS_COMPILE or "")
-        # required for D-Bus on Linux AArch64
+        # required for D-Bus on Linux AArch64, otherwise build fails with
+        # undefined reference in _dbus_atomic_* functions
         + lib.optionalString (isLinux && isAarch64) " -mno-outline-atomics";
     };
   });
