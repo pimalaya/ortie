@@ -23,16 +23,19 @@
 //! [`auth`] obtains tokens by running the OAuth grant configured on
 //! the account (get, resume), while [`token`] works on the
 //! token already persisted in storage (show, inspect, refresh).
+//! [`repl`] is those same two trees held open against one account, so
+//! the secret store is unlocked once instead of per command.
 //!
-//! The [`wizard`] ends on a bare, valid TOML fragment: appended to a
-//! config file when it offers to (writing to a terminal), printed on
-//! stdout otherwise, so `ortie >> <config>` still works as the
-//! write-back. Its banner, prompts and spinners render on stderr. An
-//! existing config is appended to, never rewritten, so the config
-//! stays user-owned; there is no account management command tree and
-//! none is planned. The wizard configures only what it can discover,
-//! and runs no grant of its own: authorizing the account it produced
-//! is what `auth get` is for.
+//! The [`wizard`] ends on a bare, valid TOML fragment, printed on
+//! stdout in every mode so `ortie >> <config>` works as the
+//! write-back; writing to a terminal, it then offers to append that
+//! fragment to a config file for the user. Its banner, prompts and
+//! spinners render on stderr. An existing config is appended to,
+//! never rewritten and never unconfirmed, so the config stays
+//! user-owned; there is no account management command tree and none
+//! is planned. The wizard configures only what it can discover, and
+//! runs no grant of its own: authorizing the account it produced is
+//! what `auth get` is for.
 //!
 //! Configuration is a two-layer affair. [`config`] holds the pure
 //! TOML DTOs: every type ends in `*Config`, mirrors the nested

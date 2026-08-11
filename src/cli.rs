@@ -22,9 +22,7 @@ use crate::{
 /// Top-level command-line interface for the `ortie` binary.
 #[derive(Parser, Debug)]
 #[command(name = env!("CARGO_PKG_NAME"))]
-#[command(author, version)]
-#[command(about = "CLI to manage OAuth tokens")]
-#[command(long_version = long_version!())]
+#[command(author, version, about, long_version = long_version!())]
 #[command(propagate_version = true, infer_subcommands = true)]
 pub struct Cli {
     /// The subcommand to run; bare `ortie` runs the configuration

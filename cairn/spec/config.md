@@ -26,7 +26,7 @@ All endpoints (`endpoints.authorization`, `endpoints.token`, `endpoints.redirect
 The `pkce` field SHALL accept a bool-or-string value: `true` and `"s256"` mean S256, `"plain"` is the escape hatch for broken servers, `false` opts out. The default when omitted is S256. The field applies to the authorization code grant only and is ignored by grants without PKCE.
 
 ### Requirement: Extras passthrough
-An account MAY carry a raw `[accounts.<name>.extras]` table whose keys are wire parameter names (never kebab-renamed) and whose values are strings. Extras are forwarded verbatim into the configured grant's initiation request (the authorization URL query for the authorization code grant). This carries provider knobs such as Google `access_type = "offline"` and the RFC 8707 `resource` without Ortie learning provider-specific logic.
+An account MAY carry a raw `[accounts.<name>.extras]` table whose keys are wire parameter names (never kebab-renamed) and whose values are strings. Extras are forwarded verbatim into the configured grant's initiation request (the authorization URL query for the authorization code grant). This carries provider options such as Google `access_type = "offline"` and the RFC 8707 `resource` without Ortie learning provider-specific logic.
 
 ### Requirement: Storage commands
 An account SHALL define read and write storage as external shell commands. The read command prints the token response JSON on stdout; the write command receives it on stdin. Ortie never persists tokens itself.

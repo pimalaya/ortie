@@ -9,32 +9,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added a welcome banner to the wizard, on stderr, framing what ortie is, what the wizard is about to do and where every field is documented.
-- Added a keyring entry prompt to the wizard's storage step, seeded with the account name, so the token lands where you name it. The entry is used verbatim, matching the Himalaya wizard, instead of being namespaced under `ortie/` on your behalf.
-- Ordered the wizard's storage strategies by what is installed: a credential provider CLI found on your `PATH` leads the list, and one that is not says so instead of being hidden, since it is one package install away and the commands written for it are correct either way.
-- Offered to save the wizard's account to a config file at the end, defaulting to `$XDG_CONFIG_HOME/ortie/config.toml`. The account is printed first and the save comes after it, so the prompt decides one thing only and declining just leaves you with the printed fragment. An existing file is appended to, never rewritten: the fragment is one `[accounts.<name>]` table, so the accounts and comments already in it are untouched. Appending to a file that already holds something is confirmed first, naming the path. A redirected stdout (or `--json`) prints without prompting at all, so `ortie >> <config>` is unchanged.
-- Resolved issuers into concrete grants: a typed issuer URL, and a discovered OAuth issuer, are now read through their RFC 8414 metadata and offered as every grant they advertise, instead of being emitted as a bare issuer comment. A server publishing both an authorization endpoint and a device authorization endpoint offers both flows, as RFC 8414 and RFC 8628 allow, so a machine with no browser can pick the device grant where a redirect is also possible.
+- Added a welcome banner to the wizard, on stderr, framing what ortie is and where every field is documented.
+- Added a keyring entry prompt to the wizard's storage step, seeded with the account name and used verbatim, matching the Himalaya wizard, instead of being namespaced under `ortie/` on your behalf.
+- Ordered the wizard's storage strategies by what is installed, the credential provider CLIs found on your `PATH` leading.
+
+  The ones that are not found are still offered, and say so: each is one package install away, and the commands written for it are correct either way.
+
+- Offered to save the wizard's account to a config file, defaulting to `$XDG_CONFIG_HOME/ortie/config.toml`.
+
+  The account is printed first and the save comes after it, so the prompt decides one thing only and declining leaves you the printed fragment. An existing file is appended to, never rewritten: the fragment is one `[accounts.<name>]` table, so the accounts and comments already in it are untouched. Appending to a file that already holds something is confirmed first, naming the path. A redirected stdout (or `--json`) prints without prompting at all, so `ortie >> <config>` is unchanged.
+
+- Resolved issuers into concrete grants: a typed issuer URL, and a discovered OAuth issuer, are read through their RFC 8414 metadata instead of being emitted as a bare issuer comment.
+
+  Every grant the metadata advertises is offered, so a server publishing both an authorization endpoint and a device authorization endpoint yields both flows, as RFC 8414 and RFC 8628 allow, and a machine with no browser can pick the device grant where a redirect is also possible.
+
 - Offered the authorization server's `scopes_supported` in the scope multi-select, for an application not bound to a registered set of scopes.
-
-### Fixed
-
-- Fixed the manual `auth resume` command printed by `auth get` being unrunnable when a generated value started with `-`: the state and PKCE verifier are now attached to their flag with `=`, so the value is never read as a flag. They stay single quoted, which is what keeps a leading `~` from being expanded by your shell.
 
 ### Changed
 
-- Emitted keyring read commands as an exec-style array instead of a shell string, so no shell reinterprets an entry name. Write commands stay shell lines, since some rely on shell features (`$(cat)` on macOS), as do commands typed by hand.
+- Emitted keyring read commands as an exec-style array instead of a shell string, so no shell reinterprets an entry name.
+
+  Write commands stay shell lines, since some rely on shell features (`$(cat)` on macOS), as do commands typed by hand.
+
 - Bounded the wizard's discovery with a 6 second deadline, so one unreachable endpoint cannot stall the prompt; this requires io-pim-discovery 0.5.
-- Reduced discovered grants by authorization server rather than by endpoint URL, so the same server described by two mechanisms is offered once instead of twice. Gmail no longer asks you to choose between Mozilla autoconfig's legacy `accounts.google.com/o/oauth2/auth` + `www.googleapis.com/oauth2/v3/token` pair and the current one; the most authoritative mechanism wins, and the entry is labelled by its flow and services instead of its token endpoint. A pick list left with a single grant is no longer prompted for.
-- Asked for the application before the scopes, since a registration is what decides which scopes can be requested. A public application now offers exactly the scopes it is registered for (Thunderbird on Google: Gmail, CardDAV and CalDAV), so a scope its client id was never verified for can no longer reach the authorization request and fail at consent. Dynamic registration picks its scopes before registering, and a hand-registered application keeps its free-text prompt.
+- Reduced discovered grants by authorization server rather than by endpoint URL, so one server described by two mechanisms is offered once instead of twice.
+
+  Gmail no longer asks you to choose between Mozilla autoconfig's legacy `accounts.google.com/o/oauth2/auth` + `www.googleapis.com/oauth2/v3/token` pair and the current one: the most authoritative mechanism wins, and an entry is labelled by its flow and services instead of its token endpoint. A pick list left with a single grant is no longer prompted for.
+
+- Asked for the application before the scopes, since a registration is what decides which scopes can be requested.
+
+  A public application now offers exactly the scopes it is registered for (Thunderbird on Google: Gmail, CardDAV and CalDAV), so a scope its client id was never verified for can no longer reach the authorization request and fail at consent. Dynamic registration picks its scopes before it registers, since they travel in the registration request.
+
 - Derived the wizard's account name from the input (the first label of the domain or issuer host) instead of prompting for it; rename the `[accounts.<name>]` key by hand.
 - Moved the wizard's guidance from the printed fragment into the stderr banner, so stdout now carries bare TOML.
 - Probed the authorization server metadata once per wizard run, shared by the scope options and the dynamic registration decision, instead of only before the application step.
-- Reworded the wizard's custom application prompt to `Client id:`, which no longer suggests it will be asked again, and serialized the client id under `--json` even when left empty, matching the `client-id = ""` placeholder of the TOML fragment.
+- Serialized the client id under `--json` even when left empty, matching the `client-id = ""` placeholder the TOML fragment already carried.
+
+### Fixed
+
+- Fixed the manual `auth resume` command printed by `auth get` being unrunnable when a generated value started with `-`.
+
+  The state and PKCE verifier are attached to their flag with `=`, so the value is never read as a flag, and stay single quoted, which is what keeps a leading `~` from being expanded by your shell.
 
 ### Removed
 
-- Removed hand-entry of OAuth 2.0 endpoints from the wizard, along with the "Enter OAuth 2.0 details manually" pick-list entry. The wizard configures only what it can discover; when nothing is found it stops and points at the sample configuration.
-- Removed the prompts behind the wizard's custom application entry (client id, secret, scopes, redirection). If you registered an application yourself you are already editing the config, so the wizard now emits the account with everything it resolved, leaves `client-id` empty, and explains what to fill in by hand. The storage step still runs, being independent of the application.
+- Removed hand-entry of OAuth 2.0 endpoints from the wizard, along with the "Enter OAuth 2.0 details manually" pick-list entry.
+
+  The wizard configures only what it can discover; when nothing is found it stops and points at the sample configuration.
+
+- Removed the prompts behind the wizard's custom application entry (client id, secret, scopes, redirection).
+
+  If you registered an application yourself you are already editing the config, so the wizard emits the account with everything it resolved, leaves `client-id` empty, and explains what to fill in by hand. The storage step still runs, being independent of the application.
 
 ## [2.1.0] - 2026-08-06
 

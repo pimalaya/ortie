@@ -10,7 +10,8 @@
 //! - `$HOME/.config/ortie/config.toml`
 //! - `$HOME/.ortierc`
 //!
-//! Override with `-c, --config <PATH>` or `ORTIE_CONFIG=<PATH>`.
+//! Override with `-c, --config <PATH>`, repeated once per file: the
+//! first one is the base and the rest are deep-merged on top.
 
 use std::{collections::HashMap, fmt, path::PathBuf, process::Command};
 

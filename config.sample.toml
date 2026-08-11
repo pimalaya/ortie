@@ -6,9 +6,8 @@
 #   - $HOME/.config/ortie/config.toml
 #   - $HOME/.ortierc
 #
-# Override with `ortie -c <PATH>` or `ORTIE_CONFIG=<PATH>`. Multiple paths can
-# be passed at once, separated by `:`; the first one is the base and the rest
-# are deep-merged on top of it.
+# Override with `ortie -c <PATH>`, repeated once per file when you keep
+# several: the first one is the base and the rest are deep-merged on top of it.
 #
 # Run bare `ortie` to discover an account and print a ready-to-append config
 # fragment (`ortie >> <path>` appends it directly); this file documents every
@@ -44,13 +43,10 @@ client-id = ""
 #grant = "authorization-code"
 
 # Credentials of the "client-credentials-jwt" grant, the Microsoft
-# certificate credentials flow. `client-key` is the path to the
-# private key (PKCS#8 or PKCS#1 PEM) signing the JWT client
-# assertion; `client-certificate` is the path to the matching
-# certificate (PEM or DER), whose SHA-1 thumbprint rides as the
-# assertion `x5t` header (required by Microsoft). Both are re-read at
-# every mint, so a renewed certificate is picked up without restart;
-# the assertion itself is short-lived and never stored.
+# certificate credentials flow: the private key (PKCS#8 or PKCS#1 PEM) signing
+# the JWT assertion, and the matching certificate (PEM or DER), whose SHA-1
+# thumbprint rides as the assertion `x5t` header. Both are re-read at every
+# mint, so a renewed certificate is picked up without a restart.
 #client-key = "/etc/ortie/example.key.pem"
 #client-certificate = "/etc/ortie/example.crt.pem"
 
@@ -81,7 +77,7 @@ scopes = []
 # (authorization-code grant). The device grant does not yet forward extras
 # (io-oauth device request params have no extras table).
 # Keys are wire parameter names (no kebab-case renaming). This is the place
-# for provider-specific knobs:
+# for provider-specific options:
 #
 #   extras.access_type = "offline"          # Google: required for a refresh token
 #   extras.prompt = "consent"               # Google: force the consent screen
@@ -97,9 +93,9 @@ auto-refresh = true
 # Storage
 # --------------------------------------------------------------------------------
 #
-# Ortie does not persist tokens on disk by itself; both reads and writes go
-# through a shell command. Any CLI that reads from / writes to stdin works.
-# A few good candidates, matched to your platform / setup:
+# Ortie persists no token itself: reads and writes go through commands of
+# yours. Any CLI reading from / writing to stdin works, so pick one for your
+# platform:
 #
 #   GNOME / Secret Service .... `secret-tool` (libsecret)
 #   KDE ....................... `kwallet-query`, `kwalletcli`
@@ -108,20 +104,10 @@ auto-refresh = true
 #   Headless / CI ............. `keyctl` (kernel keyutils)
 #   Terminal-first, portable .. `pass`, `gopass`
 #
-# Two TOML shapes are accepted on every `*.command` field:
-#
-#   - Array form, exec-style, no shell involved. First element is the
-#     program, the rest are its arguments. Whitespace / quoting follow
-#     the kernel exec rules.
-#
-#         storage.read.command = ["pass", "show", "ortie/example"]
-#
-#   - String form, wrapped through the platform shell:
-#     `/bin/sh -c "<string>"` on Unix, `cmd /C "<string>"` on Windows.
-#     Pick this when you want pipes, glob expansion or `$VAR`
-#     substitution.
-#
-#         storage.write.command = "pass insert -m -f ortie/example"
+# Every `*.command` field takes either shape: an array runs the program
+# directly, no shell involved, while a string is wrapped through the platform
+# shell (`/bin/sh -c` on Unix, `cmd /C` on Windows) and is the one to pick for
+# pipes, globs or `$VAR` substitution.
 
 storage.read.command = ["pass", "show", "ortie/example"]
 storage.write.command = "pass insert -m -f ortie/example"
@@ -131,21 +117,14 @@ storage.write.command = "pass insert -m -f ortie/example"
 # --------------------------------------------------------------------------------
 #
 # Each hook fires on token issuance (`on-issue`) or refresh (`on-refresh`),
-# split by outcome (`success` / `error`). Both accept an optional shell
-# `command` and an optional `notify` block.
+# split by outcome (`success` / `error`). Both accept a `command`, in the same
+# two shapes as the storage commands above, and a `notify` block (requires the
+# `notify` cargo feature, off by default).
 #
-# Success hooks receive the following environment variables on the command:
-#   ACCESS_TOKEN, TOKEN_TYPE, EXPIRES_IN, REFRESH_TOKEN, SCOPE
-#
-# Error hooks receive: ERROR, ERROR_DESCRIPTION, ERROR_URI
-#
-# The `notify` block (requires the `notify` cargo feature, off by default)
-# expands the same variables inside `summary` and `body` via shellexpand.
-#
-# Note: hook command fields accept the same array / string shapes as the
-# storage commands above. Use the string form when the command needs to
-# expand `$ACCESS_TOKEN`, `$EXPIRES_IN`, ... inside its arguments (the
-# shell sees them as env vars); use the array form to skip the shell.
+# A success hook receives ACCESS_TOKEN, TOKEN_TYPE, EXPIRES_IN, REFRESH_TOKEN
+# and SCOPE, an error hook ERROR, ERROR_DESCRIPTION and ERROR_URI. Both the
+# command (through the shell, so use the string shape) and the `notify`
+# summary and body expand them.
 
 #hooks.on-issue.success.command = "logger 'ortie issued a token (expires in $EXPIRES_IN)'"
 #hooks.on-issue.success.notify.summary = "Ortie"
@@ -164,12 +143,11 @@ storage.write.command = "pass insert -m -f ortie/example"
 # Headless service accounts
 # --------------------------------------------------------------------------------
 #
-# The client credentials grants run without any user interaction:
-# `auth get` completes in one shot, and expired tokens silently
-# re-acquire (these grants issue no refresh token), so
-# `ortie token show --auto-refresh` always prints a valid token.
-# Both examples are Microsoft Entra shaped: the tenanted token
-# endpoint and the resource `.default` scope.
+# The client credentials grants run without any user interaction: `auth get`
+# completes in one shot, and expired tokens silently re-acquire (they issue no
+# refresh token), so `ortie token show --auto-refresh` always prints a valid
+# one. Both examples are Microsoft Entra shaped, with a tenanted token endpoint
+# and a resource `.default` scope.
 
 # Secret-authenticated (RFC 6749 section 4.4):
 #
@@ -182,10 +160,9 @@ storage.write.command = "pass insert -m -f ortie/example"
 #storage.read.command = ["secret-tool", "lookup", "token", "graph-daemon"]
 #storage.write.command = "secret-tool store --label ortie token graph-daemon"
 
-# Certificate credentials (RFC 7523 section 2.2), authenticated by a
-# JWT assertion signed with the private key; Microsoft requires the
-# certificate thumbprint, so `client-certificate` must be set and
-# `client-secret` must stay unset:
+# Certificate credentials (RFC 7523 section 2.2), authenticated by a JWT
+# assertion signed with the private key. Microsoft requires the certificate
+# thumbprint, so `client-certificate` is set and `client-secret` stays unset:
 #
 #[accounts.graph-cert-daemon]
 #grant = "client-credentials-jwt"

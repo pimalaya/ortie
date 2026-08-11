@@ -18,19 +18,19 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 
 ## Features
 
-- **Account configuration wizard**: run bare, it finds the OAuth 2.0 grants reachable for an email address and appends the resulting account to your configuration, or prints it for you to place yourself.
+- **Account configuration wizard**: run bare, it discovers the grants reachable for an email address and hands you the account, ready to append to your configuration.
 - **Dynamic client registration**: register a public client on the spot, with no provider console, when the provider advertises it.
-- **Authorization code grant**: sign in through the browser, with a built-in redirection server that captures the callback.
+- **Authorization code grant**: sign in through the browser, with a built-in server capturing the redirection.
 - **Device authorization grant**: sign in by typing a short code on another device, for hosts without a browser.
-- **Client credentials grants**: obtain machine tokens fully headlessly, authenticated by the client secret or by a JWT assertion signed with a certificate credential (Microsoft style); expired tokens silently re-acquire, so scripts always read a valid one.
+- **Client credentials grants**: machine tokens fully headlessly, authenticated by the client secret or by a signed JWT assertion (Microsoft certificate credentials).
 - **Manual flow completion**: finish a flow by hand, from the URL your browser was sent to, when the redirection server cannot bind.
-- **Token refresh**: renew an expired access token from its refresh token, on demand or automatically when reading it.
-- **PKCE**: enabled with the S256 method by default, following the OAuth 2.1 posture; opt out for servers that reject it.
-- **Extra authorization parameters**: forward provider-specific knobs (Google offline access, login hints, resource indicators) verbatim.
+- **Token refresh**: renew an expired access token on demand, or automatically when reading it.
+- **PKCE**: S256 by default, following the OAuth 2.1 posture; opt out for servers that reject it.
+- **Extra authorization parameters**: forward provider-specific options (offline access, login hints, resource indicators) verbatim.
 - **Token storage**: read and write tokens through your own shell commands, wiring into any credential manager.
 - **Hooks**: run a shell command or raise a system notification on token issuance and refresh, split by outcome.
-- **Persistent session**: unlock the secret store once and answer token commands over stdin/stdout, so an application drives ortie without reimplementing the OAuth flow.
-- **JSON output**: switch discovery and token commands to machine-readable output for scripts.
+- **Persistent session**: unlock the secret store once, then answer token commands over stdin/stdout.
+- **JSON output**: machine-readable discovery and token commands, for scripts.
 - Full standard, blocking client with **TLS** support:
   - [Rustls](https://crates.io/crates/rustls) with ring crypto (requires `rustls-ring` feature, enabled by default)
   - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)
@@ -118,9 +118,9 @@ nix run
 
 ## Configuration
 
-Run ortie with no argument to launch the configuration wizard. It asks for one thing, an email address (or a bare domain, or an issuer URL), then discovers the OAuth 2.0 grants reachable for it, walks you through the application, the scopes that application may request, and the token storage, and hands you the account as a complete TOML fragment. It configures only what it can discover: when nothing is found it stops and points at the sample configuration rather than asking you to type endpoints by hand.
+Run ortie with no argument to launch the configuration wizard. From one email address (or a bare domain, or an issuer URL) it discovers the grants your provider offers, walks you through the application, the scopes it may request and the token storage, then prints the account and offers to append it to your config file. It configures only what it can discover: when nothing is found it stops and points at the sample configuration rather than asking you to type endpoints by hand.
 
-The account is printed at the end, then you are offered to save it to a config file. An existing file is appended to, never rewritten: the fragment is one `[accounts.<name>]` table, so the accounts and comments already in it are left alone, and appending to a file that already holds something is confirmed first. Decline and you keep the printed fragment to place yourself. The welcome banner and the prompts render on stderr and stdout carries nothing but the fragment, so a redirect keeps working without any prompt at all, `ortie >> ~/.config/ortie/config.toml`.
+An existing file is appended to, never rewritten, and never without confirmation. Prompts render on stderr and stdout carries nothing but the fragment, so `ortie >> ~/.config/ortie/config.toml` works just as well.
 
 Run `ortie auth get` afterwards to authorize the account and store its first token.
 
@@ -130,11 +130,11 @@ A configuration is loaded from the first valid path among:
 - `$HOME/.config/ortie/config.toml`
 - `$HOME/.ortierc`
 
-Override the path with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`; multiple paths can be passed at once, separated by :. The first one is the base and the rest are deep-merged on top. The full field reference lives in [config.sample.toml](./config.sample.toml); ready-made per-provider blocks follow below.
+Override the path with `-c <PATH>`, repeated once per file when you keep several: the first one is the base and the rest are deep-merged on top, which is how a public config and a private one stay separate. The full field reference lives in [config.sample.toml](./config.sample.toml); ready-made per-provider blocks follow below.
 
-You may also need a registered OAuth 2.0 application. The wizard offers three ways, most preferred first: dynamic registration when your provider advertises it (Fastmail does), a public application (Thunderbird credentials cover most consumer providers), or your own registration. The last one is not prompted for: you already hold those values and are about to edit the config anyway, so the wizard hands you the account with an empty `client-id` and tells you what to fill in. Public Thunderbird credentials for various providers are listed at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).
+You may also need a registered OAuth 2.0 application. The wizard offers three, most preferred first: dynamic registration when your provider advertises it (Fastmail does), a public application (Thunderbird credentials cover most consumer providers), or your own, which it leaves as an empty `client-id` for you to fill in. Public Thunderbird credentials are listed at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).
 
-Ready-made configuration blocks for common providers follow. The discovery wizard fills most of these in for you; they are kept here for manual setups and for Microsoft Graph, which the wizard does not cover. Drop the relevant block under your `[accounts.<name>]` table and fill in the client credentials.
+Ready-made blocks for common providers follow. The wizard fills most of them in for you; they are kept here for manual setups and for Microsoft Graph, which the wizard does not cover. Drop the relevant block under your `[accounts.<name>]` table and fill in the client credentials.
 
 ### Google
 
@@ -210,7 +210,7 @@ The wizard selects all four advertised scopes by default (Fastmail cannot comple
 
 ## Usage
 
-Every command and subcommand is documented through --help. The common flows:
+Every command and subcommand is documented through `--help`. The common flows:
 
 ```sh
 ortie                       # discover an account and print a config fragment

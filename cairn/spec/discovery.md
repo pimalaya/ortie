@@ -15,7 +15,7 @@ Bare `ortie` (no subcommand) SHALL run the wizard, prompting for the input. Ther
 Bare `ortie` SHALL open with a welcome banner on stderr, before the first prompt, in three short paragraphs: the greeting, what Ortie is (named without reference to the tools that consume its tokens), and what the wizard is about to do, closing on the documented sample configuration as the escape hatch for writing an account by hand. The banner renders on stderr so it never pollutes a redirected fragment, and it is skipped under `--json`. It SHALL NOT suggest a stdout redirection, which can only be set up before the command is run.
 
 ### Requirement: Input orients the flow
-A single prompt SHALL accept an email address, a bare domain, or an issuer URL, and nothing else. An email or bare domain runs io-pim-discovery's parallel discovery; an issuer URL resolves that issuer's RFC 8414 authorization server metadata into a grant. The wizard SHALL NOT offer any hand-entry of OAuth 2.0 endpoints.
+A single prompt SHALL accept an email address, a bare domain, or an issuer URL, and nothing else. An email or bare domain runs io-pim-discovery's parallel discovery; an issuer URL resolves that issuer's RFC 8414 authorization server metadata into the grants it advertises. The wizard SHALL NOT offer any hand-entry of OAuth 2.0 endpoints.
 
 ### Requirement: Discovery is time-bounded
 The parallel discovery run SHALL be bounded by a short deadline so a single unreachable endpoint cannot stall the interactive wizard. Each mechanism runs independently; any that has not reported by the deadline is abandoned, and only what completed in time is offered.
