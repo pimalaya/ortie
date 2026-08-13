@@ -18,49 +18,32 @@
 }:
 
 let
-  version = "2.1.0";
-  hash = "sha256-I1lE+0crzjz6qzPifsIbOhVXiiBIQ6BomkTaG2Wkj1I=";
-  cargoHash = "sha256-WteGukTwrUAVcbAqmP/HedHY+/KmRP0s8zKQhZ82lnM=";
-
-  inherit (stdenv.hostPlatform)
-    isLinux
-    isWindows
-    isAarch64
-    ;
-
-  emulator = stdenv.hostPlatform.emulator buildPackages;
-  exe = stdenv.hostPlatform.extensions.executable;
-
-  hasNativeTlsFeature = builtins.elem "native-tls" buildFeatures;
-  hasNotifyFeature = !buildNoDefaultFeatures || builtins.elem "notify" buildFeatures;
-
-  dbus' = dbus.overrideAttrs (old: {
-    env = (old.env or { }) // {
-      NIX_CFLAGS_COMPILE =
-        (old.env.NIX_CFLAGS_COMPILE or "")
-        # required for D-Bus on Linux AArch64, otherwise build fails with
-        # undefined reference in _dbus_atomic_* functions
-        + lib.optionalString (isLinux && isAarch64) " -mno-outline-atomics";
-    };
-  });
+  dbus' =
+    # undefined reference in _dbus_atomic_* functions
+    if stdenv.hostPlatform.isLinux && stdenv.hostPlatform.isAarch64 then
+      dbus.overrideAttrs (old: {
+        env = (old.env or { }) // {
+          NIX_CFLAGS_COMPILE = (old.env.NIX_CFLAGS_COMPILE or "") + " -mno-outline-atomics";
+        };
+      })
+    else
+      dbus;
 
 in
-rustPlatform.buildRustPackage {
+rustPlatform.buildRustPackage (finalAttrs: {
   __structuredAttrs = true;
 
-  inherit
-    version
-    cargoHash
-    buildNoDefaultFeatures
-    ;
+  inherit buildNoDefaultFeatures;
 
   pname = "ortie";
+  version = "2.1.0";
+  cargoHash = "sha256-ZAW+Coyv1DVmF2HWr7CmFMtQT9hNaS+1koWoZCJ+Wsc=";
 
   src = fetchFromGitHub {
-    inherit hash;
     owner = "pimalaya";
-    repo = "ortie";
-    rev = "v${version}";
+    repo = finalAttrs.pname;
+    tag = "v${finalAttrs.version}";
+    hash = "sha256-5KRXPIDYBfF/2fNnrJur8WdfLYvgtJWlTWA7YD8yYWg=";
   };
 
   # OpenSSL should not be provided by vendors, not even on Windows
@@ -72,33 +55,36 @@ rustPlatform.buildRustPackage {
   ];
 
   buildInputs =
-    lib.optional hasNativeTlsFeature openssl
-    # D-Bus is provided by vendors on Windows
-    ++ lib.optional (hasNotifyFeature && !isWindows) dbus';
+    lib.optional (builtins.elem "native-tls" buildFeatures) openssl
+    # On Windows, D-Bus is provided by vendors
+    ++ lib.optional (builtins.elem "notify" buildFeatures && !stdenv.hostPlatform.isWindows) dbus';
 
   buildFeatures =
     buildFeatures
-    # D-Bus is provided by vendors on Windows
-    ++ lib.optional (hasNotifyFeature && isWindows) "vendored";
+    # On Windows, D-Bus is provided by vendors
+    ++ lib.optional (builtins.elem "notify" buildFeatures && stdenv.hostPlatform.isWindows) "vendored";
 
   postInstall =
-    lib.optionalString (lib.hasInfix "wine" emulator) ''
-      export WINEPREFIX="''${WINEPREFIX:-$(mktemp -d)}"
-      mkdir -p $WINEPREFIX
+    let
+      exe =
+        if stdenv.buildPlatform.canExecute stdenv.hostPlatform then
+          "$out/bin/${finalAttrs.pname}"
+        else
+          lib.getExe buildPackages.${finalAttrs.pname};
+    in
     ''
-    + ''
       mkdir -p $out/share/{completions,man}
-      ${emulator} "$out"/bin/ortie${exe} manuals "$out"/share/man
-      ${emulator} "$out"/bin/ortie${exe} completions -d "$out"/share/completions bash elvish fish powershell zsh
+      ${exe} manuals "$out"/share/man
+      ${exe} completions -d "$out"/share/completions bash elvish fish powershell zsh
     ''
     + lib.optionalString installManPages ''
       installManPage "$out"/share/man/*
     ''
     + lib.optionalString installShellCompletions ''
-      installShellCompletion --cmd ortie \
-        --bash "$out"/share/completions/ortie.bash \
-        --fish "$out"/share/completions/ortie.fish \
-        --zsh "$out"/share/completions/_ortie
+      installShellCompletion --cmd ${finalAttrs.pname} \
+        --bash "$out"/share/completions/${finalAttrs.pname}.bash \
+        --fish "$out"/share/completions/${finalAttrs.pname}.fish \
+        --zsh "$out"/share/completions/_${finalAttrs.pname}
     '';
 
   # Disable impure integration tests
@@ -106,13 +92,16 @@ rustPlatform.buildRustPackage {
 
   meta = {
     description = "CLI to manage OAuth 2.0 tokens";
-    mainProgram = "ortie";
-    homepage = "https://github.com/pimalaya/ortie";
-    changelog = "https://github.com/pimalaya/ortie/blob/v${version}/CHANGELOG.md";
+    mainProgram = finalAttrs.pname;
+    homepage = "https://github.com/pimalaya/${finalAttrs.pname}";
+    changelog = "https://github.com/pimalaya/${finalAttrs.pname}/releases/${finalAttrs.src.tag}";
     license = with lib.licenses; [
       asl20
       mit
     ];
-    maintainers = with lib.maintainers; [ soywod ];
+    maintainers = with lib.maintainers; [
+      soywod
+      bobberb
+    ];
   };
-}
+})
