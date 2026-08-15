@@ -7,24 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-08-15
+
 ### Added
 
 - Added the `configure` command (alias `wizard`), running the account wizard by name.
 
-  A bare `ortie` and any command needing an account now offer it when they find no configuration, behind a welcome naming the file they looked for. That offer is a hook rather than a gate: the command carries on afterwards either way. Nothing prompts when stdin is not a terminal or `--json` is set.
+  A bare `ortie` and any command needing an account offer it when they find no configuration, behind a welcome naming the file they looked for. The offer is a hook rather than a gate: the command carries on afterwards either way. Nothing prompts when stdin is not a terminal or `--json` is set.
 
 - Added the `ORTIE_CONFIG` environment variable, read like `-c`, both now accepting a `:`-delimited list.
 - Added the shared Pimalaya help footer, pointing at the bug tracker and the sponsoring page.
 
 ### Changed
 
-- A bare `ortie` now shows the help when a configuration exists, instead of always running the wizard. With no configuration it offers to create one, and `--account` with no subcommand shows the help too.
+- Changed a bare `ortie` to show the help when it finds a configuration, instead of always running the wizard.
 
-- The wizard no longer asks where to save: it writes where `-c` or `ORTIE_CONFIG` pointed, or `$XDG_CONFIG_HOME/ortie/config.toml`. The account is still printed before the save is offered, and an existing file is still appended to rather than overwritten, after confirmation. The generated account now takes a name the configuration does not already hold, suffixed until free, and claims `default = true` only when no other account does.
+  With no configuration it offers to create one, and `--account` with no subcommand shows the help too.
 
-- The three account resolution failures now name what is missing: the configuration path that was read, the accounts the configuration holds, and the two ways to pick a default. They used to read `Config file not found` and `Account not found`.
+- Dropped the wizard's save-path prompt, writing where `-c` or ORTIE_CONFIG pointed, or to config.toml under $XDG_CONFIG_HOME/ortie.
 
-- Bumped pimalaya-stream to 0.2, whose only change here is the removal of its SASL module: this crate uses the TLS options and the blocking stream, neither of which moved.
+  The account is still printed before the save is offered, and an existing file is still appended to rather than overwritten, after confirmation. The generated account takes a name the configuration does not already hold, suffixed until free, and claims `default = true` only when no other account does.
+
+- Named what is missing in the three account resolution failures: the configuration path read, the accounts it holds, and the two ways to pick a default.
+
+  They used to read Config file not found and Account not found.
+
+- Bumped io-pim-discovery to 0.6 and pimalaya-stream to 0.2.
 
 ## [2.1.0] - 2026-08-11
 
@@ -47,7 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A provider `invalid_client` on the JWT kind now hints that the certificate credential may be expired and need renewal.
 
 - Added a welcome banner to the wizard, on stderr, framing what ortie is and where every field is documented.
-- Added a keyring entry prompt to the wizard's storage step, seeded with the account name and used verbatim, matching the Himalaya wizard, instead of being namespaced under `ortie/` on your behalf.
+- Added a keyring entry prompt to the wizard's storage step, seeded with the account name and used verbatim.
+
+  It matches the Himalaya wizard, where the entry used to be namespaced under `ortie/` on your behalf.
+
 - Offered to save the wizard's account to a config file, defaulting to `$XDG_CONFIG_HOME/ortie/config.toml`.
 
   The account is printed first and the save comes after it, so the prompt decides one thing only and declining leaves you the printed fragment. An existing file is appended to, never rewritten: the fragment is one `[accounts.<name>]` table, so the accounts and comments already in it are untouched. Appending to a file that already holds something is confirmed first, naming the path. A redirected stdout (or `--json`) prints without prompting at all, so `ortie >> <config>` is unchanged.
@@ -61,7 +72,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Bumped io-oauth to 0.2.1, for the RFC 7523 support behind its `jwt-bearer` feature, and io-pim-discovery to 0.5, for the time-bounded discovery the wizard now runs.
-- A refreshed or issued token now stamps its issuance time from the local clock (instead of relying on the server `Date` header), and a missing `expires_in` defaults to one hour, so auto-refresh stays reliable across a long-lived session.
+- Stamped a refreshed or issued token with the local clock instead of relying on the server `Date` header.
+
+  A missing `expires_in` defaults to one hour, so auto-refresh stays reliable across a long-lived session.
+
 - Emitted keyring read commands as an exec-style array instead of a shell string, so no shell reinterprets an entry name.
 
   Write commands stay shell lines, since some rely on shell features (`$(cat)` on macOS), as do commands typed by hand.
@@ -91,7 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Its state and PKCE verifier are single quoted and attached to their flag with `=`, so a value starting with `-` is not read as a flag and one starting with `~` is not expanded by your shell.
 
-- Trimmed auth-code resume input; omitted redirect/state/PKCE bodies from resume errors.
+- Trimmed the auth-code resume input.
+- Omitted the redirect, state and PKCE bodies from resume errors.
 
 ### Removed
 
@@ -126,7 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the `extras` account config table.
 
-  Parameters forwarded verbatim to the authorization request, for provider-specific knobs like Google's `access_type` / `prompt`, `login_hint`, or the RFC 8707 `resource` indicator.
+  Parameters forwarded verbatim to the authorization request, for provider-specific options like Google's `access_type` and `prompt`, `login_hint`, or the RFC 8707 `resource` indicator.
 
 - Added the token issuance time to the `token inspect` output.
 
@@ -162,11 +177,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Replaced default TLS feature `native-tls` by `rustls-ring`. Native TLS makes release process a bit more complicated and heavier static binaries. Rustls + Ring seems to be a better choice.
+- Replaced the default TLS feature `native-tls` by `rustls-ring`.
+
+  Native TLS complicates the release process and produces heavier static binaries.
 
 ### Removed
 
-- Removed direct keyring support. Use commands instead. The reason is that keyring support has always been a bit blurry for users. It's hard to know what it truly does behind the scene. Plus it increases the complexity. The same way Ortie CLI exports OAuth logic and simplies usage inside tools, [Mimosa CLI](https://github.com/pimalaya/mimosa) does the same for passwords and keyring.
+- Removed direct keyring support, in favour of storage commands.
+
+  What keyring support did behind the scenes was never clear to users, and it added complexity for it. A credential provider CLI does the same job, the way ortie itself exports the OAuth logic for other tools to call.
 
 ## [1.0.0] - 2026-02-12
 
@@ -200,7 +219,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#3]: https://github.com/pimalaya/ortie/issues/3
 [#4]: https://github.com/pimalaya/ortie/issues/4
 
-[unreleased]: https://github.com/pimalaya/ortie/compare/v2.1.0...master
+[unreleased]: https://github.com/pimalaya/ortie/compare/v2.2.0...master
+[2.2.0]: https://github.com/pimalaya/ortie/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/pimalaya/ortie/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/pimalaya/ortie/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/pimalaya/ortie/compare/v1.0.0...v1.1.0

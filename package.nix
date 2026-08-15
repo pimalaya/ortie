@@ -40,14 +40,14 @@ rustPlatform.buildRustPackage (finalAttrs: {
   inherit buildNoDefaultFeatures;
 
   pname = "ortie";
-  version = "2.1.0";
-  cargoHash = "sha256-ZAW+Coyv1DVmF2HWr7CmFMtQT9hNaS+1koWoZCJ+Wsc=";
+  version = "2.2.0";
+  cargoHash = "";
 
   src = fetchFromGitHub {
     owner = "pimalaya";
     repo = finalAttrs.pname;
     tag = "v${finalAttrs.version}";
-    hash = "sha256-5KRXPIDYBfF/2fNnrJur8WdfLYvgtJWlTWA7YD8yYWg=";
+    hash = "";
   };
 
   env = {
