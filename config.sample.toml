@@ -6,13 +6,13 @@
 #   - $HOME/.config/ortie/config.toml
 #   - $HOME/.ortierc
 #
-# Override with `ortie -c <PATH>`, repeated once per file when you keep
-# several: the first one is the base and the rest are deep-merged on top of it.
+# Override with `ortie -c <PATH>` or `ORTIE_CONFIG=<PATH>`, both accepting a
+# `:`-delimited list: the first one is the base and the rest are deep-merged
+# on top of it.
 #
-# Run bare `ortie` to discover an account and print a ready-to-append config
-# fragment (`ortie >> <path>` appends it directly); this file documents every
-# field. Each `[accounts.<name>]` section declares one OAuth 2.0 account,
-# picked at runtime with `-a <NAME>` (or via the `default = true` flag).
+# Run `ortie configure` to discover an account and write it here; this file
+# documents every field. Each `[accounts.<name>]` section declares one OAuth
+# 2.0 account, picked at runtime with `-a <NAME>` (or via `default = true`).
 # ================================================================================
 
 [accounts.example]

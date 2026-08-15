@@ -18,26 +18,23 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 
 ## Features
 
-- **Account configuration wizard**: run bare, it discovers the grants reachable for an email address and hands you the account, ready to append to your configuration.
-- **Dynamic client registration**: register a public client on the spot, with no provider console, when the provider advertises it.
-- **Authorization code grant**: sign in through the browser, with a built-in server capturing the redirection.
-- **Device authorization grant**: sign in by typing a short code on another device, for hosts without a browser.
-- **Client credentials grants**: machine tokens fully headlessly, authenticated by the client secret or by a signed JWT assertion (Microsoft certificate credentials).
-- **Manual flow completion**: finish a flow by hand, from the URL your browser was sent to, when the redirection server cannot bind.
-- **Token refresh**: renew an expired access token on demand, or automatically when reading it.
-- **PKCE**: S256 by default, following the OAuth 2.1 posture; opt out for servers that reject it.
-- **Extra authorization parameters**: forward provider-specific options (offline access, login hints, resource indicators) verbatim.
-- **Token storage**: read and write tokens through your own shell commands, wiring into any credential manager.
-- **Hooks**: run a shell command or raise a system notification on token issuance and refresh, split by outcome.
-- **Persistent session**: unlock the secret store once, then answer token commands over stdin/stdout.
-- **JSON output**: machine-readable discovery and token commands, for scripts.
-- Full standard, blocking client with **TLS** support:
-  - [Rustls](https://crates.io/crates/rustls) with ring crypto (requires `rustls-ring` feature, enabled by default)
-  - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)
-  - [Native TLS](https://crates.io/crates/native-tls) (requires `native-tls` feature)
+- **Configuration wizard**: discovers your provider's grants and writes the account for you.
+- **Dynamic client registration**: registers a public client on the spot, no provider console.
+- **Authorization code grant**: browser sign-in, with a built-in server catching the redirection.
+- **Device authorization grant**: a short code typed on another device, for hosts with no browser.
+- **Client credentials grants**: headless machine tokens, by client secret or signed JWT assertion.
+- **Manual completion**: finish a flow by hand when the redirection server cannot bind.
+- **Token refresh**: on demand, or automatically when the token is read.
+- **PKCE**: S256 by default, following the OAuth 2.1 posture.
+- **Extra parameters**: provider-specific authorization parameters forwarded verbatim.
+- **Token storage**: read and write tokens through your own shell commands.
+- **Hooks**: a shell command or a desktop notification on issuance and refresh.
+- **Persistent session**: unlock the secret store once, then answer token commands over stdin.
+- **JSON output**: `--json` on every data command, for scripts.
+- **TLS**: [rustls](https://crates.io/crates/rustls) with ring (`rustls-ring`, default) or aws (`rustls-aws`) crypto, or [native-tls](https://crates.io/crates/native-tls) (`native-tls`).
 
 > [!TIP]
-> Ortie uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional functionality; the default set is declared in Cargo.toml.
+> Ortie is written in [Rust](https://www.rust-lang.org/) and uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional functionality. The default feature set is declared in [Cargo.toml](./Cargo.toml).
 
 ## Coverage
 
@@ -118,23 +115,13 @@ nix run
 
 ## Configuration
 
-Run ortie with no argument to launch the configuration wizard. From one email address (or a bare domain, or an issuer URL) it discovers the grants your provider offers, walks you through the application, the scopes it may request and the token storage, then prints the account and offers to append it to your config file. It configures only what it can discover: when nothing is found it stops and points at the sample configuration rather than asking you to type endpoints by hand.
+Run `ortie` with no command: it offers to generate a first account, which `ortie configure` does again later. From an email address, a domain or an issuer URL it discovers the grants your provider offers, walks you through the application, the scopes and the token storage, then appends the account to your configuration. What it cannot discover it does not ask for: the annotated [config.sample.toml](./config.sample.toml) is the reference for the rest. Run `ortie auth get` afterwards to authorize the account and store its first token.
 
-An existing file is appended to, never rewritten, and never without confirmation. Prompts render on stderr and stdout carries nothing but the fragment, so `ortie >> ~/.config/ortie/config.toml` works just as well.
+A configuration is loaded from the first valid path among $XDG_CONFIG_HOME/ortie/config.toml, $HOME/.config/ortie/config.toml and $HOME/.ortierc. Override it with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`, `:`-separated to deep-merge several files on top of the first.
 
-Run `ortie auth get` afterwards to authorize the account and store its first token.
+An OAuth 2.0 application is needed too. The wizard offers three, most preferred first: dynamic registration when the provider advertises it, a public application ([Thunderbird credentials](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs) cover most consumer providers), or your own, left as an empty `client-id` to fill in.
 
-A configuration is loaded from the first valid path among:
-
-- `$XDG_CONFIG_HOME/ortie/config.toml`
-- `$HOME/.config/ortie/config.toml`
-- `$HOME/.ortierc`
-
-Override the path with `-c <PATH>`, repeated once per file when you keep several: the first one is the base and the rest are deep-merged on top, which is how a public config and a private one stay separate. The full field reference lives in [config.sample.toml](./config.sample.toml); ready-made per-provider blocks follow below.
-
-You may also need a registered OAuth 2.0 application. The wizard offers three, most preferred first: dynamic registration when your provider advertises it (Fastmail does), a public application (Thunderbird credentials cover most consumer providers), or your own, which it leaves as an empty `client-id` for you to fill in. Public Thunderbird credentials are listed at [github.com/mozilla](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs).
-
-Ready-made blocks for common providers follow. The wizard fills most of them in for you; they are kept here for manual setups and for Microsoft Graph, which the wizard does not cover. Drop the relevant block under your `[accounts.<name>]` table and fill in the client credentials.
+Ready-made blocks for common providers follow, for manual setups and for Microsoft Graph, which the wizard does not cover. Drop one under your `[accounts.<name>]` table and fill in the client credentials.
 
 ### Google
 
@@ -145,9 +132,9 @@ scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com/"]
 extras.access_type = "offline"
 ```
 
-Use these current endpoints, not the legacy `o/oauth2/auth` / `www.googleapis.com/oauth2/v3/token` pair, which Google can reject at consent with "This app is blocked"; the discovery wizard already fills the current ones. Gmail and CardDAV are sensitive scopes, so an unverified own application only works for accounts listed as test users on its OAuth consent screen; the public Thunderbird application below is verified.
+Use these endpoints, not the legacy `o/oauth2/auth` and `oauth2/v3/token` pair, which Google can reject at consent with "This app is blocked". Gmail and CardDAV being sensitive scopes, an unverified application of your own only works for accounts listed as test users; the Thunderbird one below is verified.
 
-Google splits contacts across two scopes that are not interchangeable: `https://www.googleapis.com/auth/carddav` authorizes the CardDAV endpoint (RFC 6352), while `https://www.googleapis.com/auth/contacts` authorizes the People API, a JSON REST interface. Calendars have no such split, CalDAV being authorized by the plain `https://www.googleapis.com/auth/calendar` scope. A client id is verified for a fixed set of scopes, so asking the Thunderbird application (registered for mail, CardDAV and CalDAV) for a People API scope fails at consent.
+Contacts are split across two scopes that are not interchangeable: `auth/carddav` authorizes the CardDAV endpoint, `auth/contacts` the People API. Calendars are not split, CalDAV using the plain `auth/calendar` scope. A client id is verified for a fixed set of scopes, so asking the Thunderbird application for a People API scope fails at consent.
 
 Public Thunderbird application:
 
@@ -175,7 +162,7 @@ endpoints.redirection = "https://localhost"
 
 ### Microsoft Graph
 
-The Thunderbird application above is registered for Outlook IMAP / SMTP, not for the Graph API. To mint Graph tokens (for example Himalaya's msgraph backend), request Graph scopes from a client registered for Graph:
+The Thunderbird application above is registered for Outlook IMAP and SMTP, not for the Graph API. Graph tokens need Graph scopes from a client registered for Graph:
 
 ```toml
 endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
@@ -190,14 +177,14 @@ client-id = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
 endpoints.redirection = "http://localhost"
 ```
 
-Work or school (Entra ID) accounts receive a JWT the Graph API accepts; personal Microsoft accounts may be issued an opaque token the API rejects with InvalidAuthenticationToken, so prefer a work or school account, or your own registered application.
+Work or school (Entra ID) accounts receive a JWT the Graph API accepts. Personal accounts may get an opaque token it rejects with InvalidAuthenticationToken, so prefer a work or school account, or an application of your own.
 
 ### Fastmail
 
-Fastmail advertises RFC 7591 dynamic registration, so bare `ortie` can register a client for you. Two Fastmail specifics the wizard fills in for you, worth knowing about when writing the block by hand:
+Fastmail advertises RFC 7591 dynamic registration, so bare `ortie` can register a client for you. Two specifics it fills in, worth knowing when writing the block by hand:
 
-1. RFC 8707 resource: Fastmail's authorize endpoint rejects the request with `invalid_target` (no consent screen, an instant bounce) unless a resource indicator is present. Its value is the JMAP session URL.
-2. Redirect: Fastmail's dynamic registration accepts only a reverse-DNS private-use scheme (it refuses http and loopback), so the wizard pins `endpoints.redirection = "org.pimalaya.ortie://redirect"`. A desktop browser cannot route that scheme back to ortie, so `auth get` prints a manual `auth resume` command to finish the flow by hand.
+1. RFC 8707 resource: without a resource indicator, the authorize endpoint bounces the request with `invalid_target`, before any consent screen. Its value is the JMAP session URL.
+2. Redirect: dynamic registration accepts only a reverse-DNS private-use scheme, `org.pimalaya.ortie://redirect`. No desktop browser routes it back, so `auth get` prints a manual `auth resume` command.
 
 ```toml
 endpoints.authorization = "https://api.fastmail.com/oauth/authorize"
@@ -206,25 +193,28 @@ scopes = ["urn:ietf:params:oauth:scope:mail", "urn:ietf:params:oauth:scope:conta
 extras.resource = "https://api.fastmail.com/jmap/session"
 ```
 
-The wizard selects all four advertised scopes by default (Fastmail cannot complete on a desktop anyway; trim them in the scope multi-select if you want). The pre-registered Thunderbird application offered by the wizard covers Fastmail with a loopback redirect instead, avoiding the manual resume; see [cairn/spec/provider-quirks.md](./cairn/spec/provider-quirks.md) and [cairn/changes/discovery-layering/](./cairn/changes/discovery-layering/) for why dynamic registration forces the private-use scheme.
+The wizard selects all four advertised scopes by default; trim them in the multi-select. The Thunderbird application it also offers covers Fastmail with a loopback redirect, avoiding the manual resume.
 
 ## Usage
 
-Every command and subcommand is documented through `--help`. The common flows:
+Configure an account, authorize it, then read its token:
 
 ```sh
-ortie                       # discover an account and print a config fragment
-ortie auth get              # request a first access token through the browser
-ortie auth resume <url>     # finish the flow by hand when the redirection fails
-ortie token show            # print the stored access token
-ortie token refresh         # force a refresh
-ortie token inspect         # show token metadata (type, scopes, expiry)
-ortie repl                  # persistent session: unlock once, answer token commands
+ortie configure                        # discover a provider and write the account
+ortie auth get                         # authorize and store a first token
+ortie auth resume <URI|DEVICE_CODE>    # finish a flow by hand
+ortie token show                       # print the stored access token
+ortie token refresh                    # force a refresh
+ortie token inspect                    # print type, scopes and expiry
 ```
 
-Logs go to stderr; `--log-level` and `--log-file` control verbosity and destination, and `--json` switches output to machine-readable objects.
+`ortie repl` answers those `token` commands from stdin instead, reading the secret store once so a keyring is unlocked one time rather than per call:
 
-`ortie repl` starts a persistent session for one account (the `-a` or default one). It reads the secret store once and holds the token in memory, then answers `token` commands read line by line from stdin, so the keyring is unlocked a single time instead of on every call. On a terminal it shows a prompt; when piped it writes one result per line on stdout (errors on stderr), so an application can drive it (`printf 'token show\n' | ortie repl`) without reimplementing the OAuth flow.
+```sh
+printf 'token show\n' | ortie repl
+```
+
+Every command and every flag is documented behind `--help`. `--json` switches data commands to machine-readable objects, and logs go to stderr, `--log-level <LEVEL>` and `--log-file <PATH>` setting their verbosity and destination.
 
 ## Alternatives
 

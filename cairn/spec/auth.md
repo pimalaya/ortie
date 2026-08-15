@@ -6,7 +6,7 @@ status: current
 
 # Auth
 
-The `auth` command tree obtains tokens by running the grant configured on the account: `get` initiates the grant, `resume` finishes a flow that could not complete automatically. Both dispatch on the account's configured grant. The wizard that produces an account in the first place is not part of this tree; bare `ortie` runs it (see the discovery capability).
+The `auth` command tree obtains tokens by running the grant configured on the account: `get` initiates the grant, `resume` finishes a flow that could not complete automatically. Both dispatch on the account's configured grant. The wizard that produces an account in the first place is not part of this tree; `ortie configure` runs it (see the discovery capability).
 
 ### Requirement: Authorization code grant
 On an authorization-code account, `auth get` SHALL build the authorization URL (with PKCE per the account's posture, a generated `state`, and any `extras`), open it, and capture the redirect on an ephemeral `127.0.0.1` loopback listener, then exchange the code, write storage, and fire the on-issue hooks.
