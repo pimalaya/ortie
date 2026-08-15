@@ -40,11 +40,12 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     fmt, fs,
-    io::{IsTerminal, Write, stdout},
-    path::Path,
+    io::{IsTerminal, Write, stdin, stdout},
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result, bail};
+use clap::Parser;
 use pimalaya_cli::{printer::Printer, prompt, spinner::Spinner};
 use serde::Serialize;
 use url::Url;
@@ -53,23 +54,51 @@ use io_pim_discovery::{
     compose::config::DiscoveryAuthMethod, rfc8414::DiscoveryOauthServerMetadata,
 };
 
-use crate::wizard::search::Discovered;
+use pimalaya_config::toml::TomlConfig;
+
+use crate::{config::Config, wizard::search::Discovered};
 
 /// The documented sample configuration, shown in the welcome banner
 /// and pointed at when discovery finds nothing to configure
 /// automatically.
-const CONFIG_SAMPLE_URL: &str = "https://github.com/pimalaya/ortie/blob/master/config.sample.toml";
+pub const CONFIG_SAMPLE_URL: &str =
+    "https://github.com/pimalaya/ortie/blob/master/config.sample.toml";
+
+/// Configure an account interactively.
+///
+/// This command discovers an OAuth 2.0 account from an email address (or
+/// a bare domain, or an issuer URL), prints the resulting account, then
+/// offers to save it to the configuration file. Anything discovery does
+/// not cover is written by hand.
+#[derive(Debug, Parser)]
+pub struct ConfigureCommand;
+
+impl ConfigureCommand {
+    /// Runs the wizard, then prints the account and offers to save it.
+    ///
+    /// No welcome: whoever typed the command knows what it does. The
+    /// banner belongs to the offer a missing configuration raises, which
+    /// is where the wizard meets someone who did not ask for it.
+    pub fn execute(self, printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
+        if !printer.is_json() && !stdin().is_terminal() {
+            bail!(
+                "Configuring needs a terminal to prompt on, \
+                 write the configuration by hand instead: {CONFIG_SAMPLE_URL}"
+            );
+        }
+
+        run(printer, config_paths)
+    }
+}
 
 /// Runs the wizard and prints the resulting account as a
 /// ready-to-append TOML document on stdout.
 ///
-/// A welcome message renders on stderr first (skipped in JSON mode) to
-/// frame what Ortie is and what the wizard does, so nothing but the
-/// fragment lands on stdout.
-pub fn run(printer: &mut impl Printer) -> Result<()> {
-    if !printer.is_json() {
-        print_welcome();
-    }
+/// The fragment reaches stdout before the save is offered, so the choice
+/// of where it goes is made having seen what is being placed.
+fn run(printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
+    let path = Config::target_path(config_paths)?;
+    let existing = ExistingConfig::read(&path)?;
 
     let input = prompt::text("Email address:", None)?;
     let input = input.trim();
@@ -80,9 +109,14 @@ pub fn run(printer: &mut impl Printer) -> Result<()> {
     // NOTE: the account name is just the TOML table key, so it is
     // derived from the input rather than prompted; the user renames it
     // by hand.
-    let account_name = default_account_name(input);
+    let account_name = account_name(&default_account_name(input), existing.as_ref());
     let mut config = configure_discovery(input)?;
     config.name = account_name;
+
+    // NOTE: a second `default = true` would make the account every
+    // command picks depend on map ordering, so the generated one claims
+    // the default only when no other account does.
+    config.default = !existing.as_ref().is_some_and(|config| config.has_default);
 
     // NOTE: fill the defaults a provider is known to need but discovery
     // does not yet surface (Fastmail's RFC 8707 resource and its
@@ -118,7 +152,66 @@ pub fn run(printer: &mut impl Printer) -> Result<()> {
         return Ok(());
     }
 
-    offer_save(&config)
+    offer_save(&config, &path)
+}
+
+/// What a configuration file already on disk constrains in the generated
+/// account: the names it takes, and whether one of its accounts already
+/// claims the default.
+struct ExistingConfig {
+    names: Vec<String>,
+    has_default: bool,
+}
+
+impl ExistingConfig {
+    /// Reads the configuration at the given path, or `None` when no file
+    /// is there.
+    ///
+    /// A file that fails to parse is an error rather than a `None`:
+    /// appending to a broken document would bury the actual problem
+    /// under a second one.
+    fn read(path: &Path) -> Result<Option<Self>> {
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let config = Config::from_paths(&[path.to_path_buf()])
+            .with_context(|| format!("Read the configuration at {}", path.display()))?;
+
+        Ok(Some(Self {
+            names: config.accounts.keys().cloned().collect(),
+            has_default: config.accounts.values().any(|account| account.default),
+        }))
+    }
+}
+
+/// The name discovery proposes, suffixed until the configuration does
+/// not already hold it.
+///
+/// Not prompted: the name is only the TOML table key, and whoever wants
+/// another one renames it in the file. It still has to be free, since a
+/// second `[accounts.<name>]` table makes the whole document fail to
+/// parse, taking the accounts that used to work down with it.
+fn account_name(base: &str, existing: Option<&ExistingConfig>) -> String {
+    let taken = existing
+        .map(|config| config.names.as_slice())
+        .unwrap_or(&[]);
+
+    if !taken.iter().any(|name| name == base) {
+        return base.to_string();
+    }
+
+    let mut suffix = 2;
+
+    loop {
+        let name = format!("{base}-{suffix}");
+
+        if !taken.contains(&name) {
+            return name;
+        }
+
+        suffix += 1;
+    }
 }
 
 /// Explains, on stderr, the empty `client-id` a custom application
@@ -138,22 +231,34 @@ fn print_missing_application() {
     eprintln!();
 }
 
-/// Prints a welcome banner on stderr framing the project and the
-/// wizard, so bare `ortie` explains itself before dropping into
-/// prompts. On stderr so it never pollutes a redirected fragment.
-fn print_welcome() {
+/// Frames Ortie, names the configuration file that is missing, and
+/// points at the sample for everything the wizard does not cover.
+///
+/// Printed before the offer a bare `ortie` or a command needing an
+/// account raises when it finds no configuration, so the wizard
+/// introduces itself to someone who did not ask for it. `configure`
+/// skips it, since it was asked for by name.
+///
+/// On stderr, so a redirected stdout holds the fragment alone.
+pub fn print_welcome(path: &Path) {
     eprintln!();
     eprintln!("Welcome to Ortie, the CLI to manage OAuth 2.0 tokens.");
     eprintln!();
     eprintln!("Ortie runs the OAuth 2.0 grant your provider expects and keeps the");
     eprintln!("resulting access token fresh, so any tool that needs one just reads");
-    eprintln!("it from your credential manager. It needs one account to work with.");
+    eprintln!("it from your credential manager. It needs one account to work with,");
+    eprintln!("and no configuration file was found at:");
     eprintln!();
-    eprintln!("This wizard sets that account up for you, from your email address");
-    eprintln!("alone. To write it by hand instead, every field is documented in the");
-    eprintln!("sample configuration:");
+    eprintln!("  {}", path.display());
+    eprintln!();
+    eprintln!("The wizard sets that account up for you, from your email address");
+    eprintln!("alone. To write it by hand instead, every field is documented at:");
     eprintln!();
     eprintln!("  {CONFIG_SAMPLE_URL}");
+    eprintln!();
+    eprintln!("At anytime, you can create a new account with the command:");
+    eprintln!();
+    eprintln!("  ortie configure");
     eprintln!();
 }
 
@@ -169,17 +274,14 @@ fn print_welcome() {
 /// untouched. That is the same thing `ortie >> <config>` does, done
 /// for the user, and it is confirmed before it happens since the file
 /// is one the user already owns.
-fn offer_save(config: &OauthConfig) -> Result<()> {
+fn offer_save(config: &OauthConfig, path: &Path) -> Result<()> {
     eprintln!();
 
-    if !prompt::bool("Save this configuration to a file?", true)? {
+    let question = format!("Save this configuration to {}?", path.display());
+
+    if !prompt::bool(question, true)? {
         return Ok(());
     }
-
-    let default = default_config_path();
-    let path = prompt::text("Configuration file path:", default.as_deref())?;
-    let path = shellexpand::full(path.trim())?.into_owned();
-    let path = Path::new(&path);
 
     // NOTE: a config rarely ends on a blank line, and two tables glued
     // together read as one, so separate them when appending.
@@ -229,16 +331,6 @@ fn offer_save(config: &OauthConfig) -> Result<()> {
     }
 
     Ok(())
-}
-
-/// The default config path (`$XDG_CONFIG_HOME/ortie/config.toml`),
-/// used to seed the save prompt; `None` when no config dir resolves.
-fn default_config_path() -> Option<String> {
-    let path = dirs::config_dir()?
-        .join(env!("CARGO_PKG_NAME"))
-        .join("config.toml");
-
-    Some(path.to_string_lossy().into_owned())
 }
 
 /// Runs the discovery flow for an email, a bare domain, or an issuer
@@ -337,6 +429,10 @@ fn first_label(host: &str) -> String {
 pub struct OauthConfig {
     /// The account name, heading the `[accounts.<name>]` table.
     pub name: String,
+    /// Whether this account is picked when none is named. Claimed only
+    /// when no other account already does.
+    #[serde(skip_serializing_if = "core::ops::Not::not")]
+    pub default: bool,
     /// The OAuth 2.0 client identifier, when already registered.
     /// Always serialized, empty included, so both output shapes carry
     /// the placeholder the user fills in by hand.
@@ -371,6 +467,7 @@ impl OauthConfig {
     /// grant fills in.
     pub fn empty() -> Self {
         Self {
+            default: false,
             name: String::new(),
             client_id: None,
             client_secret: None,
@@ -425,6 +522,10 @@ impl From<Discovered> for OauthConfig {
 impl fmt::Display for OauthConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "[accounts.{}]", toml_key(&self.name))?;
+
+        if self.default {
+            writeln!(f, "default = true")?;
+        }
 
         let client_id = self.client_id.as_deref().unwrap_or_default();
         writeln!(f, "client-id = {}", toml_string(client_id))?;
@@ -709,6 +810,7 @@ mod tests {
     #[test]
     fn the_fragment_carries_no_leading_comment() {
         let mut config = OauthConfig {
+            default: true,
             name: "posteo".to_string(),
             client_id: Some("client".to_string()),
             grant: Some("authorization-code"),
@@ -865,5 +967,119 @@ mod tests {
 
         assert!(config.extras.is_empty());
         assert!(config.scopes.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod frame_tests {
+    use std::{
+        env, fs,
+        path::PathBuf,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
+
+    use super::*;
+
+    static NEXT_CONFIG: AtomicUsize = AtomicUsize::new(0);
+
+    /// A path in the temporary directory no other test writes to.
+    fn config_path() -> PathBuf {
+        let id = NEXT_CONFIG.fetch_add(1, Ordering::Relaxed);
+        env::temp_dir().join(format!("ortie-configure-{id}.toml"))
+    }
+
+    #[test]
+    fn a_taken_name_gets_a_suffix() {
+        let existing = ExistingConfig {
+            names: vec!["posteo".to_string(), "posteo-2".to_string()],
+            has_default: true,
+        };
+
+        assert_eq!(account_name("posteo", None), "posteo");
+        assert_eq!(account_name("posteo", Some(&existing)), "posteo-3");
+        assert_eq!(account_name("gmail", Some(&existing)), "gmail");
+    }
+
+    #[test]
+    fn a_missing_configuration_constrains_nothing() {
+        let existing = ExistingConfig::read(&config_path()).expect("read a missing config");
+
+        assert!(existing.is_none());
+    }
+
+    #[test]
+    fn an_existing_configuration_reports_its_names_and_default() {
+        let path = config_path();
+        fs::write(
+            &path,
+            "# my accounts\n[accounts.work]\ndefault = true\nclient-id = \"a\"\nstorage.read.command = [\"true\"]\nstorage.write.command = \"true\"\n",
+        )
+        .expect("write the existing config");
+
+        let existing = ExistingConfig::read(&path)
+            .expect("read the existing config")
+            .expect("an existing config");
+
+        assert_eq!(existing.names, ["work"]);
+        assert!(existing.has_default);
+
+        fs::remove_file(&path).expect("remove the config");
+    }
+
+    #[test]
+    fn an_appended_account_keeps_the_existing_one() {
+        let path = config_path();
+
+        // No trailing newline, the shape an appended block has to survive
+        // without merging into the last line.
+        fs::write(
+            &path,
+            "# my accounts\n[accounts.work]\ndefault = true\nclient-id = \"a\"\nstorage.read.command = [\"true\"]\nstorage.write.command = \"true\"",
+        )
+        .expect("write the existing config");
+
+        let existing = ExistingConfig::read(&path)
+            .expect("read the existing config")
+            .expect("an existing config");
+
+        // The second account never claims a default the first one holds.
+        let mut config = OauthConfig::empty();
+        config.name = account_name("work", Some(&existing));
+        config.default = !existing.has_default;
+        config.client_id = Some("b".to_string());
+        config.storage = Some(Storage {
+            read: StorageEntry {
+                command: StorageCommand::Argv(vec!["true".to_string()]),
+            },
+            write: StorageEntry {
+                command: StorageCommand::Shell("true".to_string()),
+            },
+        });
+
+        let mut file = fs::File::options()
+            .append(true)
+            .open(&path)
+            .expect("open the config");
+        write!(file, "\n{config}").expect("append the generated account");
+        drop(file);
+
+        let content = fs::read_to_string(&path).expect("read back");
+        let parsed =
+            Config::from_paths(std::slice::from_ref(&path)).expect("parse the appended config");
+
+        assert_eq!(parsed.accounts.len(), 2);
+        assert!(parsed.accounts.contains_key("work-2"));
+
+        // Exactly one default, and the comment is still there.
+        let defaults = parsed
+            .accounts
+            .values()
+            .filter(|account| account.default)
+            .count();
+        assert_eq!(defaults, 1);
+        assert!(parsed.accounts["work"].default);
+        assert!(content.starts_with("# my accounts"));
+
+        fs::remove_file(&path).expect("remove the config");
     }
 }

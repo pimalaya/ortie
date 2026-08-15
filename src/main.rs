@@ -83,10 +83,17 @@ mod repl;
 mod token;
 mod wizard;
 
-use clap::Parser;
-use pimalaya_cli::{error::ErrorReport, log::Logger, printer::StdoutPrinter};
+use std::{
+    io::{IsTerminal, stdin},
+    path::PathBuf,
+};
 
-use crate::cli::Cli;
+use anyhow::Result;
+use clap::{CommandFactory, Parser};
+use pimalaya_cli::{error::ErrorReport, log::Logger, printer::Printer, printer::StdoutPrinter};
+use pimalaya_config::toml::TomlConfig;
+
+use crate::{cli::Cli, config::Config};
 
 fn main() {
     let cli = Cli::parse();
@@ -94,14 +101,52 @@ fn main() {
     Logger::try_init(&cli.log).expect("init logger");
     let mut printer = StdoutPrinter::new(&cli.json);
 
+    let config_paths = cli.config.paths.as_ref();
+    let account_name = cli.account.name.as_deref();
+
     let result = match cli.cmd {
-        Some(cmd) => {
-            let config_paths = cli.config.paths.as_ref();
-            let account_name = cli.account.name.as_deref();
-            cmd.execute(&mut printer, config_paths, account_name)
-        }
-        None => wizard::run(&mut printer),
+        Some(cmd) => cmd.execute(&mut printer, config_paths, account_name),
+        None => meet_bare_invocation(&mut printer, config_paths, account_name.is_some()),
     };
 
     ErrorReport::eval(&mut printer, result)
+}
+
+/// Meets a bare `ortie`, which is where a newcomer lands.
+///
+/// With no command there is nothing to run: a missing configuration
+/// raises the offer, and an existing one gets the help, which is what
+/// someone already set up is asking for. A script or a JSON caller gets
+/// the help too, since neither can answer a prompt. A file that exists
+/// but fails to parse counts as a configuration, so the offer never
+/// proposes to write over a broken one: the parse error surfaces when a
+/// real command reads it.
+///
+/// `--account` names an account to act on, so with no subcommand it is a
+/// half-typed command rather than a first run: it gets the help, which
+/// points at the commands, instead of an offer to create an account.
+fn meet_bare_invocation(
+    printer: &mut StdoutPrinter,
+    config_paths: &[PathBuf],
+    named_account: bool,
+) -> Result<()> {
+    let configured = Config::from_paths_or_default(config_paths)
+        .ok()
+        .flatten()
+        .is_some();
+
+    if !configured && !named_account && !printer.is_json() && stdin().is_terminal() {
+        let path = Config::target_path(config_paths)?;
+
+        // NOTE: a bare invocation has nothing to run after the offer, so
+        // a declined one falls back to the help. The wizard already says
+        // what to run next when it ran.
+        if cli::offer_configuration(printer, config_paths, &path)? {
+            return Ok(());
+        }
+    }
+
+    Cli::command().print_help()?;
+
+    Ok(())
 }

@@ -38,17 +38,17 @@ tempfile = "3"
 [dependencies]
 anyhow = "1"
 base64 = "0.23"
-clap = { version = "4.4", features = ["derive", "wrap_help"] }
+clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
 dirs = "6.0"
 humantime = "2.2"
-io-oauth = { version = "0.2.1", default-features = false, features = ["client", "jwt-bearer"] }
-io-pim-discovery = { version = "0.5", default-features = false, features = ["stream", "autoconfig", "pacc", "rfc6186", "rfc6764", "rfc8620", "rfc8414"] }
+io-oauth = { version = "0.2", default-features = false, features = ["client", "jwt-bearer"] }
+io-pim-discovery = { version = "0.6", default-features = false, features = ["stream", "autoconfig", "pacc", "rfc6186", "rfc6764", "rfc8620", "rfc8414"] }
 log = "0.4"
 notify-rust = { version = "4.18", default-features = false, features = ["d"], optional = true }
 open = "5.3"
 pimalaya-cli = { version = "0.2", default-features = false, features = ["terminal", "prompt", "spinner", "wizard"] }
 pimalaya-config = { version = "0.1", default-features = false, features = ["toml", "secret"] }
-pimalaya-stream = { version = "0.1", default-features = false, features = ["std"] }
+pimalaya-stream = { version = "0.2", default-features = false, features = ["std"] }
 secrecy = { version = "0.10", default-features = false, features = ["serde"] }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 shellexpand = "3.1"

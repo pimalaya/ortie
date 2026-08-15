@@ -18,8 +18,12 @@
 }:
 
 let
+  nativeTls = builtins.elem "native-tls" buildFeatures;
+  notify = builtins.elem "notify" buildFeatures;
+
+  # dbus calls libgcc outline atomics that the static aarch64 link cannot
+  # resolve (__aarch64_ldset4_sync & co), so inline them instead.
   dbus' =
-    # undefined reference in _dbus_atomic_* functions
     if stdenv.hostPlatform.isLinux && stdenv.hostPlatform.isAarch64 then
       dbus.overrideAttrs (old: {
         env = (old.env or { }) // {
@@ -46,8 +50,16 @@ rustPlatform.buildRustPackage (finalAttrs: {
     hash = "sha256-5KRXPIDYBfF/2fNnrJur8WdfLYvgtJWlTWA7YD8yYWg=";
   };
 
-  # OpenSSL should not be provided by vendors, not even on Windows
-  env.OPENSSL_NO_VENDOR = 1;
+  env = {
+    # pkg-config hands the linker libdbus but no rpath, leaving a binary that
+    # cannot find it: not in postInstall, which runs it, nor once installed.
+    NIX_LDFLAGS = lib.optionalString (notify && !stdenv.hostPlatform.isWindows) (
+      "-rpath " + lib.getLib dbus' + "/lib"
+    );
+
+    # openssl should not be provided by vendors, not even on windows
+    OPENSSL_NO_VENDOR = 1;
+  };
 
   nativeBuildInputs = [
     pkg-config
@@ -55,14 +67,14 @@ rustPlatform.buildRustPackage (finalAttrs: {
   ];
 
   buildInputs =
-    lib.optional (builtins.elem "native-tls" buildFeatures) openssl
-    # On Windows, D-Bus is provided by vendors
-    ++ lib.optional (builtins.elem "notify" buildFeatures && !stdenv.hostPlatform.isWindows) dbus';
+    lib.optional nativeTls openssl
+    # dbus is provided by vendors on windows
+    ++ lib.optional (notify && !stdenv.hostPlatform.isWindows) dbus';
 
   buildFeatures =
     buildFeatures
-    # On Windows, D-Bus is provided by vendors
-    ++ lib.optional (builtins.elem "notify" buildFeatures && stdenv.hostPlatform.isWindows) "vendored";
+    # dbus is provided by vendors on windows
+    ++ lib.optional (notify && stdenv.hostPlatform.isWindows) "vendored";
 
   postInstall =
     let
@@ -87,7 +99,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
         --zsh "$out"/share/completions/_${finalAttrs.pname}
     '';
 
-  # Disable impure integration tests
+  # disable impure integration tests: they bind sockets and spawn processes
   cargoTestFlags = [ "--bins" ];
 
   meta = {

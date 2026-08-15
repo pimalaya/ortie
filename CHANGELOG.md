@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added the `configure` command (alias `wizard`), running the account wizard by name.
+
+  A bare `ortie` and any command needing an account now offer it when they find no configuration, behind a welcome naming the file they looked for. That offer is a hook rather than a gate: the command carries on afterwards either way. Nothing prompts when stdin is not a terminal or `--json` is set.
+
+- Added the `ORTIE_CONFIG` environment variable, read like `-c`, both now accepting a `:`-delimited list.
+- Added the shared Pimalaya help footer, pointing at the bug tracker and the sponsoring page.
+
+### Changed
+
+- A bare `ortie` now shows the help when a configuration exists, instead of always running the wizard. With no configuration it offers to create one, and `--account` with no subcommand shows the help too.
+
+- The wizard no longer asks where to save: it writes where `-c` or `ORTIE_CONFIG` pointed, or `$XDG_CONFIG_HOME/ortie/config.toml`. The account is still printed before the save is offered, and an existing file is still appended to rather than overwritten, after confirmation. The generated account now takes a name the configuration does not already hold, suffixed until free, and claims `default = true` only when no other account does.
+
+- The three account resolution failures now name what is missing: the configuration path that was read, the accounts the configuration holds, and the two ways to pick a default. They used to read `Config file not found` and `Account not found`.
+
+- Bumped pimalaya-stream to 0.2, whose only change here is the removal of its SASL module: this crate uses the TLS options and the blocking stream, neither of which moved.
+
 ## [2.1.0] - 2026-08-11
 
 ### Added
