@@ -70,10 +70,10 @@ pub enum Command {
     Token(TokenCommand),
 
     Repl(ReplCommand),
-
-    #[command(alias = "mans")]
-    Manuals(ManualCommand),
-    Completions(CompletionCommand),
+    #[command(aliases = ["manuals", "mans"])]
+    Manual(ManualCommand),
+    #[command(alias = "completions")]
+    Completion(CompletionCommand),
 }
 
 impl Command {
@@ -96,8 +96,8 @@ impl Command {
                 let account = take_account(printer, config_paths, account_name)?;
                 cmd.execute(printer, account)
             }
-            Self::Manuals(cmd) => cmd.execute(printer, Cli::command()),
-            Self::Completions(cmd) => cmd.execute(printer, Cli::command()),
+            Self::Manual(cmd) => cmd.execute(printer, Cli::command()),
+            Self::Completion(cmd) => cmd.execute(printer, Cli::command()),
         }
     }
 }
