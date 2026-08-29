@@ -115,7 +115,9 @@ nix run
 
 ## Configuration
 
-Run `ortie` with no command: it offers to generate a first account, which `ortie configure` does again later. From an email address, a domain or an issuer URL it discovers the grants your provider offers, walks you through the application, the scopes and the token storage, then appends the account to your configuration. What it cannot discover it does not ask for: the annotated [config.sample.toml](./config.sample.toml) is the reference for the rest. Run `ortie auth get` afterwards to authorize the account and store its first token.
+Run `ortie` with no command and it offers to generate a first account, which `ortie configure` does again later. From an email address, a domain or an issuer URL it discovers the grants your provider offers, then appends the account it walked you through to your configuration.
+
+What it cannot discover it does not ask for: the annotated [config.sample.toml](./config.sample.toml) is the reference for the rest. Run `ortie auth get` afterwards to authorize the account and store its first token.
 
 A configuration is loaded from the first valid path among $XDG_CONFIG_HOME/ortie/config.toml, $HOME/.config/ortie/config.toml and $HOME/.ortierc. Override it with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`, `:`-separated to deep-merge several files on top of the first.
 
@@ -132,9 +134,13 @@ scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com/"]
 extras.access_type = "offline"
 ```
 
-Use these endpoints, not the legacy `o/oauth2/auth` and `oauth2/v3/token` pair, which Google can reject at consent with "This app is blocked". Gmail and CardDAV being sensitive scopes, an unverified application of your own only works for accounts listed as test users; the Thunderbird one below is verified.
+Use these endpoints, not the legacy `o/oauth2/auth` and `oauth2/v3/token` pair, which Google can reject at consent with "This app is blocked".
 
-Contacts are split across two scopes that are not interchangeable: `auth/carddav` authorizes the CardDAV endpoint, `auth/contacts` the People API. Calendars are not split, CalDAV using the plain `auth/calendar` scope. A client id is verified for a fixed set of scopes, so asking the Thunderbird application for a People API scope fails at consent.
+Gmail and CardDAV being sensitive scopes, an unverified application of your own only works for accounts listed as test users. The Thunderbird one below is verified.
+
+Contacts are split across two scopes that are not interchangeable: `auth/carddav` authorizes the CardDAV endpoint, `auth/contacts` the People API. Calendars are not split, CalDAV using the plain `auth/calendar` scope.
+
+A client id is verified for a fixed set of scopes, so asking the Thunderbird application for a People API scope fails at consent.
 
 Public Thunderbird application:
 
@@ -181,7 +187,7 @@ Work or school (Entra ID) accounts receive a JWT the Graph API accepts. Personal
 
 ### Fastmail
 
-Fastmail advertises RFC 7591 dynamic registration, so bare `ortie` can register a client for you. Two specifics it fills in, worth knowing when writing the block by hand:
+Fastmail advertises RFC 7591 dynamic registration, so bare `ortie` registers a client for you. Two specifics it fills in, worth knowing when writing the block by hand:
 
 1. RFC 8707 resource: without a resource indicator, the authorize endpoint bounces the request with `invalid_target`, before any consent screen. Its value is the JMAP session URL.
 2. Redirect: dynamic registration accepts only a reverse-DNS private-use scheme, `org.pimalaya.ortie://redirect`. No desktop browser routes it back, so `auth get` prints a manual `auth resume` command.
@@ -193,7 +199,7 @@ scopes = ["urn:ietf:params:oauth:scope:mail", "urn:ietf:params:oauth:scope:conta
 extras.resource = "https://api.fastmail.com/jmap/session"
 ```
 
-The wizard selects all four advertised scopes by default; trim them in the multi-select. The Thunderbird application it also offers covers Fastmail with a loopback redirect, avoiding the manual resume.
+The wizard selects all four advertised scopes by default, and the multi-select is where you trim them. The Thunderbird application it also offers covers Fastmail with a loopback redirect, avoiding the manual resume.
 
 ## Usage
 
@@ -214,7 +220,7 @@ ortie token inspect                    # print type, scopes and expiry
 printf 'token show\n' | ortie repl
 ```
 
-Every command and every flag is documented behind `--help`. `--json` switches data commands to machine-readable objects, and logs go to stderr, `--log-level <LEVEL>` and `--log-file <PATH>` setting their verbosity and destination.
+Every command and every flag is documented behind `--help`. `--json` switches data commands to machine-readable objects, and logs go to stderr, with `--log-level <LEVEL>` and `--log-file <PATH>` setting their verbosity and destination.
 
 ## Alternatives
 

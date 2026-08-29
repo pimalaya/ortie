@@ -1,18 +1,14 @@
 # ================================================================================
 # `ortie` configuration file.
 #
-# Loaded from the first valid path among:
-#   - $XDG_CONFIG_HOME/ortie/config.toml
-#   - $HOME/.config/ortie/config.toml
-#   - $HOME/.ortierc
+# Loaded from the first valid path among $XDG_CONFIG_HOME/ortie/config.toml,
+# $HOME/.config/ortie/config.toml and $HOME/.ortierc. `ortie -c <PATH>` and
+# `ORTIE_CONFIG=<PATH>` override it, both accepting a `:`-delimited list whose
+# first entry is the base and whose rest are deep-merged on top of it.
 #
-# Override with `ortie -c <PATH>` or `ORTIE_CONFIG=<PATH>`, both accepting a
-# `:`-delimited list: the first one is the base and the rest are deep-merged
-# on top of it.
-#
-# Run `ortie configure` to discover an account and write it here; this file
-# documents every field. Each `[accounts.<name>]` section declares one OAuth
-# 2.0 account, picked at runtime with `-a <NAME>` (or via `default = true`).
+# Each `[accounts.<name>]` section declares one OAuth 2.0 account, picked at
+# runtime with `-a <NAME>` or by `default = true`. `ortie configure` discovers
+# one and writes it here; this file documents every field.
 # ================================================================================
 
 [accounts.example]
@@ -27,8 +23,8 @@ default = true
 
 # OAuth 2.0 client credentials, as registered with your provider.
 #
-# `client-secret` is optional (PKCE-only public clients skip it). When set, it
-# accepts the same shapes as pimalaya-config secrets: `raw`, `command`, `env`.
+# `client-secret` is optional, PKCE-only public clients skipping it, and takes
+# the same shapes as every pimalaya-config secret: `raw`, `command`, `env`.
 client-id = ""
 #client-secret.raw = "secret"
 #client-secret.command = "pass show ortie/example"
@@ -42,10 +38,9 @@ client-id = ""
 #   "client-credentials-jwt" # headless machine flow, JWT-assertion-authenticated (RFC 7523 section 2.2)
 #grant = "authorization-code"
 
-# Credentials of the "client-credentials-jwt" grant, the Microsoft
-# certificate credentials flow: the private key (PKCS#8 or PKCS#1 PEM) signing
-# the JWT assertion, and the matching certificate (PEM or DER), whose SHA-1
-# thumbprint rides as the assertion `x5t` header. Both are re-read at every
+# Credentials of the "client-credentials-jwt" grant: the private key (PKCS#8
+# or PKCS#1 PEM) signing the JWT assertion, and the certificate (PEM or DER)
+# whose SHA-1 thumbprint rides as the `x5t` header. Both are re-read at every
 # mint, so a renewed certificate is picked up without a restart.
 #client-key = "/etc/ortie/example.key.pem"
 #client-certificate = "/etc/ortie/example.crt.pem"
@@ -55,16 +50,15 @@ endpoints.authorization = ""
 #endpoints.device-authorization = ""  # required when grant = "device"
 endpoints.token = ""
 
-# Optional redirection endpoint. When omitted, defaults to
-# `http://127.0.0.1:0` (random port chosen by the OS). Set it explicitly to
-# match a redirect URI registered with the provider (e.g. `http://localhost`).
+# Optional redirection endpoint, defaulting to `http://127.0.0.1:0`, whose
+# port the OS picks. Set it to match a redirect URI the provider pins.
 #endpoints.redirection = "http://localhost"
 
 # OAuth 2.0 scopes granted to the access token.
 scopes = []
 
-# Proof Key for Code Exchange (RFC 7636), used by the authorization code
-# grant. Enabled with the S256 method by default, aligning with OAuth 2.1.
+# Proof Key for Code Exchange (RFC 7636), used by the authorization code grant
+# and enabled with the S256 method by default, aligning with OAuth 2.1.
 #
 # Possible values:
 #   pkce = true    # S256 (same as the default)
@@ -73,11 +67,9 @@ scopes = []
 #   pkce = false   # disable, for servers rejecting PKCE parameters
 #pkce = "s256"
 
-# Extra parameters forwarded verbatim to the authorization request query
-# (authorization-code grant). The device grant does not yet forward extras
-# (io-oauth device request params have no extras table).
-# Keys are wire parameter names (no kebab-case renaming). This is the place
-# for provider-specific options:
+# Extra parameters forwarded verbatim to the authorization request query,
+# keyed by wire parameter name with no kebab-case renaming. This is where
+# provider-specific options go. The device grant forwards no extras yet.
 #
 #   extras.access_type = "offline"          # Google: required for a refresh token
 #   extras.prompt = "consent"               # Google: force the consent screen
@@ -85,8 +77,8 @@ scopes = []
 #   extras.resource = "https://api.example.com/"  # RFC 8707 (Fastmail needs it)
 #extras.access_type = "offline"
 
-# When true, `ortie token show` automatically refreshes the access token if it
-# has expired. Equivalent to passing `--auto-refresh` on every call.
+# Whether `ortie token show` refreshes an expired access token by itself,
+# which is what passing `--auto-refresh` on every call would do.
 auto-refresh = true
 
 # --------------------------------------------------------------------------------
@@ -94,8 +86,8 @@ auto-refresh = true
 # --------------------------------------------------------------------------------
 #
 # Ortie persists no token itself: reads and writes go through commands of
-# yours. Any CLI reading from / writing to stdin works, so pick one for your
-# platform:
+# yours. Any CLI printing on stdout and reading from stdin works, so pick one
+# for your platform:
 #
 #   GNOME / Secret Service .... `secret-tool` (libsecret)
 #   KDE ....................... `kwallet-query`, `kwalletcli`
@@ -104,10 +96,10 @@ auto-refresh = true
 #   Headless / CI ............. `keyctl` (kernel keyutils)
 #   Terminal-first, portable .. `pass`, `gopass`
 #
-# Every `*.command` field takes either shape: an array runs the program
-# directly, no shell involved, while a string is wrapped through the platform
-# shell (`/bin/sh -c` on Unix, `cmd /C` on Windows) and is the one to pick for
-# pipes, globs or `$VAR` substitution.
+# Every `*.command` field takes either shape. An array runs the program
+# directly, with no shell involved. A string goes through the platform shell
+# (`/bin/sh -c` on Unix, `cmd /C` on Windows), which is what pipes, globs and
+# `$VAR` substitution need.
 
 storage.read.command = ["pass", "show", "ortie/example"]
 storage.write.command = "pass insert -m -f ortie/example"
@@ -118,13 +110,13 @@ storage.write.command = "pass insert -m -f ortie/example"
 #
 # Each hook fires on token issuance (`on-issue`) or refresh (`on-refresh`),
 # split by outcome (`success` / `error`). Both accept a `command`, in the same
-# two shapes as the storage commands above, and a `notify` block (requires the
-# `notify` cargo feature, off by default).
+# two shapes as the storage commands above, and a `notify` block, which needs
+# the `notify` cargo feature, off by default.
 #
 # A success hook receives ACCESS_TOKEN, TOKEN_TYPE, EXPIRES_IN, REFRESH_TOKEN
-# and SCOPE, an error hook ERROR, ERROR_DESCRIPTION and ERROR_URI. Both the
-# command (through the shell, so use the string shape) and the `notify`
-# summary and body expand them.
+# and SCOPE, an error hook ERROR, ERROR_DESCRIPTION and ERROR_URI. The command
+# expands them through the shell, so use the string shape, and the `notify`
+# summary and body expand them too.
 
 #hooks.on-issue.success.command = "logger 'ortie issued a token (expires in $EXPIRES_IN)'"
 #hooks.on-issue.success.notify.summary = "Ortie"
@@ -144,10 +136,12 @@ storage.write.command = "pass insert -m -f ortie/example"
 # --------------------------------------------------------------------------------
 #
 # The client credentials grants run without any user interaction: `auth get`
-# completes in one shot, and expired tokens silently re-acquire (they issue no
-# refresh token), so `ortie token show --auto-refresh` always prints a valid
-# one. Both examples are Microsoft Entra shaped, with a tenanted token endpoint
-# and a resource `.default` scope.
+# completes in one shot, and an expired token silently re-acquires since none
+# of them issues a refresh token, so `ortie token show --auto-refresh` always
+# prints a valid one.
+#
+# Both examples are Microsoft Entra shaped, with a tenanted token endpoint and
+# a resource `.default` scope.
 
 # Secret-authenticated (RFC 6749 section 4.4):
 #
@@ -162,7 +156,8 @@ storage.write.command = "pass insert -m -f ortie/example"
 
 # Certificate credentials (RFC 7523 section 2.2), authenticated by a JWT
 # assertion signed with the private key. Microsoft requires the certificate
-# thumbprint, so `client-certificate` is set and `client-secret` stays unset:
+# thumbprint, so `client-certificate` is set and `client-secret` stays unset,
+# its Basic header conflicting with the assertion:
 #
 #[accounts.graph-cert-daemon]
 #grant = "client-credentials-jwt"

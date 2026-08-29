@@ -1,22 +1,20 @@
-//! Application step of the wizard: how the account obtains an OAuth
-//! 2.0 client registration.
+//! # Application step
 //!
-//! Every way to obtain one is offered at once, sorted by io-oauth's
-//! client source preference: dynamic registration (RFC 7591) when the
-//! authorization server advertises a registration endpoint, then the
-//! well-known public applications registered against that same server,
-//! then a custom entry for a client the user registered by hand.
+//! The wizard step deciding how the account obtains an OAuth 2.0 client
+//! registration, offering every way to obtain one at once.
 //!
-//! The custom entry prompts for nothing. A registration of one's own
-//! is the rare case, and the person who made one is already editing
-//! the config: typing a client id, a secret and a redirection into a
-//! wizard only to check them in a file afterwards helps nobody. It
-//! yields the account with its client id left empty, and the wizard
-//! explains what to fill in.
+//! They are sorted by io-oauth's client source preference: dynamic
+//! registration (RFC 7591) when the server advertises a registration
+//! endpoint, then the well-known public applications registered against
+//! that same server, then a custom entry.
+//!
+//! The custom entry prompts for nothing and leaves the client id empty
+//! for the wizard to explain: a registration of one's own is the rare
+//! case, and whoever made one is already editing the config.
 //!
 //! The step runs before the scope step and hands it the options its
-//! outcome allows (see [`scope`]), since a registration is what
-//! decides which scopes can be requested at all.
+//! outcome allows (see [`scope`]), a registration being what decides
+//! which scopes can be requested at all.
 
 use std::fmt;
 
@@ -39,28 +37,29 @@ use url::Url;
 
 use crate::wizard::{OauthConfig, RawSecret, scope, search};
 
-/// Loopback redirection URI registered by default: RFC 8252
-/// section 7.3 lets the port vary at authorization time, so it matches
-/// the runtime ephemeral-port default.
+/// The loopback redirection URI registered by default.
+///
+/// RFC 8252 section 7.3 lets the port vary at authorization time, so it
+/// matches the runtime ephemeral-port default.
 const REDIRECT_LOOPBACK: &str = "http://127.0.0.1";
 
-/// Reverse-DNS private-use redirection URI (RFC 8252 section 7.1),
-/// retried when the provider rejects http redirections altogether
-/// (Fastmail's dynamic registration accepts only private-use schemes).
-/// The browser dead-ends on it, so `auth get` prints the manual
-/// `auth resume` steps rather than binding a listener.
+/// The reverse-DNS private-use redirection URI (RFC 8252 section 7.1)
+/// retried when the provider rejects http redirections altogether.
+///
+/// The browser dead-ends on it, so `auth get` prints the manual `auth
+/// resume` steps rather than binding a listener.
 const REDIRECT_SCHEME: &str = "org.pimalaya.ortie://redirect";
 
-/// Runs the application step against `config`, filling in its client
-/// id, client secret and (when the provider pins one) redirection
-/// endpoint, and returns the scope options the chosen application
-/// allows.
+/// Runs the application step against `config` and returns the scope
+/// options the chosen application allows.
+///
+/// It fills in the client id, the client secret and, when the provider
+/// pins one, the redirection endpoint. A single candidate skips the
+/// pick list.
 ///
 /// `metadata` is the run's authorization server metadata, if any: its
-/// registration endpoint is what decides whether dynamic registration
-/// is on offer, and its advertised scopes are what a client registered
-/// for this account may ask for. A single candidate skips the pick
-/// list.
+/// registration endpoint decides whether dynamic registration is on
+/// offer, and its scopes what an unbound client may ask for.
 pub fn configure(
     config: &mut OauthConfig,
     metadata: Option<&DiscoveryOauthServerMetadata>,
@@ -89,8 +88,8 @@ pub fn configure(
 
                 match register(config, &endpoint) {
                     Ok(()) => return Ok(scope::Source::Taken),
-                    // NOTE: the failure was reported by the register
-                    // spinner; drop the entry and offer the rest.
+                    // NOTE: the register spinner already reported the
+                    // failure, so drop the entry and offer the rest.
                     Err(_) => choices.retain(|choice| !matches!(choice, Choice::Dynamic(_))),
                 }
             }
@@ -101,9 +100,9 @@ pub fn configure(
                 });
                 config.endpoints.redirection = app.redirection.map(ToString::to_string);
 
-                // NOTE: the discovered scopes are the narrow per-service
-                // ones, so they drive the selection; without them every
-                // registered scope is selected instead.
+                // NOTE: the discovered scopes are the narrow
+                // per-service ones, so they drive the selection; every
+                // registered scope is selected without them.
                 if config.scopes.is_empty() {
                     config.scopes = app.scopes.iter().map(ToString::to_string).collect();
                 }
@@ -112,24 +111,24 @@ pub fn configure(
 
                 return Ok(scope::Source::Registered(registered));
             }
-            // NOTE: nothing to ask. The client id, its secret and its
-            // redirection are the user's to fill in, and the scopes
-            // stay the discovered ones, since nothing exposes what a
-            // hand-made registration was granted.
+            // NOTE: nothing to ask. The scopes stay the discovered
+            // ones, since nothing exposes what a hand-made registration
+            // was granted.
             Choice::Custom => return Ok(scope::Source::Taken),
         }
     }
 }
 
 /// Registers Ortie dynamically against the provider's registration
-/// endpoint (RFC 7591): a public client without secret
-/// (`token_endpoint_auth_method` none), the grant and response types of
-/// the discovered flow, and the discovered scopes. The issued client id
-/// (and secret, when the server insists on one) land in the config.
+/// endpoint (RFC 7591), landing the issued credentials in the config.
 ///
-/// A loopback redirection is registered first, matching the runtime
-/// default; providers rejecting http redirections altogether get a
-/// reverse-DNS private-use scheme instead, which the config then pins.
+/// It registers a public client with no secret, the grant and response
+/// types of the discovered flow, and the discovered scopes. A server
+/// insisting on a secret has that stored too.
+///
+/// The loopback redirection is registered first, matching the runtime
+/// default; a provider rejecting http redirections altogether gets a
+/// reverse-DNS private-use scheme, which the config then pins.
 fn register(config: &mut OauthConfig, endpoint: &Url) -> Result<()> {
     let device = config.grant == Some("device");
     let scopes = config.scopes.join(" ");
@@ -167,9 +166,9 @@ fn register(config: &mut OauthConfig, endpoint: &Url) -> Result<()> {
 
     let mut response = register_once(endpoint, &tls, &params);
 
-    // NOTE: some providers (Fastmail) reject every http redirection,
-    // loopback included, and only accept a reverse-DNS private-use
-    // scheme (RFC 8252 section 7.1); retry with one before giving up.
+    // NOTE: some providers reject every http redirection, loopback
+    // included, and only accept a reverse-DNS private-use scheme (RFC
+    // 8252 section 7.1), so retry with one before giving up.
     if let Ok(Err(rejection)) = &response {
         let redirect_rejected =
             rejection.error == Oauth20ClientRegisterErrorCode::InvalidRedirectUri;
@@ -189,10 +188,9 @@ fn register(config: &mut OauthConfig, endpoint: &Url) -> Result<()> {
                 raw: secret.expose_secret().to_string(),
             });
 
-            // NOTE: the loopback registration matches the runtime
-            // default (ephemeral 127.0.0.1 port, free per RFC 8252
-            // section 7.3), so only the private-use scheme needs
-            // pinning.
+            // NOTE: the loopback registration already matches the
+            // runtime default, its port being free per RFC 8252 section
+            // 7.3, so only the private-use scheme needs pinning.
             if params.redirect_uris.first().map(String::as_str) == Some(REDIRECT_SCHEME) {
                 config.endpoints.redirection = Some(REDIRECT_SCHEME.to_string());
             }
@@ -213,24 +211,24 @@ fn register(config: &mut OauthConfig, endpoint: &Url) -> Result<()> {
     }
 }
 
-/// Posts one registration attempt over a fresh connection to the
-/// registration endpoint; servers rarely keep the socket alive, so the
-/// redirect-scheme retry reconnects instead of reusing a stream.
+/// Posts one registration attempt over a fresh connection.
+///
+/// Servers rarely keep the socket alive, so the redirect-scheme retry
+/// reconnects instead of reusing a stream.
 fn register_once(
     endpoint: &Url,
     tls: &Tls,
     params: &Oauth20ClientRegisterParams,
 ) -> Result<Oauth20ClientRegisterResponse> {
-    // NOTE: no client id exists yet, registration is what issues it.
+    // NOTE: no client id exists yet, registration being what issues it.
     let mut client = Oauth20ClientStd::connect(endpoint.clone(), tls, "")?;
     let response = client.register_client(endpoint, params)?;
 
     Ok(response)
 }
 
-/// One entry in the application pick list: dynamic registration
-/// against the provider's advertised endpoint, a well-known public
-/// application, or the trailing custom entry.
+/// One entry in the application pick list: dynamic registration, a
+/// well-known public application, or the trailing custom entry.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum Choice {
     Dynamic(Url),
@@ -239,9 +237,8 @@ enum Choice {
 }
 
 impl Choice {
-    /// The io-oauth client source of the entry, whose derived order
-    /// (dynamic registration, public client, manual) is the pick-list
-    /// preference.
+    /// The io-oauth client source of the entry, whose derived order is
+    /// the pick-list preference.
     fn source(&self) -> Oauth20ClientSource {
         match self {
             Self::Dynamic(_) => Oauth20ClientSource::DynamicRegistration,
@@ -270,31 +267,32 @@ impl fmt::Display for Choice {
 struct KnownApp {
     /// Display name of the application.
     name: &'static str,
-    /// The PIM domains the registration covers, shown between parens
-    /// in the pick list; derived from the scopes the application is
-    /// registered for.
+    /// The PIM domains the registration covers, shown between parens in
+    /// the pick list.
     covers: &'static str,
     /// Host of the endpoints the client is registered against.
     host: &'static str,
     /// The public client identifier.
     client_id: &'static str,
-    /// The client secret, for providers issuing one; as public as the
+    /// The client secret of a provider issuing one, as public as the
     /// client id.
     client_secret: Option<&'static str>,
-    /// Redirect URI registered with the provider, when it must be
-    /// pinned; the runtime default (http://127.0.0.1:0) otherwise.
+    /// Redirect URI to pin, the runtime default http://127.0.0.1:0
+    /// applying when the provider pins none.
     redirection: Option<&'static str>,
-    /// The OAuth 2.0 scopes the registration is granted. No OAuth
-    /// mechanism exposes the scopes tied to a client registration (RFC
-    /// 8414 only lists the server-wide scopes-supported), so they are
-    /// hardcoded here, exactly as Thunderbird hardcodes its own. They
-    /// fill the config when discovery yielded none.
+    /// The OAuth 2.0 scopes the registration is granted, filling the
+    /// config when discovery yielded none.
+    ///
+    /// No OAuth mechanism exposes the scopes tied to a registration,
+    /// RFC 8414 listing only the server-wide ones, so they are
+    /// hardcoded here exactly as Thunderbird hardcodes its own.
     scopes: &'static [&'static str],
 }
 
-/// The well-known public applications. Thunderbird covers Google,
-/// Microsoft and Fastmail today; Pimalaya applications join the list
-/// as their provider registrations land.
+/// The well-known public applications.
+///
+/// Thunderbird covers Google, Microsoft and Fastmail today, and
+/// Pimalaya applications join the list as their registrations land.
 const KNOWN_APPS: &[KnownApp] = &[
     KnownApp {
         name: "Thunderbird",

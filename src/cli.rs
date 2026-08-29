@@ -1,4 +1,7 @@
-//! Root clap parser for the `ortie` binary.
+//! # Command-line interface
+//!
+//! The root clap parser of the `ortie` binary, its subcommand router,
+//! and the account resolution every account-bound command starts from.
 
 use std::{
     io::{IsTerminal, stdin},
@@ -35,23 +38,18 @@ use crate::{
 #[command(after_help = footer!())]
 #[command(propagate_version = true, infer_subcommands = true)]
 pub struct Cli {
-    /// The subcommand to run; bare `ortie` runs the configuration
-    /// wizard.
+    /// The subcommand to run, bare `ortie` running the wizard.
     #[command(subcommand)]
     pub cmd: Option<Command>,
-
     /// Path(s) to the TOML configuration file(s).
     #[command(flatten)]
     pub config: ConfigPathsArg,
-
     /// Name of the account to run the subcommand with.
     #[command(flatten)]
     pub account: AccountFlag,
-
     /// Switch the output format to JSON.
     #[command(flatten)]
     pub json: JsonFlag,
-
     /// Log level and log file destination.
     #[command(flatten)]
     pub log: LogFlags,
@@ -63,12 +61,10 @@ pub enum Command {
     /// Configure an account interactively.
     #[command(visible_alias = "wizard")]
     Configure(ConfigureCommand),
-
     #[command(subcommand)]
     Auth(AuthCommand),
     #[command(subcommand)]
     Token(TokenCommand),
-
     Repl(ReplCommand),
     #[command(aliases = ["manuals", "mans"])]
     Manual(ManualCommand),
@@ -77,8 +73,8 @@ pub enum Command {
 }
 
 impl Command {
-    /// Dispatches the parsed subcommand, resolving the account first
-    /// for the token tree (the auth tree resolves it per leaf).
+    /// Dispatches the parsed subcommand, resolving the account for the
+    /// token tree (the auth tree resolves it per leaf).
     pub fn execute(
         self,
         printer: &mut impl Printer,
@@ -102,14 +98,12 @@ impl Command {
     }
 }
 
-/// Welcomes, then offers to generate a first configuration. Returns
+/// Welcomes, then offers to generate a first configuration, returning
 /// whether the wizard ran.
 ///
-/// Raised from the two places nothing can happen without a
-/// configuration: a bare invocation, and a command that needs an
-/// account. It is a hook rather than a gate, so declining it decides
-/// nothing: what happens next is the caller's business, and for a
-/// command that is simply carrying on.
+/// It is a hook rather than a gate, so declining decides nothing: what
+/// happens next is the caller's business, and for a command that is
+/// simply carrying on.
 pub fn offer_configuration(
     printer: &mut impl Printer,
     config_paths: &[PathBuf],
@@ -126,15 +120,12 @@ pub fn offer_configuration(
     Ok(true)
 }
 
-/// Loads the config from `config_paths` and takes the named (or
-/// default) account out of it, flattened into its runtime view.
+/// Takes the named (or default) account out of the config at
+/// `config_paths`, flattened into its runtime view.
 ///
 /// A missing configuration is met with the wizard rather than with an
-/// error: the welcome frames what Ortie is and offers to generate an
-/// account, then the command carries on either way. Accepting is what
-/// gives it a chance to work; declining leaves it to fail on the
-/// configuration it still has not got. The two other failures name what
-/// is missing and how to pick an account.
+/// error, and the command carries on either way: accepting gives it a
+/// chance to work, declining leaves it to fail as it would have.
 pub(crate) fn take_account(
     printer: &mut impl Printer,
     config_paths: &[PathBuf],
@@ -143,22 +134,21 @@ pub(crate) fn take_account(
     let mut config = match Config::from_paths_or_default(config_paths)? {
         Some(config) => config,
         None => {
-            // NOTE: the target path is where `-c` pointed, or the default
-            // location when it named none, so a mistyped path shows up as
-            // itself rather than as a generic first run.
+            // NOTE: where `-c` pointed, or the default location when it
+            // named none, so a mistyped path shows up as itself rather
+            // than as a generic first run.
             let path = Config::target_path(config_paths)?;
 
-            // NOTE: nobody is there to answer a prompt in a script or a
-            // cron job, and a JSON consumer wants a failure it can read,
-            // so both skip the offer and fail below.
+            // NOTE: nobody answers a prompt in a script or a cron job,
+            // and a JSON consumer wants a failure it can read, so both
+            // skip the offer and fail below.
             if !printer.is_json() && stdin().is_terminal() {
                 offer_configuration(printer, config_paths, &path)?;
             }
 
-            // NOTE: the wizard also prints the account instead of writing
-            // it, so having run it proves nothing: the configuration is
-            // looked up again, and the command fails the ordinary way
-            // when nothing landed.
+            // NOTE: the wizard may print the account instead of writing
+            // it, so having run it proves nothing: look the
+            // configuration up again and fail the ordinary way.
             match Config::from_paths_or_default(config_paths)? {
                 Some(config) => config,
                 None => bail!(
@@ -170,7 +160,7 @@ pub(crate) fn take_account(
     };
 
     // NOTE: an empty name and `default` both mean the default account,
-    // which is the next block's business.
+    // which the block below resolves.
     let named = account_name.filter(|name| !name.is_empty() && *name != "default");
 
     if let Some(name) = named.filter(|name| !config.accounts.contains_key(*name)) {
@@ -197,11 +187,10 @@ pub(crate) fn take_account(
 pub struct ConfigPathsArg {
     /// Override the default configuration file path.
     ///
-    /// The given paths are shell-expanded then canonicalized (if
-    /// applicable). Other paths are merged with the first one, which
-    /// allows you to separate your public config from your private
-    /// one(s). Multiple paths can also be given at once, delimited by
-    /// `:` like `$PATH` in a POSIX shell.
+    /// Paths are shell-expanded, then canonicalized when applicable.
+    /// Several can be given at once, delimited by `:` like `$PATH` in a
+    /// POSIX shell: the first one is the base and the rest are merged on
+    /// top, which is how a public config and a private one combine.
     #[arg(long = "config", short = 'c', global = true, env = "ORTIE_CONFIG")]
     #[arg(name = "config_paths", value_name = "PATH", value_parser = path_parser, value_delimiter = ':')]
     pub paths: Vec<PathBuf>,

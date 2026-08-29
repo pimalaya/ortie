@@ -1,4 +1,8 @@
-//! `token show` subcommand: print the current access token.
+//! # Token show command
+//!
+//! The `token show` subcommand, printing the stored access token raw so
+//! it pipes into whatever needed it, and refreshing it first when the
+//! account or the flag asks for a fresh one.
 
 use std::{
     fmt,
@@ -16,39 +20,37 @@ use crate::{
     token::refresh::{RefreshAction, TokenRefreshCommand, refresh_action},
 };
 
-/// Seconds of slack before the real expiry at which a token is treated
-/// as expired, so a token that is about to lapse is refreshed rather
-/// than handed out and rejected mid-request.
+/// Slack before the real expiry at which a token counts as expired, so
+/// one about to lapse is refreshed rather than rejected mid-request.
 const EXPIRY_SKEW_SECS: u64 = 60;
 
-/// Default access token lifetime assumed when the server sends no
-/// `expires_in`, so a session refreshes roughly hourly instead of never.
+/// Access token lifetime assumed when the server sends no `expires_in`,
+/// so a session refreshes roughly hourly instead of never.
 const DEFAULT_EXPIRES_IN_SECS: u64 = 3600;
 
 /// Display the raw access token.
 ///
-/// This command allows you to see your access token. It can easily be
-/// piped to other applications.
+/// The token is printed alone, so it pipes straight into whatever
+/// application needs it.
 #[derive(Debug, Parser)]
 pub struct TokenShowCommand {
     /// Automatically refresh the access token when expired.
     ///
-    /// This option insures you that you get a fresh access token. See
-    /// also the `auto-refresh` config option.
+    /// Guarantees a fresh access token. The `auto-refresh` config
+    /// option turns it on for every call.
     #[arg(long, short = 'r')]
     pub auto_refresh: bool,
 }
 
 impl TokenShowCommand {
     /// Reads the token from storage, making it fresh first when
-    /// auto-refresh is requested (refresh-token exchange, or client
-    /// credentials re-acquisition), then prints it raw.
+    /// auto-refresh is on, then prints it raw.
     pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         let auto_refresh = self.auto_refresh || account.auto_refresh;
 
-        // NOTE: on an auto-refreshing client credentials account a
-        // missing or unreadable stored token re-acquires instead of
-        // failing, so the very first run needs no prior auth get.
+        // NOTE: a missing or unreadable token re-acquires rather than
+        // fails on an auto-refreshing client credentials account, so
+        // the very first run needs no prior auth get.
         let mut token = match account.resolve_token() {
             Ok(token) => token,
             Err(_)
@@ -80,14 +82,12 @@ impl TokenShowCommand {
     }
 }
 
-/// Whether the token has reached (or is within [`EXPIRY_SKEW_SECS`] of)
-/// its real expiry, computed from the issuance time plus its lifetime.
+/// Whether the token reached its real expiry, or is within
+/// [`EXPIRY_SKEW_SECS`] of it.
 ///
-/// `expires_in` alone is the lifetime granted at issuance (e.g. 3599s),
-/// not a live countdown, so it must be added to `issued_at` and
-/// compared against the wall clock. When `issued_at` is unknown the
-/// token is assumed still valid; a missing `expires_in` defaults to
-/// [`DEFAULT_EXPIRES_IN_SECS`] rather than never expiring.
+/// `expires_in` is the lifetime granted at issuance, not a countdown,
+/// so it is added to `issued_at`. An unknown `issued_at` counts as
+/// valid, a missing `expires_in` as [`DEFAULT_EXPIRES_IN_SECS`].
 fn is_expired(issued_at: Option<u64>, expires_in: Option<usize>) -> bool {
     let Some(issued_at) = issued_at else {
         return false;

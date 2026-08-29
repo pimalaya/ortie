@@ -1,6 +1,9 @@
-//! Client credentials grants e2e via the real binary and a local
-//! mock authorization server: silent re-acquisition on expiry, fresh
-//! JWT assertion per mint, and the certificate renewal hint.
+//! # Client credentials grants
+//!
+//! End-to-end coverage of the two headless grants, driving the real
+//! binary against a local mock authorization server: silent
+//! re-acquisition on expiry, a fresh JWT assertion per mint, and the
+//! certificate renewal hint.
 
 use std::{
     io::{Read, Write},
@@ -62,8 +65,7 @@ struct CapturedRequest {
 }
 
 /// Starts a mock token endpoint answering every POST with the given
-/// status and body, capturing each request (headers plus the full
-/// content-length body) for later assertions.
+/// status and body, capturing each request for later assertions.
 fn start_mock(status: u16, response: &str) -> (SocketAddr, Arc<Mutex<Vec<CapturedRequest>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -165,6 +167,7 @@ fn seed_expired_token(token: &Path) {
     .unwrap();
 }
 
+/// Runs the built binary against `config` and captures its output.
 fn ortie(config: &Path, args: &[&str]) -> std::process::Output {
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_ortie"));
     Command::new(&bin)
@@ -175,6 +178,7 @@ fn ortie(config: &Path, args: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
+/// The successful token response the mock server answers with.
 const TOKEN_RESPONSE: &str =
     r#"{"access_token":"at-fresh","token_type":"Bearer","expires_in":3600}"#;
 

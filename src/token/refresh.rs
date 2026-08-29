@@ -1,4 +1,7 @@
-//! `token refresh` subcommand: refresh the current access token.
+//! # Token refresh command
+//!
+//! The `token refresh` subcommand, making the stored access token fresh
+//! again, and the per-grant decision of how that is done.
 
 use std::time::Duration;
 
@@ -27,10 +30,9 @@ use crate::{
 
 /// How an expired token gets fresh again, decided per grant.
 ///
-/// The client credentials grants issue no refresh token, so their
-/// refresh is a silent re-acquisition: the grant runs again (the JWT
-/// kind minting a fresh assertion). Every other grant exchanges its
-/// refresh token, or keeps the stored token when none exists.
+/// The client credentials grants issue no refresh token, so theirs is a
+/// silent re-acquisition. Every other grant exchanges its refresh
+/// token, or keeps the stored one when none exists.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RefreshAction {
     /// Exchange the refresh token against the token endpoint.
@@ -41,9 +43,8 @@ pub enum RefreshAction {
     Keep,
 }
 
-/// Decides how an expired token gets fresh again: re-acquisition on
-/// the client credentials kinds, refresh-token exchange where a
-/// refresh token exists, nothing otherwise.
+/// Decides how an expired token gets fresh again: re-acquisition on the
+/// client credentials kinds, exchange where a refresh token exists.
 pub fn refresh_action(grant: GrantConfig, has_refresh_token: bool) -> RefreshAction {
     if grant.is_client_credentials() {
         RefreshAction::Reacquire
@@ -56,18 +57,16 @@ pub fn refresh_action(grant: GrantConfig, has_refresh_token: bool) -> RefreshAct
 
 /// Refresh the current access token.
 ///
-/// This command allows you to refresh an existing access token. It
-/// may fail if the refresh token is not present or expired. In this
-/// case you need to start from scratch a new authorization flow with
-/// auth get. On a client credentials account it re-runs the grant,
-/// since those issue no refresh token.
+/// Fails when the refresh token is missing or expired, which leaves
+/// `auth get` and a new authorization flow as the way out. A client
+/// credentials account re-runs its grant instead, since it was never
+/// issued a refresh token.
 #[derive(Debug, Parser)]
 pub struct TokenRefreshCommand;
 
 impl TokenRefreshCommand {
-    /// Refreshes the token per the account's grant (refresh-token
-    /// exchange or client credentials re-acquisition) and reports the
-    /// new expiry.
+    /// Refreshes the token as the account's grant requires, then
+    /// reports the new expiry.
     pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         let token = match refresh_action(account.grant, true) {
             RefreshAction::Reacquire => Self::reacquire(account)?,
@@ -94,10 +93,11 @@ impl TokenRefreshCommand {
         printer.out(Message::new(msg))
     }
 
-    /// Re-acquires a client credentials token by re-running the
-    /// grant, persists it and fires the on-refresh hooks. The JWT
-    /// kind mints a fresh assertion on every run; nothing but the
-    /// token response is ever stored.
+    /// Re-runs the client credentials grant, persists what it issues
+    /// and fires the on-refresh hooks.
+    ///
+    /// The JWT kind mints a fresh assertion on every run, and nothing
+    /// but the token response is ever stored.
     pub fn reacquire(account: &mut Account) -> Result<Oauth20AccessTokenSuccessParams> {
         match request_client_credentials_token(account)? {
             Ok(res) => {
@@ -121,9 +121,11 @@ impl TokenRefreshCommand {
         }
     }
 
-    /// Runs the refresh grant against the token endpoint, persists
-    /// the outcome (keeping the previous refresh token when the
-    /// server omits a rotated one) and fires the on-refresh hooks.
+    /// Exchanges the refresh token against the token endpoint,
+    /// persists the outcome and fires the on-refresh hooks.
+    ///
+    /// The previous refresh token is kept when the server omits a
+    /// rotated one, or the account would lose the only one it has.
     pub fn refresh(
         account: &mut Account,
         refresh_token: SecretBox<str>,

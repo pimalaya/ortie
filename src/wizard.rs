@@ -1,35 +1,30 @@
-//! Configuration wizard.
+//! # Configuration wizard
 //!
-//! Run on bare `ortie` (no subcommand), the natural first contact with
-//! the tool. It opens with a welcome banner on stderr, then walks one
-//! prompt at a time to a complete account, which it prints as a
-//! ready-to-append TOML fragment on stdout before offering (when
-//! writing to a terminal) to append it to a config file. The banner,
-//! the prompts and the spinners all render on stderr, so
-//! `ortie >> <config>` still works as the write-back when stdout is
-//! redirected, and the config stays user-owned either way: an existing
-//! file is appended to, never rewritten.
+//! Run on bare `ortie` and by `ortie configure`, walking one prompt at
+//! a time to a complete account and printing it as a ready-to-append
+//! TOML fragment on stdout.
 //!
-//! One prompt takes an email address, a bare domain, or an issuer URL,
-//! and its shape orients the setup, mirroring the Himalaya wizard:
+//! The banner, the prompts and the spinners all render on stderr, so
+//! `ortie >> <config>` works as the write-back when stdout is
+//! redirected. A terminal is offered the save instead, and an existing
+//! file is appended to rather than rewritten, so it stays user-owned.
 //!
-//! - an email (or bare domain) runs io-pim-discovery's parallel
-//!   discovery (see [`search`]) and every OAuth 2.0 grant it advertises
-//!   becomes one selectable configuration, tagged with the services
-//!   sharing it;
-//! - an issuer URL resolves that authorization server's RFC 8414
-//!   metadata into the grant it advertises.
+//! One prompt takes an email address, a bare domain or an issuer URL,
+//! and its shape orients the setup, mirroring the Himalaya wizard. An
+//! address fans out over io-pim-discovery (see [`search`]); an issuer
+//! resolves through its RFC 8414 metadata alone.
 //!
-//! The wizard only configures what it can discover automatically. When
-//! discovery finds nothing for the given input it stops and points at
-//! the documented sample, rather than prompting for hand-entered
-//! endpoints.
+//! Every OAuth 2.0 grant that turns up becomes one selectable
+//! configuration, tagged with the services sharing it. Discovering
+//! nothing stops the wizard on the documented sample rather than
+//! dropping into a hand-entry flow.
 //!
 //! From there the flow narrows the account down: the application
-//! backing it (see [`client`]), the scopes that application may
-//! request (see [`scope`]), then where its token lives (see
-//! [`storage`]). The wizard never runs a grant itself: it hands back a
-//! config, and `ortie auth get` is what authorizes it.
+//! backing it (see [`client`]), the scopes that application may request
+//! (see [`scope`]), then where its token lives (see [`storage`]).
+//!
+//! The wizard never runs a grant itself: it hands back a config, and
+//! `ortie auth get` is what authorizes it.
 
 pub mod client;
 pub mod scope;
@@ -58,27 +53,26 @@ use pimalaya_config::toml::TomlConfig;
 
 use crate::{config::Config, wizard::search::Discovered};
 
-/// The documented sample configuration, shown in the welcome banner
-/// and pointed at when discovery finds nothing to configure
-/// automatically.
+/// The documented sample configuration, shown in the welcome banner and
+/// pointed at whenever discovery finds nothing.
 pub const CONFIG_SAMPLE_URL: &str =
     "https://github.com/pimalaya/ortie/blob/master/config.sample.toml";
 
 /// Configure an account interactively.
 ///
-/// This command discovers an OAuth 2.0 account from an email address (or
-/// a bare domain, or an issuer URL), prints the resulting account, then
-/// offers to save it to the configuration file. Anything discovery does
-/// not cover is written by hand.
+/// Discovers an OAuth 2.0 account from an email address, a bare domain
+/// or an issuer URL, prints it, then offers to save it to the
+/// configuration file. Anything discovery does not cover is written by
+/// hand, every field being documented in the sample configuration.
 #[derive(Debug, Parser)]
 pub struct ConfigureCommand;
 
 impl ConfigureCommand {
     /// Runs the wizard, then prints the account and offers to save it.
     ///
-    /// No welcome: whoever typed the command knows what it does. The
-    /// banner belongs to the offer a missing configuration raises, which
-    /// is where the wizard meets someone who did not ask for it.
+    /// No welcome, since whoever typed the command knows what it does.
+    /// The banner belongs to the offer a missing configuration raises,
+    /// where the wizard meets someone who did not ask for it.
     pub fn execute(self, printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
         if !printer.is_json() && !stdin().is_terminal() {
             bail!(
@@ -94,8 +88,8 @@ impl ConfigureCommand {
 /// Runs the wizard and prints the resulting account as a
 /// ready-to-append TOML document on stdout.
 ///
-/// The fragment reaches stdout before the save is offered, so the choice
-/// of where it goes is made having seen what is being placed.
+/// The fragment reaches stdout before the save is offered, so the
+/// choice of where it goes is made having seen what is placed.
 fn run(printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
     let path = Config::target_path(config_paths)?;
     let existing = ExistingConfig::read(&path)?;
@@ -106,9 +100,8 @@ fn run(printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
         bail!("Empty input: enter an email address, a bare domain, or an issuer URL");
     }
 
-    // NOTE: the account name is just the TOML table key, so it is
-    // derived from the input rather than prompted; the user renames it
-    // by hand.
+    // NOTE: the account name is only the TOML table key, so it is
+    // derived from the input rather than prompted.
     let account_name = account_name(&default_account_name(input), existing.as_ref());
     let mut config = configure_discovery(input)?;
     config.name = account_name;
@@ -118,34 +111,26 @@ fn run(printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
     // the default only when no other account does.
     config.default = !existing.as_ref().is_some_and(|config| config.has_default);
 
-    // NOTE: fill the defaults a provider is known to need but discovery
-    // does not yet surface (Fastmail's RFC 8707 resource and its
-    // scopes). Stopgap; see cairn/changes/discovery-layering/.
     fill_provider_defaults(&mut config);
 
-    // The authorization server metadata answers two later steps at
-    // once, so probe it once here: its registration endpoint decides
-    // whether dynamic registration is on offer, and the scopes it
-    // supports widen the options of a client not bound to a registered
-    // set.
+    // NOTE: the metadata answers two later steps at once, its
+    // registration endpoint deciding whether dynamic registration is on
+    // offer and its scopes widening what an unbound client may ask for.
     let metadata = probe_metadata(&config);
 
-    // NOTE: application first: what a token may request is a property
-    // of the application requesting it.
+    // NOTE: the application comes first, since what a token may request
+    // is a property of the application requesting it.
     let scopes = client::configure(&mut config, metadata.as_ref())?;
     scope::prompt(&mut config, scopes)?;
     storage::configure(&mut config)?;
 
-    // The account is complete but for the application, so say what is
-    // missing before the fragment carrying the hole.
     if !printer.is_json() && config.client_id.is_none() {
         print_missing_application();
     }
 
-    // The fragment is what the wizard owes the user, so it always
-    // reaches stdout. JSON mode and a redirected stdout stop there,
-    // staying non-interactive for scripts and `ortie >> config.toml`;
-    // a terminal is then offered the save.
+    // NOTE: the fragment always reaches stdout, JSON mode and a
+    // redirected stdout stopping there so scripts and
+    // `ortie >> config.toml` stay non-interactive.
     printer.out(&config)?;
 
     if printer.is_json() || !stdout().is_terminal() {
@@ -155,17 +140,16 @@ fn run(printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
     offer_save(&config, &path)
 }
 
-/// What a configuration file already on disk constrains in the generated
-/// account: the names it takes, and whether one of its accounts already
-/// claims the default.
+/// What a configuration already on disk constrains in the generated
+/// account: the names it takes, and whether it claims the default.
 struct ExistingConfig {
     names: Vec<String>,
     has_default: bool,
 }
 
 impl ExistingConfig {
-    /// Reads the configuration at the given path, or `None` when no file
-    /// is there.
+    /// Reads the configuration at `path`, or `None` when no file is
+    /// there.
     ///
     /// A file that fails to parse is an error rather than a `None`:
     /// appending to a broken document would bury the actual problem
@@ -188,10 +172,9 @@ impl ExistingConfig {
 /// The name discovery proposes, suffixed until the configuration does
 /// not already hold it.
 ///
-/// Not prompted: the name is only the TOML table key, and whoever wants
-/// another one renames it in the file. It still has to be free, since a
-/// second `[accounts.<name>]` table makes the whole document fail to
-/// parse, taking the accounts that used to work down with it.
+/// It has to be free: a second `[accounts.<name>]` table makes the
+/// whole document fail to parse, taking down the accounts that used to
+/// work with it.
 fn account_name(base: &str, existing: Option<&ExistingConfig>) -> String {
     let taken = existing
         .map(|config| config.names.as_slice())
@@ -217,10 +200,9 @@ fn account_name(base: &str, existing: Option<&ExistingConfig>) -> String {
 /// Explains, on stderr, the empty `client-id` a custom application
 /// leaves behind, right before the fragment it belongs to.
 ///
-/// The wizard stops short of prompting for those fields. Registering
-/// an application of one's own is the rare path, and whoever took it
-/// is already editing the configuration; typing them into a wizard to
-/// check them in a file afterwards helps nobody.
+/// The wizard stops short of prompting for those fields: registering an
+/// application of one's own is the rare path, and whoever took it is
+/// already editing the configuration.
 fn print_missing_application() {
     eprintln!();
     eprintln!("The wizard stops here. Fill in `client-id` by hand, along with");
@@ -234,10 +216,9 @@ fn print_missing_application() {
 /// Frames Ortie, names the configuration file that is missing, and
 /// points at the sample for everything the wizard does not cover.
 ///
-/// Printed before the offer a bare `ortie` or a command needing an
-/// account raises when it finds no configuration, so the wizard
-/// introduces itself to someone who did not ask for it. `configure`
-/// skips it, since it was asked for by name.
+/// Printed before the offer a missing configuration raises, so the
+/// wizard introduces itself to someone who did not ask for it.
+/// `configure` skips it, having been asked for by name.
 ///
 /// On stderr, so a redirected stdout holds the fragment alone.
 pub fn print_welcome(path: &Path) {
@@ -262,18 +243,19 @@ pub fn print_welcome(path: &Path) {
     eprintln!();
 }
 
-/// Offers to save the account to a config file (default
-/// `$XDG_CONFIG_HOME/ortie/config.toml`). It has already been printed
-/// by then, so the prompt has one meaning and declining simply leaves
-/// the user with the fragment to place themselves. Prompts and
-/// confirmations render on stderr.
+/// Offers to save the account to a config file, by default
+/// $XDG_CONFIG_HOME/ortie/config.toml.
+///
+/// The account is already printed by then, so the prompt has one
+/// meaning and declining leaves the fragment to place by hand. Prompts
+/// and confirmations render on stderr.
 ///
 /// An existing file is appended to, never overwritten: the fragment is
-/// one `[accounts.<name>]` table, so appending adds an account and
-/// leaves the ones already configured (and every comment around them)
-/// untouched. That is the same thing `ortie >> <config>` does, done
-/// for the user, and it is confirmed before it happens since the file
-/// is one the user already owns.
+/// one `[accounts.<name>]` table, so appending leaves the accounts
+/// already configured, and every comment around them, untouched.
+///
+/// That is what `ortie >> <config>` does, done for the user, and it is
+/// confirmed first since the file is one the user already owns.
 fn offer_save(config: &OauthConfig, path: &Path) -> Result<()> {
     eprintln!();
 
@@ -288,9 +270,9 @@ fn offer_save(config: &OauthConfig, path: &Path) -> Result<()> {
     let appending = fs::metadata(path).is_ok_and(|metadata| metadata.len() > 0);
     let separator = if appending { "\n" } else { "" };
 
-    // A file already holding accounts is the user's, so appending to it
-    // is confirmed rather than assumed. Declining stops the save: the
-    // fragment is printed, so nothing is lost by placing it by hand.
+    // NOTE: a file already holding accounts is the user's, so appending
+    // is confirmed rather than assumed. Declining loses nothing: the
+    // fragment is printed and can be placed by hand.
     if appending {
         let question = format!("{} already exists, append to it?", path.display());
 
@@ -320,9 +302,9 @@ fn offer_save(config: &OauthConfig, path: &Path) -> Result<()> {
     eprintln!();
     eprintln!("Configuration {verb} {}.", path.display());
 
-    // NOTE: name the account, since the file it landed in likely holds
-    // more than this one. An account still missing its client id
-    // cannot authorize yet, and was told what to fill in already.
+    // NOTE: the account is named, the file it landed in likely holding
+    // more than this one. One still missing its client id cannot
+    // authorize yet, and was told what to fill in already.
     if config.client_id.is_some() {
         eprintln!(
             "Run `ortie auth get --account {}` to authorize the account.",
@@ -333,17 +315,17 @@ fn offer_save(config: &OauthConfig, path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Runs the discovery flow for an email, a bare domain, or an issuer
-/// URL: search the OAuth 2.0 grants reachable from it, let the user
-/// pick one, then fold it into a fresh account. When nothing is
-/// discovered the wizard stops rather than prompting for hand-entered
-/// endpoints (see [`stop_undiscovered`]).
+/// Searches the OAuth 2.0 grants reachable from `input`, then folds the
+/// one the user picks into a fresh account.
+///
+/// Discovering nothing stops the wizard rather than prompting for
+/// hand-entered endpoints (see [`stop_undiscovered`]).
 fn configure_discovery(input: &str) -> Result<OauthConfig> {
     let spinner = Spinner::start("Searching for OAuth 2.0 grants");
 
-    // An issuer URL names an authorization server directly, so its
-    // metadata is the whole search; anything else is an address, and a
-    // bare domain is discovered as `@domain`.
+    // NOTE: an issuer URL names an authorization server directly, so
+    // its metadata is the whole search; anything else is an address,
+    // and a bare domain is discovered as `@domain`.
     let mut found = if input.contains("://") {
         search::search_issuer(input)?
     } else if input.contains('@') {
@@ -369,11 +351,10 @@ fn configure_discovery(input: &str) -> Result<OauthConfig> {
     Ok(OauthConfig::from(choice))
 }
 
-/// Stops the wizard when discovery found nothing to configure for
-/// `input`: it prints where to go next (a hand-written config, seeded
-/// from the documented sample) and errors out, rather than dropping
-/// into a hand-entry flow. Ortie's wizard only ever configures what it
-/// can discover automatically.
+/// Stops the wizard when discovery found nothing for `input`.
+///
+/// It errors out on the documented sample rather than dropping into a
+/// hand-entry flow, the wizard configuring only what it discovers.
 fn stop_undiscovered(input: &str) -> Result<OauthConfig> {
     bail!(
         "Could not automatically discover an OAuth 2.0 grant for `{input}`.\n\n\
@@ -383,8 +364,9 @@ fn stop_undiscovered(input: &str) -> Result<OauthConfig> {
 }
 
 /// Fetches the authorization server metadata behind the chosen grant,
-/// behind a spinner since it is a network round trip. Absent when the
-/// server publishes none, which only means fewer scope options and no
+/// behind a spinner since it is a network round trip.
+///
+/// A server publishing none costs only fewer scope options and no
 /// dynamic registration entry.
 fn probe_metadata(config: &OauthConfig) -> Option<DiscoveryOauthServerMetadata> {
     let spinner = Spinner::start("Reading the authorization server metadata");
@@ -402,7 +384,7 @@ fn probe_metadata(config: &OauthConfig) -> Option<DiscoveryOauthServerMetadata> 
 }
 
 /// Proposes an account name from the input shape: the first label of
-/// the domain (of an email or bare domain) or of the issuer host.
+/// the domain, or of the issuer host.
 fn default_account_name(input: &str) -> String {
     if let Ok(url) = Url::parse(input)
         && let Some(host) = url.host_str()
@@ -422,18 +404,21 @@ fn first_label(host: &str) -> String {
 }
 
 /// The account resolved by the wizard, printed as a ready-to-append
-/// config fragment: bare TOML on stdout (the framing lives in the
-/// stderr welcome banner), or the same data as an object in JSON mode.
+/// config fragment.
+///
+/// It renders as bare TOML on stdout, the framing living in the stderr
+/// welcome banner, or as the same data in an object under `--json`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct OauthConfig {
     /// The account name, heading the `[accounts.<name>]` table.
     pub name: String,
-    /// Whether this account is picked when none is named. Claimed only
+    /// Whether this account is picked when none is named, claimed only
     /// when no other account already does.
     #[serde(skip_serializing_if = "core::ops::Not::not")]
     pub default: bool,
     /// The OAuth 2.0 client identifier, when already registered.
+    ///
     /// Always serialized, empty included, so both output shapes carry
     /// the placeholder the user fills in by hand.
     pub client_id: Option<String>,
@@ -449,13 +434,12 @@ pub struct OauthConfig {
     /// The scopes the token will carry.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub scopes: Vec<String>,
-    /// Extra authorization-request parameters a provider is known to
-    /// require but discovery does not yet surface (Fastmail's RFC 8707
-    /// resource). Stopgap; see cairn/changes/discovery-layering/.
+    /// Extra authorization-request parameters a provider requires but
+    /// discovery does not surface; see cairn/changes/discovery-layering/.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub extras: BTreeMap<String, String>,
-    /// Whether token show refreshes an expired token by itself; the
-    /// wizard always enables it.
+    /// Whether token show refreshes an expired token by itself, which
+    /// the wizard always enables.
     pub auto_refresh: bool,
     /// The commands persisting and reading back the token.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -512,8 +496,8 @@ impl From<Discovered> for OauthConfig {
                 scopes: split_scopes(scope),
                 ..Self::empty()
             },
-            // NOTE: search resolves every issuer into one of the two
-            // grants above, and drops the non-OAuth methods.
+            // NOTE: search resolves every issuer into one of the grants
+            // above, and drops the non-OAuth methods.
             _ => unreachable!("search yields resolved OAuth grants only"),
         }
     }
@@ -573,8 +557,7 @@ impl fmt::Display for OauthConfig {
     }
 }
 
-/// The client secret in the config's secret shape
-/// (`client-secret.raw`).
+/// The client secret in the config's `client-secret.raw` shape.
 #[derive(Debug, Serialize)]
 pub struct RawSecret {
     /// The secret value, stored in clear as the provider issued it.
@@ -600,7 +583,7 @@ pub struct Endpoints {
 }
 
 impl Endpoints {
-    /// The distinct hosts of the endpoints, lowercased: what the
+    /// The distinct lowercased hosts of the endpoints, what the
     /// metadata probe and the known applications key on.
     pub fn hosts(&self) -> BTreeSet<String> {
         let urls = [&self.authorization, &self.device_authorization, &self.token];
@@ -633,11 +616,11 @@ pub struct StorageEntry {
 ///
 /// A known credential provider yields an [`Argv`](Self::Argv), the
 /// preferred form: no shell sits between Ortie and the program, so
-/// nothing in an entry name can be reinterpreted. Only the commands
-/// that genuinely need shell features fall back to a
-/// [`Shell`](Self::Shell) line, the write half of the macOS keychain
-/// pair (`$(cat)` bridges a secret the program takes as an argument)
-/// and anything the user typed by hand.
+/// nothing in an entry name is reinterpreted.
+///
+/// Only what genuinely needs shell features falls back to a
+/// [`Shell`](Self::Shell) line: the macOS keychain write, where
+/// `$(cat)` bridges a secret, and anything typed by hand.
 #[derive(Debug, Eq, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum StorageCommand {
@@ -648,10 +631,10 @@ pub enum StorageCommand {
 }
 
 impl fmt::Display for StorageCommand {
-    /// Renders the command as its TOML value: an array of basic
-    /// strings for an argv, and a literal (single-quoted) string for a
-    /// shell line, so the quotes such a line usually carries need no
-    /// escaping.
+    /// Renders the command as its TOML value.
+    ///
+    /// An argv becomes an array of basic strings, a shell line a
+    /// single-quoted literal, so its own quotes need no escaping.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Argv(argv) => write!(f, "{}", toml_array(argv)),
@@ -674,9 +657,10 @@ fn toml_string(value: &str) -> String {
 }
 
 /// Renders a TOML literal (single-quoted) string, which escapes
-/// nothing, so a shell line keeps its own quoting verbatim. A line
-/// carrying a single quote cannot be written that way and falls back
-/// to a basic string.
+/// nothing, so a shell line keeps its own quoting verbatim.
+///
+/// A line carrying a single quote cannot be written that way and falls
+/// back to a basic string.
 fn toml_literal(value: &str) -> String {
     if value.contains('\'') {
         return toml_string(value);
@@ -707,14 +691,11 @@ pub fn split_scopes(scope: Option<String>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Fills the defaults a provider is known to need but discovery does
-/// not yet surface. Fastmail's authorization endpoint bounces the flow
-/// pre-consent (no password or scope screen, a straight redirect to the
-/// "close this window" page) unless the RFC 8707 resource indicator is
-/// present, and its discovered grant carries no scopes at all; supply
-/// the resource and, since Fastmail cannot complete on a desktop
-/// anyway, its full advertised scope set. Stopgap until discovery
-/// surfaces them; see cairn/changes/discovery-layering/.
+/// Fills the defaults a provider needs but discovery does not surface.
+///
+/// Fastmail bounces the flow pre-consent without the RFC 8707 resource
+/// indicator, and its discovered grant carries no scopes, so both are
+/// supplied. A stopgap; see cairn/changes/discovery-layering/.
 fn fill_provider_defaults(config: &mut OauthConfig) {
     let hosts = config.endpoints.hosts();
 
@@ -733,10 +714,11 @@ fn fill_provider_defaults(config: &mut OauthConfig) {
     }
 }
 
-/// The scopes a provider is known to advertise outside its RFC 8414
-/// metadata, folded into the scope options. Empty for providers whose
-/// scopes discovery or metadata already fills. Stopgap; see
-/// cairn/changes/discovery-layering/.
+/// The scopes a provider advertises outside its RFC 8414 metadata,
+/// folded into the scope options.
+///
+/// Empty for providers whose scopes discovery or metadata already
+/// fills. A stopgap; see cairn/changes/discovery-layering/.
 fn advertised_scopes(endpoints: &Endpoints) -> Vec<&'static str> {
     if endpoints.hosts().contains("api.fastmail.com") {
         return vec![
@@ -758,15 +740,16 @@ mod tests {
 
     use super::*;
 
+    /// An address takes the domain's first label, never the local part.
+    ///
+    /// A bare domain and the synthesized `@domain` form do the same, an
+    /// issuer URL takes the host's first label.
     #[test]
     fn account_name_defaults_to_the_first_domain_label() {
-        // Email: the domain's first label, never the local part.
         assert_eq!(default_account_name("clement.douin@posteo.net"), "posteo");
         assert_eq!(default_account_name("alice@mail.example.co.uk"), "mail");
-        // Bare domain, and the synthesized form discovery uses.
         assert_eq!(default_account_name("posteo.net"), "posteo");
         assert_eq!(default_account_name("@posteo.net"), "posteo");
-        // Issuer URL: the host's first label.
         assert_eq!(
             default_account_name("https://login.microsoftonline.com/common/v2.0"),
             "login"
@@ -807,6 +790,8 @@ mod tests {
         assert!(device.scopes.is_empty());
     }
 
+    /// An argv reads back as a TOML array and a shell line as a string,
+    /// and a name TOML would read as a path gets quoted.
     #[test]
     fn the_fragment_carries_no_leading_comment() {
         let mut config = OauthConfig {
@@ -842,11 +827,9 @@ mod tests {
         assert!(rendered.contains("scopes = [\"mail\"]\n"));
         assert!(rendered.contains("auto-refresh = true\n"));
 
-        // An argv reads back as a TOML array, a shell line as a string.
         assert!(rendered.contains("storage.read.command = [\"pass\", \"show\", \"posteo\"]\n"));
         assert!(rendered.contains("storage.write.command = 'pass insert -m -f posteo'\n"));
 
-        // A name TOML would read as a path gets quoted.
         config.name = "me@posteo.net".to_string();
         assert!(
             config
@@ -855,26 +838,28 @@ mod tests {
         );
     }
 
+    /// A basic string escapes the backslash and the double quote.
+    ///
+    /// A literal keeps a shell line's own quoting, which is what makes
+    /// the macOS keychain write readable, unless the line carries the
+    /// one character a literal cannot hold.
     #[test]
     fn rendered_values_survive_the_characters_toml_reserves() {
-        // A basic string escapes the backslash and the double quote.
         assert_eq!(toml_string(r#"a\b"c"#), r#""a\\b\"c""#);
         assert_eq!(
             toml_array(&["one".to_string(), r#"tw"o"#.to_string()]),
             r#"["one", "tw\"o"]"#
         );
 
-        // A shell line keeps its own quoting through a literal string,
-        // which is why the macOS keychain write stays readable.
         assert_eq!(
             toml_literal(r#"security add-generic-password -w "$(cat)""#),
             r#"'security add-generic-password -w "$(cat)"'"#
         );
-
-        // Unless it carries the one character a literal cannot hold.
         assert_eq!(toml_literal("it's"), r#""it's""#);
     }
 
+    /// The whole point of the fragment: what the wizard prints is what
+    /// the config loader accepts, both command shapes included.
     #[test]
     fn a_fragment_parses_back_into_the_account_it_came_from() {
         let mut config = OauthConfig {
@@ -909,8 +894,6 @@ mod tests {
             "https://api.fastmail.com/jmap/session".to_string(),
         );
 
-        // The whole point of the fragment: what the wizard prints is
-        // what the config loader accepts, both command shapes included.
         let mut file = tempfile::NamedTempFile::new().unwrap();
         write!(file, "{config}").unwrap();
 
@@ -1026,12 +1009,14 @@ mod frame_tests {
         fs::remove_file(&path).expect("remove the config");
     }
 
+    /// The existing file ends on no trailing newline, the shape an
+    /// appended block has to survive without merging into the last line.
+    ///
+    /// The account it already held keeps its default and its comments.
     #[test]
     fn an_appended_account_keeps_the_existing_one() {
         let path = config_path();
 
-        // No trailing newline, the shape an appended block has to survive
-        // without merging into the last line.
         fs::write(
             &path,
             "# my accounts\n[accounts.work]\ndefault = true\nclient-id = \"a\"\nstorage.read.command = [\"true\"]\nstorage.write.command = \"true\"",
@@ -1042,7 +1027,6 @@ mod frame_tests {
             .expect("read the existing config")
             .expect("an existing config");
 
-        // The second account never claims a default the first one holds.
         let mut config = OauthConfig::empty();
         config.name = account_name("work", Some(&existing));
         config.default = !existing.has_default;
@@ -1070,7 +1054,6 @@ mod frame_tests {
         assert_eq!(parsed.accounts.len(), 2);
         assert!(parsed.accounts.contains_key("work-2"));
 
-        // Exactly one default, and the comment is still there.
         let defaults = parsed
             .accounts
             .values()

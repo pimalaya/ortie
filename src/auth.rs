@@ -1,5 +1,7 @@
-//! `auth` subcommand tree: obtain OAuth 2.0 access tokens by running
-//! the grant configured on the account.
+//! # Auth commands
+//!
+//! The `auth` subcommand tree, obtaining OAuth 2.0 access tokens by
+//! running the grant configured on the account.
 
 pub mod get;
 pub mod resume;
@@ -17,8 +19,8 @@ use crate::{
 
 /// Get a fresh access token by running the account's OAuth grant.
 ///
-/// Start an authorization-code, device or client-credentials grant,
-/// or resume one with a redirected URI or device code.
+/// Start an authorization-code, device or client-credentials grant, or
+/// resume one with a redirected URI or a device code.
 #[derive(Subcommand, Debug)]
 pub enum AuthCommand {
     Get(AuthGetCommand),

@@ -1,4 +1,7 @@
-//! Device grant e2e via the real binary and a local mock AS.
+//! # Device grant
+//!
+//! End-to-end coverage of the device authorization grant, driving the
+//! real binary against a local mock authorization server.
 
 use std::{
     io::{Read, Write},
@@ -16,6 +19,10 @@ use std::{
 use serde_json::Value;
 use tempfile::TempDir;
 
+/// Starts a mock authorization server issuing a device code.
+///
+/// It answers the first token poll with `authorization_pending` and the
+/// next with a token, counting the polls it received.
 fn start_mock() -> (SocketAddr, Arc<AtomicUsize>, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -109,6 +116,11 @@ storage.write.command = ["tee", "{t}"]
     assert_eq!(stored["access_token"], "at-test");
 }
 
+/// The whole grant runs in one REPL session.
+///
+/// A non-interactive auth get prints the device response and hands off,
+/// auth resume polls and stores, and token show serves the freshly
+/// issued token from the in-memory account.
 #[test]
 fn repl_auth_get_resume_then_token_show() {
     let (addr, polls, _h) = start_mock();
@@ -135,10 +147,6 @@ storage.write.command = ["tee", "{t}"]
     .unwrap();
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_ortie"));
 
-    // Drive the whole grant, then read the token, in one REPL session:
-    // auth get (non-interactive: prints the device response and hands
-    // off), auth resume polls and stores, token show serves the freshly
-    // issued token from the in-memory account.
     let mut child = Command::new(&bin)
         .args(["-c", config.to_str().unwrap(), "repl"])
         .stdin(Stdio::piped())

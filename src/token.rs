@@ -1,5 +1,7 @@
-//! `token` subcommand tree: work on the access token already
-//! persisted in storage.
+//! # Token commands
+//!
+//! The `token` subcommand tree, working on the access token already
+//! persisted in storage rather than running a grant.
 
 pub mod inspect;
 pub mod refresh;
@@ -16,9 +18,8 @@ use crate::{
 
 /// Display and refresh an existing OAuth 2.0 access token.
 ///
-/// This subcommand allows you to show your access token, inspect
-/// metadata associated to it, and refresh your access token using the
-/// refresh token (if available).
+/// Show the access token, inspect the metadata associated to it, or
+/// refresh it with the refresh token when one is available.
 #[derive(Subcommand, Debug)]
 pub enum TokenCommand {
     #[command(visible_alias = "get")]

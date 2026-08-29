@@ -1,12 +1,11 @@
-//! Flat runtime account.
+//! # Account
 //!
-//! Built from [`crate::config::AccountConfig`] (the nested TOML DTO)
-//! by flattening every `storage.*.command` and
-//! `hooks.*.*.{command,notify}` into a direct field on this type.
-//! Commands consume `Account` and call the driver methods
-//! (`resolve_token`, `write_to_storage`,
-//! `execute_on_{issue,refresh}_{success,error}_hook`,
-//! `redirection`) instead of walking the original config tree.
+//! The flat runtime account, built from the nested
+//! [`crate::config::AccountConfig`] by flattening every
+//! `storage.*.command` and `hooks.*.*.{command,notify}` into a field.
+//!
+//! Commands consume it and call its driver methods rather than walking
+//! the config tree, so token storage and hooks have one entry point.
 
 #[cfg(feature = "notify")]
 use std::time::Duration;
@@ -47,11 +46,10 @@ pub struct Account {
     pub client_id: String,
     /// Optional OAuth 2.0 client secret.
     pub client_secret: Option<Secret>,
-    /// Path to the private key signing JWT client assertions,
-    /// re-read at every mint.
+    /// Private key signing the JWT assertions, re-read at every mint.
     pub client_key: Option<PathBuf>,
-    /// Path to the client certificate deriving the assertion `x5t`
-    /// thumbprint, recomputed at every mint.
+    /// Certificate deriving the assertion `x5t` thumbprint, recomputed
+    /// at every mint.
     pub client_certificate: Option<PathBuf>,
     /// OAuth 2.0 grant flow run by the auth commands.
     pub grant: GrantConfig,
@@ -61,12 +59,11 @@ pub struct Account {
     pub scopes: Vec<String>,
     /// PKCE posture of the authorization code grant.
     pub pkce: PkceConfig,
-    /// Extra parameters forwarded verbatim to the authorization
-    /// request query.
+    /// Extra parameters forwarded verbatim to the authorization request
+    /// query.
     pub extras: HashMap<String, String>,
     /// Whether `token show` refreshes an expired token by itself.
     pub auto_refresh: bool,
-
     /// Authorization endpoint of the authorization code grant.
     pub authorization_endpoint: Option<Url>,
     /// Device authorization endpoint of the device grant (RFC 8628).
@@ -75,15 +72,12 @@ pub struct Account {
     pub token_endpoint: Option<Url>,
     /// Redirection endpoint registered with the provider.
     pub redirection_endpoint: Option<Url>,
-
     /// Command printing the stored token JSON on its stdout.
     pub read_storage_command: Command,
     /// Command receiving the token JSON on its stdin.
     pub write_storage_command: Command,
-
     /// Token resolved from storage, memoized for the session.
     pub token: Option<Oauth20AccessTokenSuccessParams>,
-
     /// Command hook fired when a token is successfully issued.
     pub on_issue_success_hook_command: Option<Command>,
     /// Command hook fired when issuing a token fails.
@@ -92,7 +86,6 @@ pub struct Account {
     pub on_refresh_success_hook_command: Option<Command>,
     /// Command hook fired when refreshing the token fails.
     pub on_refresh_error_hook_command: Option<Command>,
-
     /// Notification fired when a token is successfully issued.
     #[cfg(feature = "notify")]
     pub on_issue_success_hook_notify: Option<NotifyConfig>,
@@ -208,9 +201,8 @@ impl From<AccountConfig> for Account {
 }
 
 impl Account {
-    /// Resolve the redirection URI: returns the configured one when
-    /// set, otherwise binds to `127.0.0.1:0` and returns the
-    /// resulting `http://127.0.0.1:<port>` URL.
+    /// Resolves the redirection URI, binding `127.0.0.1:0` for its
+    /// `http://127.0.0.1:<port>` URL when none is configured.
     pub fn redirection(&self) -> Result<Cow<'_, Url>> {
         if let Some(url) = self.redirection_endpoint.as_ref() {
             return Ok(Cow::Borrowed(url));
@@ -223,8 +215,8 @@ impl Account {
         Ok(Cow::Owned(url))
     }
 
-    /// Resolves the account token, reading it from storage on first
-    /// use and memoizing it so the read storage command runs once.
+    /// Resolves the account token, memoizing it so the read storage
+    /// command runs once per session.
     pub fn resolve_token(&mut self) -> Result<Oauth20AccessTokenSuccessParams> {
         if let Some(token) = &self.token {
             return Ok(token.clone());
@@ -235,8 +227,8 @@ impl Account {
         Ok(token)
     }
 
-    /// Reads the persisted token by running the read storage command
-    /// and parsing its stdout as the token response JSON.
+    /// Runs the read storage command and parses its stdout as the token
+    /// response JSON.
     fn read_storage(&mut self) -> Result<Oauth20AccessTokenSuccessParams> {
         let cmd = &mut self.read_storage_command;
 
@@ -260,9 +252,10 @@ impl Account {
         Ok(res)
     }
 
-    /// Persists the token by running the write storage command and
-    /// piping the token response JSON to its stdin. The local issuance
-    /// time is stamped first and the token is cached in memory after.
+    /// Pipes the token response JSON to the write storage command.
+    ///
+    /// The local issuance time is stamped before the write, since no
+    /// server reports one, and the token is cached in memory after.
     pub fn write_to_storage(
         &mut self,
         mut res: Oauth20AccessTokenSuccessParams,
@@ -355,7 +348,7 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-/// Runs a success hook: the command with the token exposed as
+/// Runs a success hook, the command with the token exposed as
 /// environment variables, then the notification.
 fn execute_success_hook(
     cmd: Option<&mut Command>,
@@ -413,7 +406,7 @@ fn execute_success_hook(
     }
 }
 
-/// Runs an error hook: the command with the server error exposed as
+/// Runs an error hook, the command with the server error exposed as
 /// environment variables, then the notification.
 fn execute_error_hook(
     cmd: Option<&mut Command>,
@@ -489,8 +482,8 @@ fn execute_command_hook(cmd: &mut Command) -> Result<()> {
     Ok(())
 }
 
-/// Shows a system notification, shell-expanding `$VAR` references in
-/// the summary and body through `get_env`.
+/// Shows a system notification, shell-expanding the `$VAR` references
+/// of the summary and body through `get_env`.
 #[cfg(feature = "notify")]
 fn notify_with<'a, F>(config: &'a NotifyConfig, get_env: F)
 where

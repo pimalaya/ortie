@@ -1,20 +1,20 @@
-//! `repl` subcommand: a persistent session over stdin/stdout.
+//! # Repl command
 //!
-//! One-shot commands re-read the secret store on every run, so a
-//! keyring that confirms disclosure per process prompts the user again
-//! and again. The REPL resolves the account token once and holds it in
-//! memory for the life of the process, collapsing those prompts into a
-//! single unlock (plus one per refresh write, which must persist a
-//! rotated refresh token).
+//! The `repl` subcommand, a session over stdin and stdout holding one
+//! account open, so the secret store is read once instead of per run.
 //!
-//! The session is bound to one account (the `-a` or default one, like
-//! any other command) and reuses the `token` command grammar: each
-//! input line is parsed as a `token` subcommand and dispatched against
-//! the in-memory account, which carries the resolved token across
-//! iterations. The persistence is private to whoever spawned the
-//! process (the stdio pipe is the authorisation boundary), so it does
-//! not hand the token to any other process the way a shared agent
-//! would. On exit the account drops and its secrets are zeroized.
+//! One-shot commands re-read it every time, and a keyring confirming
+//! disclosure per process prompts again and again. Holding the token in
+//! memory collapses those prompts into a single unlock, plus one per
+//! refresh write, which must persist a rotated refresh token.
+//!
+//! The session is bound to the `-a` or default account like any other
+//! command, and each input line is parsed as a `token` or `auth`
+//! subcommand dispatched against the in-memory account.
+//!
+//! The stdio pipe is the authorisation boundary, so the token is never
+//! handed to another process the way a shared agent would. On exit the
+//! account drops and its secrets are zeroized.
 
 use std::io::{self, IsTerminal, Write};
 
@@ -30,16 +30,15 @@ use crate::{
 
 /// Start a persistent REPL session for one account.
 ///
-/// The account token is read from storage once, on first use, and held
-/// in memory for the session, so the keyring is unlocked a single time
-/// instead of on every command. Each input line is a `token` or `auth`
-/// subcommand (e.g. `token show`, `auth get`); type `quit` (or send EOF)
-/// to end.
+/// The account token is read from storage on first use and held in
+/// memory for the session, so the keyring is unlocked once instead of
+/// on every command. Each input line is a `token` or `auth` subcommand
+/// (`token show`, `auth get`); `quit`, or EOF, ends the session.
 #[derive(Debug, Parser)]
 pub struct ReplCommand;
 
-/// One parsed REPL input line: the same command grammar as the CLI
-/// (minus the binary name), scoped to the account-bound commands.
+/// One parsed REPL input line, the CLI grammar minus the binary name,
+/// scoped to the account-bound commands.
 #[derive(Debug, Parser)]
 #[command(no_binary_name = true)]
 struct ReplLine {
@@ -47,10 +46,11 @@ struct ReplLine {
     cmd: ReplCommandTree,
 }
 
-/// The subset of the CLI command tree available inside the REPL: the
-/// `token` and `auth` commands, which run against the in-memory
-/// account. The account-less configuration wizard has no REPL form
-/// (bare `ortie` runs it).
+/// The `token` and `auth` commands, the subset of the CLI tree running
+/// against the in-memory account.
+///
+/// The configuration wizard has no REPL form, being account-less: bare
+/// `ortie` is what runs it.
 #[derive(Debug, Subcommand)]
 enum ReplCommandTree {
     #[command(subcommand)]
@@ -69,9 +69,10 @@ impl ReplCommandTree {
     }
 }
 
-/// The account-scoped `auth` leaves usable inside the REPL: `get` and
-/// `resume`, dispatched against the session's account so a token they
-/// issue is immediately visible to the following `token` commands.
+/// The `auth` leaves usable inside the REPL.
+///
+/// They dispatch against the session's account, so a token they issue
+/// is immediately visible to the `token` commands that follow.
 #[derive(Debug, Subcommand)]
 enum ReplAuthCommand {
     Get(AuthGetCommand),
@@ -115,12 +116,10 @@ impl ReplCommand {
                 break;
             }
 
-            // NOTE: commands write their result to stdout without a trailing
-            // newline (so one-shot output pipes cleanly); in the loop we
-            // terminate and flush each result, otherwise the line-buffered
-            // stdout holds it until the session ends. A parse or command
-            // error is reported and the loop continues; a bad line never
-            // terminates the session.
+            // NOTE: commands write their result with no trailing
+            // newline, so one-shot output pipes cleanly; the loop has to
+            // terminate and flush each one, or the line-buffered stdout
+            // holds it until the session ends.
             match ReplLine::try_parse_from(input.split_whitespace()) {
                 Ok(ReplLine { cmd }) => match cmd.execute(printer, &mut account) {
                     Ok(()) => {

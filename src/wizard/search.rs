@@ -1,21 +1,21 @@
-//! Input-driven OAuth 2.0 grant discovery for the wizard.
+//! # Grant discovery
 //!
-//! Mirrors the Himalaya wizard's search module, adapted to OAuth: the
-//! input feeds io-pim-discovery's parallel discovery (fixed provider
-//! rules, PACC, Mozilla autoconfig, RFC 6186 SRV, RFC 8620 JMAP
-//! resolve, RFC 8414 authorization server metadata), and every OAuth
-//! 2.0 flow it advertises becomes one selectable entry tagged with the
-//! services sharing it. Grants of the same flow against the same
-//! authorization server merge into one entry, whether they differ only
-//! in scope (Microsoft's IMAP and SMTP, say) or in the spelling two
-//! mechanisms gave the same endpoints, so a single token can cover
-//! every service and the pick list holds one entry per real choice.
+//! The input-driven OAuth 2.0 grant discovery of the wizard, mirroring
+//! the Himalaya wizard's search module.
 //!
-//! An issuer never reaches the pick list as an issuer: it is resolved
-//! through its RFC 8414 metadata into the grants it advertises, or
-//! dropped.
-//! The wizard configures only what it can discover, so there is no
-//! hand-entry of endpoints anywhere here.
+//! The input feeds io-pim-discovery's parallel discovery (fixed
+//! provider rules, PACC, Mozilla autoconfig, RFC 6186 SRV, RFC 8620
+//! JMAP resolve, RFC 8414 server metadata), and every flow it
+//! advertises becomes one entry tagged with the services sharing it.
+//!
+//! Grants of the same flow against the same authorization server merge
+//! into one, whether they differ in scope or in the spelling two
+//! mechanisms gave the same endpoints, so one token covers every
+//! service and the pick list holds one entry per real choice.
+//!
+//! An issuer never reaches the pick list as an issuer: it resolves
+//! through its RFC 8414 metadata into the grants it advertises, or it
+//! is dropped. Nothing here is ever entered by hand.
 
 use std::{collections::BTreeSet, fmt, time::Duration};
 
@@ -36,10 +36,11 @@ use url::Url;
 /// Cloudflare's `1.1.1.1` over TCP.
 const DEFAULT_RESOLVER: &str = "tcp://1.1.1.1:53";
 
-/// Upper bound on the parallel discovery fan-out. An unreachable
-/// endpoint (a firewalled port, a black-hole host) must not stall the
-/// interactive wizard, so mechanisms that have not reported by then
-/// are abandoned and only what completed in time is offered.
+/// Upper bound on the parallel discovery fan-out.
+///
+/// An unreachable endpoint must not stall the interactive wizard, so
+/// mechanisms that have not reported by then are abandoned and only
+/// what completed in time is offered.
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(6);
 
 /// One deduplicated OAuth 2.0 grant and the services sharing it.
@@ -57,8 +58,8 @@ pub struct Discovered {
 
 impl fmt::Display for Discovered {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // NOTE: the flow is what the user arbitrates; the endpoints
-        // behind it are one server's, since grants reduce by issuer.
+        // NOTE: the flow is what the user arbitrates, the endpoints
+        // behind it being one server's since grants reduce by issuer.
         let flow = match &self.method {
             DiscoveryAuthMethod::OauthAuthorizationCodeGrant { .. } => {
                 "OAuth 2.0 authorization code grant"
@@ -66,8 +67,8 @@ impl fmt::Display for Discovered {
             DiscoveryAuthMethod::OauthDeviceAuthorizationGrant { .. } => {
                 "OAuth 2.0 device authorization grant"
             }
-            // NOTE: search() resolves every issuer into one of the two
-            // grants above, so nothing else reaches the pick list.
+            // NOTE: search resolves every issuer into one of the grants
+            // above, so nothing else reaches the pick list.
             _ => return Ok(()),
         };
 
@@ -78,8 +79,8 @@ impl fmt::Display for Discovered {
             .collect::<Vec<_>>()
             .join(", ");
 
-        // A grant resolved from a typed issuer URL carries no service:
-        // the user named a server, not an address.
+        // NOTE: a grant resolved from a typed issuer URL carries no
+        // service, the user having named a server, not an address.
         if services.is_empty() {
             return write!(f, "{flow}");
         }
@@ -88,18 +89,17 @@ impl fmt::Display for Discovered {
     }
 }
 
-/// Searches every OAuth 2.0 grant reachable from `email` (a full
-/// address or the synthesized `@domain` form) and returns one entry
-/// per deduplicated grant.
+/// Searches every OAuth 2.0 grant reachable from `email`, a full
+/// address or the synthesized `@domain` form, one entry per grant.
 ///
-/// The fan-out is bounded by [`DISCOVERY_TIMEOUT`], so an unreachable
-/// mechanism costs the wizard a few seconds rather than the whole
-/// prompt. An empty result means the caller stops.
+/// [`DISCOVERY_TIMEOUT`] bounds the fan-out, so an unreachable
+/// mechanism costs a few seconds rather than the whole prompt. An empty
+/// result means the caller stops.
 pub fn search(email: &str) -> Result<Vec<Discovered>> {
     let client = compose_client();
 
-    // NOTE: the OAuth-capable PIM services; POP3, WebDAV and
-    // ManageSieve never advertise an OAuth flow of their own.
+    // NOTE: the OAuth-capable PIM services, POP3, WebDAV and
+    // ManageSieve never advertising an OAuth flow of their own.
     let services = BTreeSet::from([
         DiscoveryService::Imap,
         DiscoveryService::Smtp,
@@ -117,13 +117,12 @@ pub fn search(email: &str) -> Result<Vec<Discovered>> {
     Ok(found)
 }
 
-/// Resolves a typed issuer URL into the single grant its RFC 8414
-/// metadata advertises, or nothing when the metadata is unreachable or
-/// names no usable endpoint.
+/// Resolves a typed issuer URL into the grants its RFC 8414 metadata
+/// advertises, or into nothing when it names no usable endpoint.
 ///
-/// This is the issuer twin of [`search`]: the user named an
-/// authorization server directly instead of an address, so there is no
-/// domain to fan out over and no service to tag the grant with.
+/// The issuer twin of [`search`]: the user named an authorization
+/// server directly, so there is no domain to fan out over and no
+/// service to tag the grant with.
 pub fn search_issuer(input: &str) -> Result<Vec<Discovered>> {
     let issuer: Url = input
         .parse()
@@ -146,15 +145,11 @@ pub fn search_issuer(input: &str) -> Result<Vec<Discovered>> {
 }
 
 /// Fetches the authorization server metadata backing `endpoints`,
-/// guessing the issuer from each endpoint host (`https://<host>`) and
-/// keeping the first document that answers.
+/// keeping the first document an endpoint host answers with.
 ///
 /// No discovery mechanism carries this document alongside a composed
-/// service config (the compose layer keeps flow endpoints only, and
-/// the autoconfig sources never see server metadata), so the wizard
-/// asks the provider itself, once per run: its `scopes_supported`
-/// widens the scope options and its `registration_endpoint` decides
-/// whether dynamic registration is offered.
+/// service config, the compose layer keeping flow endpoints only, so
+/// the wizard asks the provider itself, once per run.
 pub fn metadata(hosts: &BTreeSet<String>) -> Option<DiscoveryOauthServerMetadata> {
     let client = compose_client();
 
@@ -171,8 +166,8 @@ pub fn metadata(hosts: &BTreeSet<String>) -> Option<DiscoveryOauthServerMetadata
     None
 }
 
-/// TLS options for the wizard's HTTPS calls, pinned to HTTP/1.1: the
-/// discovery mechanisms only ever speak it to `_well-known` endpoints.
+/// TLS options for the wizard's HTTPS calls, pinned to HTTP/1.1, the
+/// only protocol its discovery mechanisms speak.
 pub fn wizard_tls() -> Tls {
     Tls {
         rustls: Rustls {
@@ -183,9 +178,8 @@ pub fn wizard_tls() -> Tls {
     }
 }
 
-/// The discovery client shared by the wizard's network steps, backed
-/// by the system DNS resolver (with a public fallback), so the input
-/// domain does not leak to a third-party resolver by default.
+/// The discovery client shared by the wizard's network steps, backed by
+/// the system DNS resolver so the input domain does not leak.
 fn compose_client() -> DiscoveryComposeClientStd {
     let resolver = system_resolver().unwrap_or_else(|| {
         DEFAULT_RESOLVER
@@ -197,8 +191,10 @@ fn compose_client() -> DiscoveryComposeClientStd {
 }
 
 /// Collects the OAuth 2.0 methods across every discovered config,
-/// grouped by flow and endpoints, each carrying the union of the
-/// scopes and the set of services it authenticates.
+/// grouped by flow and endpoints.
+///
+/// Each entry carries the union of the scopes and the set of services
+/// it authenticates.
 fn collect_oauth(configs: &[DiscoveryServiceConfig]) -> Vec<Discovered> {
     let mut discovered: Vec<Discovered> = Vec::new();
 
@@ -230,10 +226,9 @@ fn collect_oauth(configs: &[DiscoveryServiceConfig]) -> Vec<Discovered> {
 /// Turns every bare issuer entry into the concrete grants its RFC 8414
 /// metadata advertises, dropping the ones that resolve to nothing.
 ///
-/// An issuer alone configures no account: it names a server whose
-/// endpoints are still unknown. Resolving it here keeps the pick list
-/// made of entries the wizard can actually carry to a working config,
-/// and folds a resolved grant into an identical one already found.
+/// An issuer alone configures no account, naming a server whose
+/// endpoints are unknown, so resolving it here keeps the pick list made
+/// of entries the wizard can carry to a working config.
 fn resolve_issuers(client: &DiscoveryComposeClientStd, found: &mut Vec<Discovered>) {
     let issuers: Vec<usize> = found
         .iter()
@@ -278,15 +273,15 @@ fn resolve_issuers(client: &DiscoveryComposeClientStd, found: &mut Vec<Discovere
     }
 }
 
-/// The grants an authorization server metadata document advertises:
-/// the authorization code flow when it exposes an authorization
-/// endpoint, the device flow when it exposes a device authorization
-/// endpoint, both when it exposes both. RFC 8414 section 2 and RFC
-/// 8628 section 4 let a server publish the two side by side, and a
-/// machine with no browser wants the device flow even where a redirect
-/// is possible, so neither hides the other: the pick list is where
-/// that choice belongs. Both flows need the token endpoint, so a
-/// document without one advertises nothing.
+/// The grants an authorization server metadata document advertises, one
+/// per endpoint that starts a flow.
+///
+/// RFC 8414 section 2 and RFC 8628 section 4 let a server publish both
+/// side by side, and a machine with no browser wants the device flow
+/// anyway, so neither hides the other: the pick list arbitrates.
+///
+/// Both flows need the token endpoint, so a document without one
+/// advertises nothing.
 fn grants_of(metadata: &DiscoveryOauthServerMetadata) -> Vec<DiscoveryAuthMethod> {
     let Some(token_endpoint) = &metadata.token_endpoint else {
         return Vec::new();
@@ -321,14 +316,12 @@ fn grants_of(metadata: &DiscoveryOauthServerMetadata) -> Vec<DiscoveryAuthMethod
 /// server, ignoring their scope, so per-service grants merge into one.
 ///
 /// The server is compared by the host of the endpoint that starts the
-/// flow, not by the endpoint URLs: mechanisms disagree on the exact
-/// spelling a provider writes its endpoints with (Mozilla's autoconfig
-/// still carries Google's legacy `/o/oauth2/auth` where the fixed
-/// provider rules carry `/o/oauth2/v2/auth`, both being the same
-/// server), and the pick list must not ask the user to arbitrate
-/// between two spellings of one thing. Compose yields its outputs in
-/// mechanism-priority order, so the spelling kept is the most
-/// authoritative one. Two genuinely different servers still differ.
+/// flow, not by the URLs: mechanisms disagree on the spelling, and the
+/// pick list must not ask the user to arbitrate between two of them.
+///
+/// Compose yields its outputs in mechanism-priority order, so the
+/// spelling kept is the most authoritative one. Two genuinely different
+/// servers still differ.
 fn same_grant(a: &DiscoveryAuthMethod, b: &DiscoveryAuthMethod) -> bool {
     match (a, b) {
         (
@@ -357,7 +350,7 @@ fn same_grant(a: &DiscoveryAuthMethod, b: &DiscoveryAuthMethod) -> bool {
 }
 
 /// The lowercased host of an endpoint URL, empty when it does not
-/// parse, so two unparsable endpoints only ever match each other.
+/// parse, so two unparsable endpoints match each other alone.
 fn endpoint_host(endpoint: &str) -> String {
     Url::parse(endpoint)
         .ok()
@@ -366,8 +359,10 @@ fn endpoint_host(endpoint: &str) -> String {
 }
 
 /// Unions the incoming grant's scope tokens into the existing grant's,
-/// preserving order and dropping duplicates, so a merged grant
-/// requests every grouped service's scopes at once.
+/// preserving order and dropping duplicates.
+///
+/// A merged grant therefore requests every grouped service's scopes at
+/// once.
 fn merge_scopes(existing: &mut DiscoveryAuthMethod, incoming: &DiscoveryAuthMethod) {
     let existing_scope = match existing {
         DiscoveryAuthMethod::OauthAuthorizationCodeGrant { scope, .. }
@@ -514,13 +509,13 @@ mod tests {
         assert_eq!(collect_oauth(&[jmap, caldav]).len(), 2);
     }
 
+    /// What Google looks like once the fixed provider rules and
+    /// Mozilla's autoconfig have both described its mail grant.
+    ///
+    /// One server, two endpoint spellings, the provider rules first
+    /// since compose yields mechanisms in priority order.
     #[test]
     fn two_spellings_of_one_server_merge_into_the_first() {
-        // What Google looks like once the fixed provider rules and
-        // Mozilla's autoconfig have both described its mail grant: one
-        // authorization server, two endpoint spellings, the provider
-        // rules first since compose yields mechanisms in priority
-        // order.
         let imap = config(
             DiscoveryService::Imap,
             vec![
@@ -557,8 +552,6 @@ mod tests {
             panic!("expected an authorization code grant");
         };
 
-        // The legacy spelling loses, and its services and scopes still
-        // land in the entry that won.
         assert_eq!(
             authorization_endpoint,
             "https://accounts.google.com/o/oauth2/v2/auth"
@@ -581,12 +574,12 @@ mod tests {
         assert!(collect_oauth(&[basic]).is_empty());
     }
 
+    /// Both endpoints yield both flows, the redirect one leading since
+    /// a desktop completes it without a second device.
     #[test]
     fn metadata_resolves_to_every_flow_it_advertises() {
         let scopes = ["mail", "offline_access"];
 
-        // Both endpoints: both flows, the redirect one leading since a
-        // desktop completes it without a second device.
         let both = metadata_of(
             Some("https://as/auth"),
             Some("https://as/device"),
@@ -609,7 +602,6 @@ mod tests {
             ]
         );
 
-        // Device only: no authorization endpoint to redirect to.
         let device = metadata_of(
             None,
             Some("https://as/device"),
@@ -626,13 +618,13 @@ mod tests {
         );
     }
 
+    /// Neither flow endpoint leaves nothing the wizard can run, and no
+    /// token endpoint leaves nothing that could complete.
     #[test]
     fn metadata_without_a_runnable_flow_resolves_to_nothing() {
-        // Neither endpoint: nothing the wizard can run.
         let bare = metadata_of(None, None, Some("https://as/token"), &[]);
         assert!(grants_of(&bare).is_empty());
 
-        // No token endpoint: no flow can complete.
         let tokenless = metadata_of(Some("https://as/auth"), None, None, &[]);
         assert!(grants_of(&tokenless).is_empty());
     }

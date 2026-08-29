@@ -1,4 +1,11 @@
-//! `auth get` subcommand: initiate a new OAuth grant flow.
+//! # Auth get command
+//!
+//! The `auth get` subcommand, initiating a new OAuth 2.0 grant flow and
+//! completing it whenever the shell it runs in allows.
+//!
+//! The headless grants complete here in one shot. The interactive ones
+//! either capture the redirection themselves or hand off to
+//! [`crate::auth::resume`], whose exchange this module shares.
 
 use std::{
     borrow::Cow,
@@ -57,15 +64,16 @@ use crate::{
 ///
 /// Runs the grant configured on the account: `authorization-code`,
 /// `device`, `client-credentials` or `client-credentials-jwt`.
-/// Interactive shells complete the flow; non-interactive and `--json`
-/// hand off to `auth resume`. The client credentials kinds complete
-/// headlessly in one shot.
+///
+/// Interactive shells complete the flow, while non-interactive ones and
+/// `--json` hand off to `auth resume`. The client credentials kinds
+/// complete headlessly in one shot.
 #[derive(Debug, Parser)]
 pub struct AuthGetCommand;
 
 impl AuthGetCommand {
-    /// Runs the grant configured on the account and completes it into
-    /// a stored access token (interactive shells chain into resume).
+    /// Runs the account's grant and completes it into a stored access
+    /// token, interactive shells chaining into resume.
     pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         if account.grant == GrantConfig::Device {
             return execute_device(printer, account);
@@ -121,10 +129,9 @@ impl AuthGetCommand {
             interactive,
         };
 
-        // NOTE: non-interactive or JSON: print (or serialize) the request
-        // and hand off to a manual `auth resume`. JSON stays a clean
-        // structured object carrying the state and verifier, so only
-        // the human output appends the ready-to-run command.
+        // NOTE: JSON stays a clean structured object carrying the state
+        // and verifier, so only the human output appends the
+        // ready-to-run resume command.
         if printer.is_json() || !interactive {
             printer.out(authorization_uri)?;
 
@@ -145,11 +152,9 @@ impl AuthGetCommand {
             println!("{msg}: {auth_uri}");
         }
 
-        // NOTE: a redirection the local listener cannot bind (a reverse-DNS
-        // private-use scheme, as Fastmail's dynamic registration
-        // mandates) dead-ends in the browser: hand off to a manual
-        // `auth resume` rather than binding a listener that would fail
-        // on the unknown scheme (no host, no inferable port).
+        // NOTE: a redirection the listener cannot bind dead-ends in the
+        // browser, so hand off rather than bind a listener that would
+        // fail on an unknown scheme with no host and no inferable port.
         if !is_loopback_redirect(&redirect_uri) {
             println!();
             println!(
@@ -165,9 +170,8 @@ impl AuthGetCommand {
 
         let redirected_uri = match await_redirect(&redirect_uri) {
             Ok(redirected_uri) => redirected_uri,
-            // NOTE: the listener could not bind or accept (a privileged or
-            // taken port, a closed browser): fall back to the manual
-            // flow instead of aborting the whole grant.
+            // NOTE: the listener could not bind or accept, so fall back
+            // to the manual flow instead of aborting the whole grant.
             Err(err) => {
                 println!();
                 println!("Ortie could not capture the redirection automatically ({err}).");
@@ -188,18 +192,12 @@ impl AuthGetCommand {
     }
 }
 
-/// Prints the manual `auth resume` command that finishes the flow by
-/// hand, filled with the flow's state and (when PKCE is enabled) code
-/// verifier. Used whenever the local listener cannot capture the
-/// redirect: a non-interactive shell, a private-use redirection
-/// scheme, or a listener that failed to bind.
+/// Prints the manual `auth resume` command finishing the flow by hand,
+/// filled with its state and, under PKCE, its code verifier.
 ///
-/// The values are attached to their flag with `=` and single quoted.
-/// Both halves matter: a PKCE verifier is drawn from the RFC 7636
-/// unreserved set and a state from URL-safe base64, so either can
-/// begin with `-` and be read as a flag rather than a value, which the
-/// `=` form settles before the parser sees it; the quotes keep the
-/// shell from expanding a leading `~`.
+/// The values are attached to their flag with `=` and single quoted:
+/// a verifier or a state can begin with `-` and be read as a flag, and
+/// the quotes keep the shell from expanding a leading `~`.
 fn print_manual_resume(state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifier>) {
     let state = shell_single_quote(&String::from_utf8_lossy(state.expose()));
 
@@ -220,11 +218,12 @@ fn print_manual_resume(state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifi
     }
 }
 
-/// Whether the redirection can be serviced by the local listener:
-/// an http(s) URL bound to a loopback host. Any other redirection (a
-/// reverse-DNS private-use scheme, as Fastmail's dynamic registration
-/// mandates, or a remote host) dead-ends in the browser, so the flow
-/// finishes by hand through `auth resume`.
+/// Whether the local listener can service the redirection, which means
+/// an http(s) URL on a loopback host.
+///
+/// Anything else, a remote host or the reverse-DNS private-use scheme
+/// Fastmail's dynamic registration mandates, dead-ends in the browser,
+/// so the flow finishes by hand through `auth resume`.
 fn is_loopback_redirect(uri: &Url) -> bool {
     let http_scheme = matches!(uri.scheme(), "http" | "https");
     let loopback_host = match uri.host() {
@@ -237,7 +236,7 @@ fn is_loopback_redirect(uri: &Url) -> bool {
     http_scheme && loopback_host
 }
 
-/// Printable outcome of the flow initiation: the authorization URI
+/// Printable outcome of the flow initiation: the authorization URI,
 /// with the state and PKCE verifier needed to resume it later.
 #[derive(Serialize)]
 pub struct AuthorizationUri<'a> {
@@ -295,6 +294,8 @@ impl fmt::Display for AuthorizationUri<'_> {
     }
 }
 
+/// Requests a device and user code, then polls the token endpoint when
+/// the shell is interactive and hands off to `auth resume` otherwise.
 fn execute_device(printer: &mut impl Printer, account: &mut Account) -> Result<()> {
     let Some(device_endpoint) = account.device_authorization_endpoint.clone() else {
         bail!("Missing endpoints.device-authorization in the account config");
@@ -342,7 +343,6 @@ fn execute_device(printer: &mut impl Printer, account: &mut Account) -> Result<(
         interactive,
     };
 
-    // NOTE: D5, non-interactive or --json print and hand off to auth resume.
     if printer.is_json() || !interactive {
         printer.out(&view)?;
         if !printer.is_json() {
@@ -370,8 +370,8 @@ fn execute_device(printer: &mut impl Printer, account: &mut Account) -> Result<(
     complete_device_token_poll(printer, account, &token_endpoint, &device)
 }
 
-/// Polls the token endpoint until the device grant completes, then stores
-/// the token and fires on-issue hooks (shared with the code grant path).
+/// Polls the token endpoint until the device grant completes, then
+/// stores the token and fires the on-issue hooks.
 pub(crate) fn complete_device_token_poll(
     printer: &mut impl Printer,
     account: &mut Account,
@@ -386,7 +386,8 @@ pub(crate) fn complete_device_token_poll(
     )?;
     client.client_secret = client_secret;
 
-    // NOTE: outer Result is transport / client-side; inner is the token body.
+    // NOTE: the outer Result is the transport, the inner one the token
+    // body the server answered with.
     match client.await_device_access_token(&account.tls, device) {
         Ok(Ok(res)) => report_token_issued(printer, account, &res),
         Ok(Err(res)) => {
@@ -410,7 +411,10 @@ pub(crate) fn complete_device_token_poll(
     }
 }
 
-/// Local poll deadline is the client twin of server `expired_token`.
+/// Synthesizes the error params of a client-side poll failure.
+///
+/// The local poll deadline is the client twin of the server's
+/// `expired_token`, so it fires the same on-issue error hook.
 fn device_poll_client_error_hook_params(
     err: &Oauth20ClientStdError,
 ) -> Option<Oauth20AccessTokenErrorParams> {
@@ -426,14 +430,14 @@ fn device_poll_client_error_hook_params(
     }
 }
 
-/// Lifetime of a freshly minted JWT client assertion. Short by
-/// design: the assertion only needs to survive one token request, and
-/// a narrow window limits replay.
+/// Lifetime of a freshly minted JWT client assertion.
+///
+/// Short by design: the assertion only needs to survive one token
+/// request, and a narrow window limits replay.
 const JWT_ASSERTION_VALIDITY: Duration = Duration::from_secs(600);
 
-/// Runs the client credentials grant headlessly in one shot: no
-/// browser, no user code, no resume. Fires the on-issue hooks and
-/// persists the token like the interactive grants.
+/// Runs the client credentials grant in one shot, with no browser, no
+/// user code and no resume, then persists like the interactive grants.
 fn execute_client_credentials(printer: &mut impl Printer, account: &mut Account) -> Result<()> {
     match request_client_credentials_token(account)? {
         Ok(res) => report_token_issued(printer, account, &res),
@@ -449,11 +453,12 @@ fn execute_client_credentials(printer: &mut impl Printer, account: &mut Account)
     }
 }
 
-/// Runs the configured client credentials exchange against the token
-/// endpoint and returns the raw token response: Basic auth from the
-/// client secret on the plain kind, a freshly minted JWT assertion on
-/// the JWT kind. Shared by `auth get` (issue) and the token
-/// re-acquisition path (refresh).
+/// Exchanges the configured client credentials against the token
+/// endpoint and returns the raw token response.
+///
+/// The plain kind authenticates with Basic auth from the client secret,
+/// the JWT kind with a freshly minted assertion. Shared by `auth get`
+/// and the re-acquisition a refresh runs.
 pub(crate) fn request_client_credentials_token(
     account: &mut Account,
 ) -> Result<Result<Oauth20AccessTokenSuccessParams, Oauth20AccessTokenErrorParams>> {
@@ -469,10 +474,9 @@ pub(crate) fn request_client_credentials_token(
             bail!("Missing client-key in the account config");
         };
 
-        // NOTE: everything is re-derived at every mint: the key
-        // re-read from disk, the x5t recomputed from the certificate,
-        // fresh iat/exp on a short validity and a unique jti. The
-        // assertion lives only for this request and is never stored.
+        // NOTE: everything is re-derived at every mint, so a renewed
+        // certificate is picked up with no restart and the assertion,
+        // which is never stored, lives only for this request.
         let pem = fs::read_to_string(&key_path)
             .with_context(|| format!("Read client key from {}", key_path.display()))?;
         let key = Oauth20JwtBearerKey::from_pkcs8_pem(&pem).or_else(|_| {
@@ -489,8 +493,8 @@ pub(crate) fn request_client_credentials_token(
             }
         };
 
-        // NOTE: reuse the CSRF state generator as the random source
-        // for the unique jti, re-encoded in URL-safe base64.
+        // NOTE: the CSRF state generator is the random source of the
+        // unique jti, re-encoded in URL-safe base64.
         let jti = BASE64_URL_SAFE_NO_PAD.encode(Oauth20State::default().expose());
 
         let claims = Oauth20JwtBearerClaims {
@@ -507,9 +511,9 @@ pub(crate) fn request_client_credentials_token(
             JWT_ASSERTION_VALIDITY,
         )?;
 
-        // NOTE: the assertion authenticates the client, so the client
-        // secret stays unset: the Basic header it would produce
-        // conflicts with the assertion authentication.
+        // NOTE: the assertion authenticates the client, so the secret
+        // stays unset: the Basic header it would produce conflicts with
+        // the assertion.
         let res = client.request_jwt_bearer_client_credentials(
             Oauth20JwtBearerClientCredentialsRequestParams {
                 client_id: Some(account.client_id.as_str().into()),
@@ -531,8 +535,8 @@ pub(crate) fn request_client_credentials_token(
     }
 }
 
-/// Returns the DER bytes of a PEM or DER encoded certificate,
-/// decoding the PEM armor when present.
+/// The DER bytes of a PEM or DER encoded certificate, the PEM armor
+/// being decoded when present.
 fn certificate_der(bytes: Vec<u8>) -> Result<Vec<u8>> {
     let Ok(text) = core::str::from_utf8(&bytes) else {
         return Ok(bytes);
@@ -553,9 +557,10 @@ fn certificate_der(bytes: Vec<u8>) -> Result<Vec<u8>> {
         .context("Decode PEM client certificate body")
 }
 
-/// Maps a client credentials error response into the reported error,
-/// hinting at certificate renewal when a JWT-authenticated client is
-/// rejected as invalid_client, the typical symptom of an expired or
+/// Maps a client credentials error response into the reported error.
+///
+/// A JWT-authenticated client rejected as invalid_client is hinted at
+/// certificate renewal, that being the typical symptom of an expired or
 /// revoked certificate credential.
 pub(crate) fn client_credentials_error(
     grant: GrantConfig,
@@ -588,8 +593,8 @@ pub(crate) fn client_credentials_error(
     }
 }
 
-/// Persist the token, fire on-issue success hooks, print the success
-/// message. Shared by the authorization-code and device grants.
+/// Persists the token, fires the on-issue success hooks and prints the
+/// success message, shared by every grant that issues one.
 pub(crate) fn report_token_issued(
     printer: &mut impl Printer,
     account: &mut Account,
@@ -624,7 +629,8 @@ fn shell_single_quote(s: &str) -> String {
     out
 }
 
-/// Printable / JSON device-authorization response for resume handoff.
+/// Printable device authorization response, carrying what a resume
+/// handoff needs.
 #[derive(Serialize)]
 struct DeviceAuthorization {
     device_code: String,
@@ -644,7 +650,8 @@ impl fmt::Display for DeviceAuthorization {
         if let Some(uri) = &self.verification_uri_complete {
             writeln!(f, " - complete URI: {uri}")?;
         }
-        // NOTE: interactive sessions poll in-process; hide the device code.
+        // NOTE: an interactive session polls in-process, so the device
+        // code is nobody's to copy and stays hidden.
         if !self.interactive {
             writeln!(f, " - device code: {}", self.device_code)?;
         }

@@ -11,7 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed `completion` writing files to the working directory instead of printing the script to the standard output, which broke every packaging helper capturing stdout.
 
-  `manual` now shares its shape: a positional list selecting what to generate, printed to stdout, and an optional `--dir` deciding where it lands instead of the directory it used to take as a positional argument. `ortie manual ./man` becomes `ortie manual --dir ./man`, and both accept command names (`ortie`, `ortie-token`) to generate a single item.
+  `manual` now shares its shape: a positional list selecting what to generate, printed to stdout, and an optional `--dir` deciding where it lands instead of the directory it used to take as a positional argument.
+
+  `ortie manual ./man` becomes `ortie manual --dir ./man`, and both accept command names (`ortie`, `ortie-token`) to generate a single item.
 
 ### Changed
 
@@ -19,7 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Bumped pimalaya-stream to 0.3, whose `Read` and `Write` retry a stream reporting it is not ready. **Behaviour change.**
 
-  A blocking socket is not supposed to report `EAGAIN`, yet callers saw one surface mid-exchange and end the exchange with a bare `Resource temporarily unavailable (os error 35)`, macOS especially and the more readily the longer the exchange ran. The transport now retries such a failure for a minute before giving up with a `TimedOut` naming the budget, and arms a socket read deadline at connect time so a server going silent on a healthy connection stops blocking the caller forever. Its `StreamStd` is renamed `stream::Stream` and its connects take a per-transport options struct, which is what this crate now calls.
+  A blocking socket is not supposed to report `EAGAIN`, yet callers saw one surface mid-exchange and end it with a bare `Resource temporarily unavailable (os error 35)`, macOS especially and the more readily the longer the exchange ran.
+
+  The transport now retries such a failure for a minute before giving up with a `TimedOut` naming the budget, and arms a socket read deadline at connect time so a server going silent on a healthy connection stops blocking the caller forever.
+
+  Its `StreamStd` is renamed `stream::Stream` and its connects take a per-transport options struct, which is what this crate now calls.
 
 ## [2.2.0] - 2026-08-15
 
@@ -54,7 +60,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the `repl` command: a persistent session bound to one account that reads the secret store once and answers `token` and `auth` commands over stdin/stdout.
 
-  One-shot commands re-read the secret store on every run, so a keyring that confirms disclosure per process prompts again and again. The REPL resolves the token once, holds it in memory for the life of the process, and reuses it, collapsing those prompts into a single unlock (plus one per refresh, which must persist a rotated refresh token). It shows a prompt on a terminal and uses a plain line protocol when piped (one flushed result per command on stdout, errors on stderr), so an application can drive it without reimplementing the OAuth flow. `auth get` and `auth resume` run against the same in-memory account, so a token they issue is immediately served by a following `token show`.
+  One-shot commands re-read the secret store on every run, so a keyring that confirms disclosure per process prompts again and again.
+
+  The REPL resolves the token once and holds it in memory for the life of the process, collapsing those prompts into a single unlock, plus one per refresh, which must persist a rotated refresh token.
+
+  It shows a prompt on a terminal and uses a plain line protocol when piped (one flushed result per command on stdout, errors on stderr), so an application can drive it without reimplementing the OAuth flow.
+
+  `auth get` and `auth resume` run against the same in-memory account, so a token they issue is immediately served by a following `token show`.
 
 - Added the device authorization grant (RFC 8628).
 
@@ -62,9 +74,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the headless client credentials grants, so OAuth-ignorant tools (a sync daemon, a cron job) can exec `ortie token show --auto-refresh` and always read a valid bearer token.
 
-  `grant = "client-credentials"` (RFC 6749 section 4.4) authenticates with the existing `client-secret`; `grant = "client-credentials-jwt"` (RFC 7523 section 2.2, the Microsoft certificate credentials flow) authenticates with a JWT assertion signed by the new `client-key` (PKCS#8 or PKCS#1 PEM path), carrying the `x5t` thumbprint of the new `client-certificate` (PEM or DER path). Both run `auth get` headlessly in one shot; `auth resume` has nothing to resume and says so.
+  `grant = "client-credentials"` (RFC 6749 section 4.4) authenticates with the existing `client-secret`.
 
-  Neither grant issues a refresh token, so auto-refresh (`token show --auto-refresh` and `token refresh`) branches per grant: refresh-token exchange where one exists, silent re-acquisition (a re-run of the grant) for the client credentials kinds, including when the stored token is missing, so the very first run needs no prior `auth get`. Each JWT re-acquisition mints a fresh 10 minute assertion (unique `jti`, key and certificate re-read from disk); assertions are never stored.
+  `grant = "client-credentials-jwt"` (RFC 7523 section 2.2, the Microsoft certificate credentials flow) authenticates with a JWT assertion signed by the new `client-key` (PKCS#8 or PKCS#1 PEM path), carrying the `x5t` thumbprint of the new `client-certificate` (PEM or DER path).
+
+  Both run `auth get` headlessly in one shot; `auth resume` has nothing to resume and says so.
+
+  Neither grant issues a refresh token, so auto-refresh (`token show --auto-refresh` and `token refresh`) branches per grant: refresh-token exchange where one exists, silent re-acquisition for the client credentials kinds, including when the stored token is missing, so the very first run needs no prior `auth get`.
+
+  Each JWT re-acquisition mints a fresh 10 minute assertion (unique `jti`, key and certificate re-read from disk); assertions are never stored.
 
   A provider `invalid_client` on the JWT kind now hints that the certificate credential may be expired and need renewal.
 
@@ -75,7 +93,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Offered to save the wizard's account to a config file, defaulting to `$XDG_CONFIG_HOME/ortie/config.toml`.
 
-  The account is printed first and the save comes after it, so the prompt decides one thing only and declining leaves you the printed fragment. An existing file is appended to, never rewritten: the fragment is one `[accounts.<name>]` table, so the accounts and comments already in it are untouched. Appending to a file that already holds something is confirmed first, naming the path. A redirected stdout (or `--json`) prints without prompting at all, so `ortie >> <config>` is unchanged.
+  The account is printed first and the save comes after it, so the prompt decides one thing only and declining leaves you the printed fragment.
+
+  An existing file is appended to, never rewritten: the fragment is one `[accounts.<name>]` table, so the accounts and comments already in it are untouched. Appending to a file that already holds something is confirmed first, naming the path.
+
+  A redirected stdout, or `--json`, prints without prompting at all, so `ortie >> <config>` is unchanged.
 
 - Resolved issuers into concrete grants: a typed issuer URL, and a discovered OAuth issuer, are read through their RFC 8414 metadata instead of being emitted as a bare issuer comment.
 
@@ -101,11 +123,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bounded the wizard's discovery with a 6 second deadline, so one unreachable endpoint cannot stall the prompt.
 - Reduced discovered grants by authorization server rather than by endpoint URL, so one server described by two mechanisms is offered once instead of twice.
 
-  Gmail no longer asks you to choose between Mozilla autoconfig's legacy `accounts.google.com/o/oauth2/auth` + `www.googleapis.com/oauth2/v3/token` pair and the current one: the most authoritative mechanism wins, and an entry is labelled by its flow and services instead of its token endpoint. A pick list left with a single grant is no longer prompted for.
+  Gmail no longer asks you to choose between Mozilla autoconfig's legacy `accounts.google.com/o/oauth2/auth` + `www.googleapis.com/oauth2/v3/token` pair and the current one: the most authoritative mechanism wins, and an entry is labelled by its flow and services instead of its token endpoint.
+
+  A pick list left with a single grant is no longer prompted for.
 
 - Asked for the application before the scopes, since a registration is what decides which scopes can be requested.
 
-  A public application now offers exactly the scopes it is registered for (Thunderbird on Google: Gmail, CardDAV and CalDAV), so a scope its client id was never verified for can no longer reach the authorization request and fail at consent. Dynamic registration picks its scopes before it registers, since they travel in the registration request.
+  A public application now offers exactly the scopes it is registered for (Thunderbird on Google: Gmail, CardDAV and CalDAV), so a scope its client id was never verified for can no longer reach the authorization request and fail at consent.
+
+  Dynamic registration picks its scopes before it registers, since they travel in the registration request.
 
 - Derived the wizard's account name from the input (the first label of the domain or issuer host) instead of prompting for it; rename the `[accounts.<name>]` key by hand.
 - Moved the wizard's guidance from the printed fragment into the stderr banner, so stdout now carries bare TOML.
@@ -139,9 +165,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the account discovery wizard, run by bare `ortie` (alias of `auth discover`).
 
-  Prompts for an email address, a server or an issuer URI, discovers the reachable OAuth 2.0 grants and prints the pick as a complete `[accounts.<name>]` fragment: valid TOML on stdout (`ortie >> <config>` appends it directly), or a JSON object with `--json`. Grants sharing a flow and endpoints are grouped into a single choice that merges their per-service scopes, so one token can cover several services (Microsoft's IMAP and SMTP, say) instead of one grant line per service.
+  Prompts for an email address, a server or an issuer URI, discovers the reachable OAuth 2.0 grants and prints the pick as a complete `[accounts.<name>]` fragment: valid TOML on stdout (`ortie >> <config>` appends it directly), or a JSON object with `--json`.
 
-  The application step then offers every way to obtain a client, most preferred first: dynamic registration (RFC 7591) when the provider advertises it in its RFC 8414 metadata (the wizard registers ortie on the spot, falling back to a reverse-DNS private-use redirection scheme for providers like Fastmail whose registration accepts only those, which `auth get` then completes through a manual `auth resume`), a well-known public application (Thunderbird for Google, Microsoft and Fastmail), or a custom entry.
+  Grants sharing a flow and endpoints are grouped into a single choice that merges their per-service scopes, so one token can cover several services (Microsoft's IMAP and SMTP, say) instead of one grant line per service.
+
+  The application step then offers every way to obtain a client, most preferred first: dynamic registration (RFC 7591) when the provider advertises it in its RFC 8414 metadata, a well-known public application (Thunderbird for Google, Microsoft and Fastmail), or a custom entry.
+
+  Dynamic registration registers ortie on the spot, falling back to a reverse-DNS private-use redirection scheme for providers like Fastmail whose registration accepts only those, which `auth get` then completes through a manual `auth resume`.
 
   It also fills the defaults a provider is known to need but discovery does not surface, such as Fastmail's RFC 8707 `resource` indicator and its scopes (without which Fastmail rejects the authorize request before any consent screen).
 

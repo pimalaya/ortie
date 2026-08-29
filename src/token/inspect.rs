@@ -1,4 +1,7 @@
-//! `token inspect` subcommand: print metadata about the access token.
+//! # Token inspect command
+//!
+//! The `token inspect` subcommand, printing the metadata around the
+//! stored access token rather than the token itself.
 
 use std::{
     fmt,
@@ -17,9 +20,9 @@ use crate::account::Account;
 
 /// Inspect metadata associated to the access token.
 ///
-/// Unlike the `token show` command, this command shows you metadata
-/// like the token type, when it was issued, when it expires, the
-/// presence of a refresh token, and the granted scopes.
+/// Unlike `token show`, this prints the token type, when it was issued,
+/// when it expires, whether a refresh token came with it, and the
+/// scopes it was granted. The token itself never appears.
 #[derive(Debug, Parser)]
 pub struct TokenInspectCommand;
 

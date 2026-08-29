@@ -1,15 +1,19 @@
-//! Scope step of the wizard: what the token is allowed to reach.
+//! # Scope step
 //!
-//! It runs after the application step, because what may be requested
-//! is a property of the application requesting it. A well-known public
-//! application is verified for a fixed set of scopes and its
-//! authorization request is refused on any other, so that set is the
-//! whole list. Dynamic registration is bound only by what the
-//! authorization server advertises, and sends the scopes inside the
-//! registration request, so it prompts from within the application
-//! step rather than after it. A custom application prompts for
-//! nothing: the discovered scopes stay in the fragment, for the user
-//! to adjust to what their own registration was granted.
+//! The wizard step deciding what the token is allowed to reach, run
+//! after the application step since what may be requested is a property
+//! of the application requesting it.
+//!
+//! A well-known public application is verified for a fixed set of
+//! scopes and refused on any other, so that set is the whole list.
+//!
+//! Dynamic registration is bound only by what the server advertises,
+//! and prompts from within the application step, its scopes travelling
+//! inside the registration request.
+//!
+//! A custom application prompts for nothing: the discovered scopes stay
+//! in the fragment, for the user to adjust to what their own
+//! registration was granted.
 
 use anyhow::Result;
 use io_pim_discovery::rfc8414::DiscoveryOauthServerMetadata;
@@ -19,23 +23,21 @@ use crate::wizard::{OauthConfig, advertised_scopes};
 
 /// The scope options the application step leaves for the scope step.
 pub enum Source {
-    /// The set a well-known public application is registered for: the
+    /// The set a well-known public application is registered for, the
     /// only scopes its client id can be granted.
     Registered(Vec<String>),
-    /// The scopes the authorization server and the provider quirks
-    /// advertise, widened by the discovered ones: what a client
-    /// registered for this account may ask for.
+    /// What the authorization server and the provider quirks advertise,
+    /// widened by the discovered scopes.
     Advertised(Vec<String>),
-    /// Nothing left to prompt: the application step sent the scopes in
-    /// a registration request, or left the account without an
-    /// application, which is the user's to fill in along with the
-    /// scopes their own registration was granted.
+    /// Nothing left to prompt, the application step having sent the
+    /// scopes already or left the account without an application.
     Taken,
 }
 
 /// Prompts for the scopes the token will carry, among the options the
-/// application allows, with the discovered ones selected. Skipped when
-/// there is nothing to choose from.
+/// application allows and with the discovered ones selected.
+///
+/// Skipped when there is nothing to choose from.
 pub fn prompt(config: &mut OauthConfig, source: Source) -> Result<()> {
     let options = match source {
         Source::Registered(options) | Source::Advertised(options) => options,
@@ -57,9 +59,10 @@ pub fn prompt(config: &mut OauthConfig, source: Source) -> Result<()> {
     Ok(())
 }
 
-/// The options for a client bound to no registered set: the discovered
-/// scopes first, since they are the narrow per-service ones the wizard
-/// resolved, then everything the authorization server metadata and the
+/// The options for a client bound to no registered set.
+///
+/// The discovered scopes lead, being the narrow per-service ones the
+/// wizard resolved, then comes everything the server metadata and the
 /// provider quirks advertise.
 pub fn advertised(config: &OauthConfig, metadata: Option<&DiscoveryOauthServerMetadata>) -> Source {
     let mut options = config.scopes.clone();
@@ -87,6 +90,8 @@ mod tests {
 
     use super::*;
 
+    /// The discovered scope leads and is not repeated by the quirk list
+    /// it also belongs to.
     #[test]
     fn advertised_options_lead_with_the_discovered_scopes() {
         let config = OauthConfig {
@@ -102,8 +107,6 @@ mod tests {
             panic!("expected advertised options");
         };
 
-        // The discovered scope leads and is not repeated by the quirk
-        // list it also belongs to.
         assert_eq!(options[0], "urn:ietf:params:oauth:scope:mail");
         assert_eq!(
             options.iter().filter(|scope| *scope == &options[0]).count(),

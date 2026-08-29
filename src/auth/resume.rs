@@ -1,4 +1,7 @@
-//! `auth resume` subcommand: complete an OAuth grant flow.
+//! # Auth resume command
+//!
+//! The `auth resume` subcommand, completing an OAuth 2.0 grant flow
+//! [`crate::auth::get`] started but could not finish itself.
 
 use std::borrow::Cow;
 
@@ -34,46 +37,41 @@ use crate::{
 
 /// Resume an existing OAuth 2.0 grant flow.
 ///
-/// Completes the grant configured on the account: the redirected URI
-/// for the authorization code grant, or the device code for the
-/// device grant. Authorization-code-only flags (`--state`, `--pkce`,
-/// `--redirect-uri`) are rejected on device accounts. The client
-/// credentials grants complete in a single auth get and are rejected
-/// here.
+/// Completes the grant configured on the account, from the redirected
+/// URI for the authorization code grant or the device code for the
+/// device grant.
+///
+/// The authorization-code-only flags (`--state`, `--pkce`,
+/// `--redirect-uri`) are rejected on a device account, and the client
+/// credentials grants have nothing to resume at all.
 #[derive(Debug, Parser)]
 pub struct AuthResumeCommand {
-    /// Redirected URI (authorization-code grant) or device code
-    /// (device grant).
+    /// Redirected URI, or device code on the device grant.
     ///
-    /// For the authorization code grant this is the URI the browser
-    /// was redirected to after consent, not the registered redirect
-    /// URI. For the device grant this is the `device_code` returned by
-    /// a non-interactive or `--json` auth get.
+    /// For the authorization code grant this is the URI the browser was
+    /// redirected to after consent, not the registered redirect URI.
+    /// For the device grant it is the `device_code` a non-interactive
+    /// or `--json` auth get returned.
     #[arg(value_name = "URI|DEVICE_CODE")]
     pub input: String,
-
     /// The state generated during the authorization flow initiation.
     ///
-    /// Authorization-code grant only. If a state was generated during
-    /// auth get, it should be given here and must match.
+    /// Authorization-code grant only. A state generated during auth get
+    /// must be given here, and must match.
     #[arg(long, short, value_parser = state_parser)]
     #[arg(value_name = "VALUE")]
     pub state: Option<Oauth20State>,
-
-    /// The PKCE code verifier generated during the authorization flow
-    /// initiation.
+    /// The PKCE code verifier generated during the initiation.
     ///
-    /// Authorization-code grant only. If PKCE was enabled during auth
-    /// get, the generated verifier should be given here.
+    /// Authorization-code grant only. The verifier generated during
+    /// auth get must be given here when PKCE was enabled.
     #[arg(long, short, value_parser = pkce_code_verifier_parser)]
     #[arg(value_name = "CODE")]
     pub pkce: Option<Oauth20PkceCodeVerifier>,
-
-    /// The redirect URI used during the authorization flow
-    /// initiation.
+    /// The redirect URI used during the initiation.
     ///
-    /// Authorization-code grant only. If a redirect URI was provided
-    /// during auth get, it must match here.
+    /// Authorization-code grant only. A redirect URI provided during
+    /// auth get must match here.
     #[arg(long, short, value_parser = uri_parser)]
     pub redirect_uri: Option<Url>,
 }
@@ -93,7 +91,8 @@ impl AuthResumeCommand {
             bail!("Missing endpoints.token in the account config");
         };
 
-        // NOTE: trim paste whitespace; do not echo the URI (may carry code=).
+        // NOTE: the URI is never echoed back, since a pasted one still
+        // carries the authorization code.
         let redirected_uri = Url::parse(self.input.trim())
             .map_err(|err| anyhow!("Invalid redirected URI: {err}"))?;
 
@@ -160,7 +159,7 @@ impl AuthResumeCommand {
         }
     }
 
-    /// Device grant: treat `input` as the device code and poll.
+    /// Takes `input` as the device code and polls the token endpoint.
     fn execute_device(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         if self.state.is_some() || self.pkce.is_some() || self.redirect_uri.is_some() {
             bail!(
@@ -178,7 +177,8 @@ impl AuthResumeCommand {
             bail!("Missing endpoints.token in the account config");
         };
 
-        // NOTE: bare device code, RFC 8628 example defaults for the poll loop.
+        // NOTE: a resume is handed the device code alone, so the poll
+        // loop falls back on the RFC 8628 example values.
         let device = Oauth20DeviceAuthSuccessParams {
             device_code: SecretString::from(device_code),
             user_code: String::new(),
@@ -207,7 +207,8 @@ pub fn state_parser(state: &str) -> Result<Oauth20State, String> {
 
 /// Clap value parser for the PKCE code verifier argument.
 pub fn pkce_code_verifier_parser(verifier: &str) -> Result<Oauth20PkceCodeVerifier, String> {
-    // NOTE: omit the verifier body: clap surfaces this string on stderr.
+    // NOTE: the verifier body is omitted, clap surfacing this string on
+    // stderr.
     match verifier.parse() {
         Ok(verifier) => Ok(verifier),
         Err(b) => Err(format!("Invalid 0x{b:x} found in PKCE code verifier")),

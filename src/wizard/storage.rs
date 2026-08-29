@@ -1,25 +1,24 @@
-//! Storage step of the wizard: where the issued token is persisted.
+//! # Storage step
 //!
-//! Ortie persists nothing itself, so an account is only usable once it
-//! names a pair of shell commands: one printing the stored token JSON
-//! on stdout, one receiving it on stdin. This is the Ortie twin of the
-//! Himalaya wizard's credential prompt, and follows the same two steps
-//! as the shared picker it mirrors: a strategy (a credential provider
-//! CLI known for the running OS, or custom commands), then the entry
-//! the secret lives under, seeded with the account name.
+//! The wizard step deciding where the issued token is persisted, which
+//! Ortie never does itself: an account is usable only once it names a
+//! pair of shell commands, one printing the stored token JSON on stdout
+//! and one receiving it on stdin.
 //!
-//! The strategies are ordered by what the running system can actually
-//! do: a provider whose CLI is on the `PATH` leads, one that is only
-//! relevant for the OS follows and says so. Nothing is hidden, since a
-//! provider missing today is one package install away and the config
-//! the wizard writes for it is correct either way.
+//! It is the Ortie twin of the Himalaya wizard's credential prompt and
+//! follows the same two steps: a strategy, meaning a credential
+//! provider CLI known for the running OS or custom commands, then the
+//! entry the secret lives under, seeded with the account name.
 //!
-//! The entry is used verbatim, exactly as in Himalaya, so a keyring
-//! already holding a token for this account is named as it is rather
-//! than under a namespace Ortie picked. Unlike Himalaya, which only
-//! ever *reads* a secret the user stored, Ortie owns the value, so both
-//! directions are recorded: the write command stores what a later
-//! `ortie auth get` issues.
+//! Strategies are ordered by what the running system can do, a provider
+//! on the `PATH` leading and one merely relevant for the OS following
+//! and saying so. Nothing is hidden, a missing provider being one
+//! package install away and its config correct either way.
+//!
+//! The entry is used verbatim, so a keyring already holding a token for
+//! this account is named as it is rather than under a namespace Ortie
+//! picked. Ortie owns the value where Himalaya only reads one, so both
+//! directions are recorded.
 
 use std::{env, fmt};
 
@@ -32,9 +31,8 @@ use crate::wizard::{OauthConfig, Storage, StorageCommand, StorageEntry};
 /// write commands.
 ///
 /// The pick list holds the credential provider CLIs relevant on the
-/// running OS, the ones actually installed first, and ends with a
-/// custom entry, so a platform with no known provider (Windows) is
-/// offered the custom entry alone.
+/// running OS, the installed ones first, and ends with a custom entry,
+/// so a platform with no known provider is offered that entry alone.
 pub fn configure(config: &mut OauthConfig) -> Result<()> {
     let mut known: Vec<(KeyringProvider, bool)> = KeyringProvider::available()
         .into_iter()
@@ -66,13 +64,11 @@ pub fn configure(config: &mut OauthConfig) -> Result<()> {
 }
 
 /// The read and write pair for a secret living at `entry` in
-/// `provider`. The entry is used verbatim, so a pre-existing one is
-/// read and written exactly as named.
+/// `provider`, the entry being used verbatim.
 ///
-/// The two halves land in different shapes because the picker hands
-/// them over that way: reads are an argv, so no shell reinterprets an
-/// entry name, while writes stay a shell line since some rely on shell
-/// features (`$(cat)` on macOS).
+/// The two halves land in different shapes: reads are an argv, so no
+/// shell reinterprets an entry name, while writes stay a shell line
+/// since some rely on shell features (`$(cat)` on macOS).
 fn keyring_storage(provider: KeyringProvider, entry: &str) -> Storage {
     Storage {
         read: StorageEntry {
@@ -85,8 +81,10 @@ fn keyring_storage(provider: KeyringProvider, entry: &str) -> Storage {
 }
 
 /// Prompts for the custom storage commands, run through the platform
-/// shell. The write prompt is skipped when the read command is left
-/// empty for later, and the fragment keeps empty placeholders.
+/// shell.
+///
+/// A read command left empty for later skips the write prompt, and the
+/// fragment keeps empty placeholders.
 fn custom(config: &mut OauthConfig) -> Result<()> {
     let read = prompt::some_text::<&str>("Read command (leave empty for now):", None)?
         .filter(|command| !command.is_empty());
@@ -109,10 +107,8 @@ fn custom(config: &mut OauthConfig) -> Result<()> {
     Ok(())
 }
 
-/// Whether the provider's CLI can be found on the `PATH`, which is
-/// what leads the pick list: a provider that is installed is one the
-/// user can store a token in today, while the rest are a package
-/// install away.
+/// Whether the provider's CLI is on the `PATH`, which is what leads the
+/// pick list.
 ///
 /// The provider names its own program, being the first element of its
 /// read command, so no table of binary names is duplicated here.
@@ -148,8 +144,8 @@ impl fmt::Display for Choice {
                 provider,
                 installed: true,
             } => write!(f, "{}", provider.name()),
-            // Offered anyway: a provider can be installed right after,
-            // and the config it yields is written all the same.
+            // NOTE: offered anyway, a provider being installable right
+            // after and its config written all the same.
             Self::Known {
                 provider,
                 installed: false,
