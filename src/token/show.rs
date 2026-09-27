@@ -12,6 +12,7 @@ use std::{
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
+use schemars::JsonSchema;
 use secrecy::ExposeSecret;
 use serde::Serialize;
 
@@ -76,7 +77,7 @@ impl TokenShowCommand {
             }
         }
 
-        printer.out(AccessToken {
+        printer.out(TokenShowOutput {
             access_token: token.access_token.expose_secret(),
         })
     }
@@ -105,13 +106,13 @@ fn is_expired(issued_at: Option<u64>, expires_in: Option<usize>) -> bool {
 }
 
 /// Printable raw access token, exposed for piping.
-#[derive(Debug, Serialize)]
-pub struct AccessToken<'a> {
+#[derive(Debug, JsonSchema, Serialize)]
+pub struct TokenShowOutput<'a> {
     /// The raw access token string.
     pub access_token: &'a str,
 }
 
-impl fmt::Display for AccessToken<'_> {
+impl fmt::Display for TokenShowOutput<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.access_token)
     }

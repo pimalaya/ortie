@@ -19,7 +19,7 @@ use anyhow::Result;
 use io_pim_discovery::rfc8414::DiscoveryOauthServerMetadata;
 use pimalaya_cli::prompt;
 
-use crate::wizard::{OauthConfig, advertised_scopes};
+use crate::wizard::{ConfigureOutput, advertised_scopes};
 
 /// The scope options the application step leaves for the scope step.
 pub enum Source {
@@ -38,7 +38,7 @@ pub enum Source {
 /// application allows and with the discovered ones selected.
 ///
 /// Skipped when there is nothing to choose from.
-pub fn prompt(config: &mut OauthConfig, source: Source) -> Result<()> {
+pub fn prompt(config: &mut ConfigureOutput, source: Source) -> Result<()> {
     let options = match source {
         Source::Registered(options) | Source::Advertised(options) => options,
         Source::Taken => return Ok(()),
@@ -64,7 +64,10 @@ pub fn prompt(config: &mut OauthConfig, source: Source) -> Result<()> {
 /// The discovered scopes lead, being the narrow per-service ones the
 /// wizard resolved, then comes everything the server metadata and the
 /// provider quirks advertise.
-pub fn advertised(config: &OauthConfig, metadata: Option<&DiscoveryOauthServerMetadata>) -> Source {
+pub fn advertised(
+    config: &ConfigureOutput,
+    metadata: Option<&DiscoveryOauthServerMetadata>,
+) -> Source {
     let mut options = config.scopes.clone();
 
     let supported = metadata
@@ -94,13 +97,13 @@ mod tests {
     /// it also belongs to.
     #[test]
     fn advertised_options_lead_with_the_discovered_scopes() {
-        let config = OauthConfig {
+        let config = ConfigureOutput {
             endpoints: Endpoints {
                 token: Some("https://api.fastmail.com/oauth/refresh".to_string()),
                 ..Default::default()
             },
             scopes: vec!["urn:ietf:params:oauth:scope:mail".to_string()],
-            ..OauthConfig::empty()
+            ..ConfigureOutput::empty()
         };
 
         let Source::Advertised(options) = advertised(&config, None) else {
@@ -117,13 +120,13 @@ mod tests {
 
     #[test]
     fn a_provider_without_quirks_offers_only_what_was_discovered() {
-        let config = OauthConfig {
+        let config = ConfigureOutput {
             endpoints: Endpoints {
                 token: Some("https://as.example.test/token".to_string()),
                 ..Default::default()
             },
             scopes: vec!["mail".to_string()],
-            ..OauthConfig::empty()
+            ..ConfigureOutput::empty()
         };
 
         let Source::Advertised(options) = advertised(&config, None) else {

@@ -59,4 +59,18 @@ Each of the three ways account resolution fails SHALL name what is missing and w
 The configuration path SHALL be read from `ORTIE_CONFIG` as well as `-c`, both accepting a `:`-delimited list merged in order.
 
 ### Requirement: The wizard saves where the configuration lives
-The save SHALL NOT prompt for a path: it writes where `-c` or `ORTIE_CONFIG` pointed, or the default location. A file already holding accounts is still appended to rather than overwritten, and still confirmed before it happens, since it is one the user already owns. The fragment still reaches stdout before the save is offered, so the choice is made having seen what is being placed.
+The save SHALL NOT prompt for a path: it writes where `-c` or `ORTIE_CONFIG` pointed, or the default location. A file already holding accounts is appended to rather than overwritten, and confirmed before it happens in the one prompt the save step asks, since it is a file the user already owns. Declining SHALL print the account on stdout instead of writing it.
+
+### Requirement: One TLS conversion, taking the ALPN list
+The `tls` account option SHALL name the TLS provider as one of `auto` (the default, the provider the binary was built with), `native-tls`, `rustls-aws` or `rustls-ring`, and SHALL be folded into the runtime TLS handle by a single conversion taking the ALPN list as its argument. No other code path SHALL build that handle from the configuration, so no call site can negotiate an ALPN, or none, by accident.
+
+#### Scenario: Omitted TLS provider
+- GIVEN an account with no `tls` field
+- WHEN a command connects to the token endpoint
+- THEN the provider is the one the binary was built with
+
+### Requirement: ALPN is a config key
+An account MAY declare `alpn`, the list of ALPN identifiers offered during the TLS handshake. It SHALL default to empty, sending no ALPN extension, which is what an OAuth 2.0 endpoint over plain HTTPS expects; a non-empty list overrides it, `["http/1.1"]` being the one meaningful value, for a TLS middlebox refusing a handshake without ALPN. Only rustls reads it, native-tls ignoring ALPN.
+
+### Requirement: A defaulted field is absent from the generated account
+The account fragment the wizard prints SHALL omit every field equal to its type's default, through one shared helper rather than a per-field predicate, so an account that does not claim the default carries no `default = false` line in either rendering.

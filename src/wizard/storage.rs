@@ -25,7 +25,7 @@ use std::{env, fmt};
 use anyhow::Result;
 use pimalaya_cli::{prompt, wizard::keyring::KeyringProvider};
 
-use crate::wizard::{OauthConfig, Storage, StorageCommand, StorageEntry};
+use crate::wizard::{ConfigureOutput, Storage, StorageCommand, StorageEntry};
 
 /// Runs the storage step against `config`, filling in its read and
 /// write commands.
@@ -33,7 +33,7 @@ use crate::wizard::{OauthConfig, Storage, StorageCommand, StorageEntry};
 /// The pick list holds the credential provider CLIs relevant on the
 /// running OS, the installed ones first, and ends with a custom entry,
 /// so a platform with no known provider is offered that entry alone.
-pub fn configure(config: &mut OauthConfig) -> Result<()> {
+pub fn configure(config: &mut ConfigureOutput) -> Result<()> {
     let mut known: Vec<(KeyringProvider, bool)> = KeyringProvider::available()
         .into_iter()
         .map(|provider| (provider, installed(provider)))
@@ -85,7 +85,7 @@ fn keyring_storage(provider: KeyringProvider, entry: &str) -> Storage {
 ///
 /// A read command left empty for later skips the write prompt, and the
 /// fragment keeps empty placeholders.
-fn custom(config: &mut OauthConfig) -> Result<()> {
+fn custom(config: &mut ConfigureOutput) -> Result<()> {
     let read = prompt::some_text::<&str>("Read command (leave empty for now):", None)?
         .filter(|command| !command.is_empty());
 

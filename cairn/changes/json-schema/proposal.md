@@ -1,7 +1,7 @@
 ---
 cairn: change
 id: json-schema
-status: draft
+status: landed
 created: 2026-08-15
 ---
 
@@ -41,6 +41,8 @@ No new output. `token refresh` and `auth resume` keep printing a `Message` confi
 
 No REPL entries. The REPL dispatches the same `token` and `auth` leaves and prints their payloads verbatim, so its lines are already described by the four keys; the registry says so in prose rather than duplicating them.
 
-No renames. `AccessToken`, `AuthorizationUri`, `DeviceAuthorization` and `OauthConfig` keep their names: Comodoro registers `Timer` and `GeneratedConfig` without an `Output` suffix, and Ortie has no naming problem worth a sweep in this change.
+Renames, reversing what this proposal first said. The draft kept `AccessToken` and `OauthConfig` on the grounds that Comodoro registers `Timer` and `GeneratedConfig` without an `Output` suffix. The cross-product scan since then made the suffix a family rule rather than one product's habit: every data command prints a `<Command>Output` type deriving `Display`, `Serialize` and `JsonSchema`. So `AccessToken` becomes `TokenShowOutput`, the `token inspect` newtype becomes `TokenInspectOutput`, the `auth get` enum is `AuthGetOutput`, and `OauthConfig` becomes `ConfigureOutput`, which also stops a `*Config` type from living outside `config.rs` against what the crate header says about its two configuration layers.
+
+The variant payloads `AuthorizationUri` and `DeviceAuthorization` keep their names: the command's output type is the enum, and the two describe what they carry better than a numbered suffix would.
 
 No generated schemas in the repository and no CI step publishing them. The command generates on demand, like `manuals` and `completions`, and packaging can pick it up later.

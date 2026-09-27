@@ -32,14 +32,13 @@ pimalaya-cli = { version = "0.2", default-features = false, features = ["build"]
 env_logger = "0.11"
 rustls = "0.23"
 rustls-platform-verifier = "0.7"
-serde_json = "1"
 tempfile = "3"
 
 [dependencies]
 anyhow = "1"
 base64 = "0.23"
 clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
-dirs = "6.0"
+dirs = "7"
 humantime = "2.2"
 io-oauth = { version = "0.3", default-features = false, features = ["client", "jwt-bearer"] }
 io-pim-discovery = { version = "0.7", default-features = false, features = ["stream", "autoconfig", "pacc", "rfc6186", "rfc6764", "rfc8620", "rfc8414"] }
@@ -49,7 +48,9 @@ open = "5.3"
 pimalaya-cli = { version = "0.2", default-features = false, features = ["terminal", "prompt", "spinner", "wizard"] }
 pimalaya-config = { version = "0.2", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.3", default-features = false, features = ["std"] }
+schemars = "1"
 secrecy = { version = "0.10", default-features = false, features = ["serde"] }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
+serde_json = "1"
 shellexpand = "3.1"
 url = { version = "2.5", default-features = false, features = ["serde"] }

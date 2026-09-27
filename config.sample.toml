@@ -18,8 +18,16 @@ default = true
 
 # TLS provider used for the HTTPS connection to the token endpoint.
 #
-# Possible values: "native-tls", "rustls-aws", "rustls-ring"
+# Possible values: "auto" (default, the provider this binary was built with),
+# "native-tls", "rustls-aws", "rustls-ring"
 #tls = "rustls-ring"
+
+# ALPN identifiers offered during the TLS handshake.
+#
+# Empty by default, so no ALPN extension is sent: an OAuth 2.0 endpoint is plain
+# HTTPS and registers no identifier. Set `["http/1.1"]` when a TLS middlebox
+# refuses a handshake without ALPN. Only rustls reads it, native-tls ignores it.
+#alpn = ["http/1.1"]
 
 # OAuth 2.0 client credentials, as registered with your provider.
 #

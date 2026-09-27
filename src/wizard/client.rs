@@ -35,7 +35,7 @@ use pimalaya_stream::tls::Tls;
 use secrecy::ExposeSecret;
 use url::Url;
 
-use crate::wizard::{OauthConfig, RawSecret, scope, search};
+use crate::wizard::{ConfigureOutput, RawSecret, scope, search};
 
 /// The loopback redirection URI registered by default.
 ///
@@ -61,7 +61,7 @@ const REDIRECT_SCHEME: &str = "org.pimalaya.ortie://redirect";
 /// registration endpoint decides whether dynamic registration is on
 /// offer, and its scopes what an unbound client may ask for.
 pub fn configure(
-    config: &mut OauthConfig,
+    config: &mut ConfigureOutput,
     metadata: Option<&DiscoveryOauthServerMetadata>,
 ) -> Result<scope::Source> {
     let registration_endpoint =
@@ -129,7 +129,7 @@ pub fn configure(
 /// The loopback redirection is registered first, matching the runtime
 /// default; a provider rejecting http redirections altogether gets a
 /// reverse-DNS private-use scheme, which the config then pins.
-fn register(config: &mut OauthConfig, endpoint: &Url) -> Result<()> {
+fn register(config: &mut ConfigureOutput, endpoint: &Url) -> Result<()> {
     let device = config.grant == Some("device");
     let scopes = config.scopes.join(" ");
 
@@ -340,7 +340,7 @@ const KNOWN_APPS: &[KnownApp] = &[
 
 /// The well-known public applications registered against the same
 /// authorization server as the config's endpoints.
-fn known_apps(config: &OauthConfig) -> Vec<&'static KnownApp> {
+fn known_apps(config: &ConfigureOutput) -> Vec<&'static KnownApp> {
     let hosts = config.endpoints.hosts();
 
     KNOWN_APPS
@@ -355,13 +355,13 @@ mod tests {
 
     use super::*;
 
-    fn config_on(host: &str) -> OauthConfig {
-        OauthConfig {
+    fn config_on(host: &str) -> ConfigureOutput {
+        ConfigureOutput {
             endpoints: Endpoints {
                 token: Some(format!("https://{host}/token")),
                 ..Default::default()
             },
-            ..OauthConfig::empty()
+            ..ConfigureOutput::empty()
         }
     }
 

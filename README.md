@@ -30,7 +30,7 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 - **Token storage**: read and write tokens through your own shell commands.
 - **Hooks**: a shell command or a desktop notification on issuance and refresh.
 - **Persistent session**: unlock the secret store once, then answer token commands over stdin.
-- **JSON output**: `--json` on every data command, for scripts.
+- **JSON output**: `--json` on every data command, its payload described by `ortie json-schema`.
 - **TLS**: [rustls](https://crates.io/crates/rustls) with ring (`rustls-ring`, default) or aws (`rustls-aws`) crypto, or [native-tls](https://crates.io/crates/native-tls) (`native-tls`).
 
 > [!TIP]
@@ -220,7 +220,7 @@ ortie token inspect                    # print type, scopes and expiry
 printf 'token show\n' | ortie repl
 ```
 
-Every command and every flag is documented behind `--help`. `--json` switches data commands to machine-readable objects, and logs go to stderr, with `--log-level <LEVEL>` and `--log-file <PATH>` setting their verbosity and destination.
+Every command and every flag is documented behind `--help`. `--json` switches data commands to machine-readable objects, `ortie json-schema --dir <DIR>` writing the JSON Schema of each, and logs go to stderr, with `--log-level <LEVEL>` and `--log-file <PATH>` setting their verbosity and destination.
 
 ## Alternatives
 

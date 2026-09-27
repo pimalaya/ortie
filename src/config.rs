@@ -2,7 +2,9 @@
 //!
 //! The TOML configuration of the `ortie` CLI. Every type here is a pure
 //! DTO mirroring the nested shape (`storage.read.command`,
-//! `hooks.on-refresh.error.notify`, ...) and carrying no behaviour.
+//! `hooks.on-refresh.error.notify`, ...), the sole behaviour being
+//! [`TlsConfig::into_tls`], which folds the selector and the ALPN list
+//! into the handle the connect helpers expect.
 //!
 //! The flat runtime view commands consume is
 //! [`crate::account::Account`], which this one is flattened into once
@@ -79,8 +81,16 @@ pub struct AccountConfig {
     #[serde(default)]
     pub endpoints: EndpointsConfig,
     /// TLS provider used for the HTTPS connections.
-    #[serde(default, deserialize_with = "tls")]
-    pub tls: Tls,
+    #[serde(default)]
+    pub tls: TlsConfig,
+    /// ALPN identifiers offered during the TLS handshake, empty by
+    /// default so no ALPN extension is sent.
+    ///
+    /// An OAuth 2.0 endpoint is plain HTTPS and registers no
+    /// identifier; `["http/1.1"]` is the one meaningful override, for a
+    /// middlebox refusing a handshake without ALPN. Only rustls reads it.
+    #[serde(default)]
+    pub alpn: Vec<String>,
     /// OAuth 2.0 scopes requested for the access token.
     #[serde(default)]
     pub scopes: Vec<String>,
@@ -266,49 +276,55 @@ fn deserialize_opt_command<'de, D: Deserializer<'de>>(de: D) -> Result<Option<Co
     command::deserialize(de).map(Some)
 }
 
+/// Shell-expands an optional path field at deserialize time.
+///
+/// TODO: swap for a shared pimalaya_config::toml::opt_shell_expanded_path
+/// once it exists, neverest and carillon hand-rolling this same helper.
 fn opt_shell_expanded_path<'de, D: Deserializer<'de>>(de: D) -> Result<Option<PathBuf>, D::Error> {
     toml::shell_expanded_path(de).map(Some)
 }
 
-/// TLS provider selector, converted into the pimalaya-stream config.
-#[derive(Deserialize)]
+/// Skips a field equal to its type's default, so a wizard-generated
+/// configuration omits defaulted scalars.
+pub(crate) fn is_default<T: Default + PartialEq>(value: &T) -> bool {
+    *value == T::default()
+}
+
+/// TLS provider selector, folded into the pimalaya-stream config.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-enum TlsConfig {
+pub enum TlsConfig {
+    /// The provider the binary was built with.
+    #[default]
+    Auto,
+    /// The platform-backed native-tls provider.
     NativeTls,
+    /// The rustls provider on the aws-lc-rs crypto backend.
     RustlsAws,
+    /// The rustls provider on the ring crypto backend.
     RustlsRing,
 }
 
-impl From<TlsConfig> for Tls {
-    fn from(tls: TlsConfig) -> Self {
-        match tls {
-            TlsConfig::NativeTls => Self {
-                provider: Some(TlsProvider::NativeTls),
-                rustls: Rustls::default(),
-                cert: None,
-            },
-            TlsConfig::RustlsAws => Self {
-                provider: Some(TlsProvider::Rustls),
-                rustls: Rustls {
-                    crypto: Some(RustlsCrypto::Aws),
-                    alpn: Vec::new(),
-                },
-                cert: None,
-            },
-            TlsConfig::RustlsRing => Self {
-                provider: Some(TlsProvider::Rustls),
-                rustls: Rustls {
-                    crypto: Some(RustlsCrypto::Ring),
-                    alpn: Vec::new(),
-                },
-                cert: None,
-            },
+impl TlsConfig {
+    /// Builds the runtime [`Tls`] handle the connect helpers expect,
+    /// folding in the account's ALPN list.
+    ///
+    /// That list is the only way ALPN is set, so no call site can
+    /// negotiate one by accident; an empty one skips the extension.
+    pub fn into_tls(self, alpn: Vec<String>) -> Tls {
+        let (provider, crypto) = match self {
+            Self::Auto => (None, None),
+            Self::NativeTls => (Some(TlsProvider::NativeTls), None),
+            Self::RustlsAws => (Some(TlsProvider::Rustls), Some(RustlsCrypto::Aws)),
+            Self::RustlsRing => (Some(TlsProvider::Rustls), Some(RustlsCrypto::Ring)),
+        };
+
+        Tls {
+            provider,
+            rustls: Rustls { crypto, alpn },
+            cert: None,
         }
     }
-}
-
-fn tls<'de, D: Deserializer<'de>>(d: D) -> Result<Tls, D::Error> {
-    Ok(TlsConfig::deserialize(d)?.into())
 }
 
 #[cfg(test)]
@@ -377,6 +393,45 @@ storage.write.command = ["tee", "token.json"]
             account.client_certificate,
             Some(PathBuf::from("/etc/ortie/cert.pem"))
         );
+    }
+
+    #[test]
+    fn tls_and_alpn_fold_into_one_handle() {
+        let account = parse(
+            r#"
+[accounts.test]
+client-id = "app-id"
+tls = "rustls-aws"
+alpn = ["http/1.1"]
+storage.read.command = ["cat", "token.json"]
+storage.write.command = ["tee", "token.json"]
+"#,
+        );
+
+        let tls = account.tls.into_tls(account.alpn);
+
+        assert!(matches!(tls.provider, Some(TlsProvider::Rustls)));
+        assert!(matches!(tls.rustls.crypto, Some(RustlsCrypto::Aws)));
+        assert_eq!(tls.rustls.alpn, ["http/1.1"]);
+    }
+
+    #[test]
+    fn an_account_naming_neither_offers_no_alpn() {
+        let account = parse(
+            r#"
+[accounts.test]
+client-id = "app-id"
+storage.read.command = ["cat", "token.json"]
+storage.write.command = ["tee", "token.json"]
+"#,
+        );
+
+        assert_eq!(account.tls, TlsConfig::Auto);
+
+        let tls = account.tls.into_tls(account.alpn);
+
+        assert!(tls.provider.is_none());
+        assert!(tls.rustls.alpn.is_empty());
     }
 
     #[test]

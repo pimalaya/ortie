@@ -20,9 +20,9 @@
 //! [`repl`] holds those same two trees open against one account, so the
 //! secret store is unlocked once instead of per command.
 //!
-//! The [`wizard`] ends on a bare, valid TOML fragment printed on stdout
-//! in every mode, so `ortie >> <config>` works as the write-back; on a
-//! terminal it then offers to append it to a config file. Its banner,
+//! The [`wizard`] ends on a bare, valid TOML fragment: written to a
+//! config file, appended to the one already there, or printed on stdout,
+//! which is where `--json` and a redirected stdout stop. Its banner,
 //! prompts and spinners render on stderr.
 //!
 //! An existing config is appended to, never rewritten and never
@@ -52,6 +52,11 @@
 //! carries the logs. Doc comments on the command structs double as the
 //! CLI help: the first paragraph is `-h`, the rest completes `--help`.
 //!
+//! Each command emitting data prints one `*Output` type, and
+//! [`json_schema`] maps its invocation to that type's JSON Schema, which
+//! `ortie json-schema` writes out. A command reporting a confirmation
+//! prints a `Message` and carries no schema.
+//!
 //! Device authorization (RFC 8628) is `grant = "device"`. The headless
 //! grants are `grant = "client-credentials"` (RFC 6749 section 4.4),
 //! authenticated by the client secret, and `grant =
@@ -69,6 +74,7 @@ mod account;
 mod auth;
 mod cli;
 mod config;
+mod json_schema;
 mod repl;
 mod token;
 mod wizard;

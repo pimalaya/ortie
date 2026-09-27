@@ -24,6 +24,7 @@ use clap::Parser;
 use humantime::format_duration;
 use log::debug;
 use pimalaya_cli::printer::{Message, Printer};
+use schemars::JsonSchema;
 use secrecy::ExposeSecret;
 use serde::{
     Deserialize, Serialize, Serializer,
@@ -133,7 +134,7 @@ impl AuthGetCommand {
         // and verifier, so only the human output appends the
         // ready-to-run resume command.
         if printer.is_json() || !interactive {
-            printer.out(authorization_uri)?;
+            printer.out(AuthGetOutput::Authorization(&authorization_uri))?;
 
             if !printer.is_json() {
                 println!();
@@ -236,17 +237,43 @@ fn is_loopback_redirect(uri: &Url) -> bool {
     http_scheme && loopback_host
 }
 
+/// Printable handoff of `auth get`, one variant per interactive grant.
+///
+/// The two grants hand back different things, and one type relates them
+/// so the command describes itself with a single JSON Schema. Its
+/// `Display` delegates to the variant, which owns the rendering.
+#[derive(JsonSchema, Serialize)]
+#[serde(untagged)]
+pub enum AuthGetOutput<'a> {
+    /// The authorization-code handoff, opened in a browser.
+    Authorization(&'a AuthorizationUri<'a>),
+    /// The device-authorization handoff, entered on another device.
+    Device(&'a DeviceAuthorization),
+}
+
+impl fmt::Display for AuthGetOutput<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Authorization(view) => view.fmt(f),
+            Self::Device(view) => view.fmt(f),
+        }
+    }
+}
+
 /// Printable outcome of the flow initiation: the authorization URI,
 /// with the state and PKCE verifier needed to resume it later.
-#[derive(Serialize)]
+#[derive(JsonSchema, Serialize)]
 pub struct AuthorizationUri<'a> {
     /// The composed authorization URI to open in a browser.
+    #[schemars(with = "String")]
     authorization_uri: &'a Url,
     /// The generated CSRF state, to pass back to auth resume.
     #[serde(serialize_with = "serialize_state")]
+    #[schemars(with = "String")]
     state: &'a Oauth20State,
     /// The generated PKCE code verifier, to pass back to auth resume.
     #[serde(serialize_with = "serialize_pkce_code_verifier")]
+    #[schemars(with = "Option<String>")]
     pkce_code_verifier: Option<&'a Oauth20PkceCodeVerifier>,
     /// Whether the flow was initiated from an interactive shell.
     interactive: bool,
@@ -344,7 +371,7 @@ fn execute_device(printer: &mut impl Printer, account: &mut Account) -> Result<(
     };
 
     if printer.is_json() || !interactive {
-        printer.out(&view)?;
+        printer.out(AuthGetOutput::Device(&view))?;
         if !printer.is_json() {
             println!();
             println!("Once authorized, run:");
@@ -631,14 +658,23 @@ fn shell_single_quote(s: &str) -> String {
 
 /// Printable device authorization response, carrying what a resume
 /// handoff needs.
-#[derive(Serialize)]
-struct DeviceAuthorization {
+#[derive(JsonSchema, Serialize)]
+pub struct DeviceAuthorization {
+    /// The device code `auth resume` exchanges against the token
+    /// endpoint.
     device_code: String,
+    /// The code the user types on the verification page.
     user_code: String,
+    /// The page the user enters the code on.
     verification_uri: String,
+    /// The verification page with the code already in it, when the
+    /// server offers one.
     verification_uri_complete: Option<String>,
+    /// How long the device code stays valid, in seconds.
     expires_in: usize,
+    /// The minimum delay between two token endpoint polls, in seconds.
     interval: usize,
+    /// Whether the flow was initiated from an interactive shell.
     interactive: bool,
 }
 

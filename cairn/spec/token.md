@@ -28,3 +28,6 @@ On refresh, Ortie SHALL persist the new token to storage before the old one can 
 
 ### Requirement: Auto-refresh branches per grant
 When auto-refresh triggers, Ortie SHALL exchange the refresh token where one exists and SHALL silently re-acquire (re-run the configured grant) on the client credentials kinds, which issue no refresh token. `token refresh` SHALL follow the same decision. On an auto-refreshing client credentials account, a stored token that is missing or unreadable SHALL re-acquire instead of failing, so `token show --auto-refresh` transparently produces a valid token for every grant.
+
+### Requirement: Token inspect reports metadata, not secrets
+`token inspect` SHALL emit, in both renderings, the metadata of the stored token and not the token itself: the token type, when it was issued, what remains of its lifetime, whether a refresh token is held, and the granted scope. The access token and the refresh token SHALL NOT be serialized. The raw access token stays available from `token show`.
