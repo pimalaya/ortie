@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-02
+
 ### Added
 
 - Added the `json-schema` command (hidden alias `json-schemas`), printing the JSON Schema of a command's `--json` payload.
@@ -49,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   It now emits `token_type`, `issued_at`, `expires_in`, `with_refresh_token` and `scope`, the boolean replacing the `refresh_token` string. The raw access token comes from `token show`.
 
-- **BREAKING**: renamed `completions` and `manuals` to `completion` and `manual`, the plural staying as a hidden alias (`mans` still works too).
+- Renamed `completions` and `manuals` to `completion` and `manual`, the plural staying as a hidden alias (`mans` still works too).
 
 - Bumped pimalaya-stream to 0.3, whose `Read` and `Write` retry a stream reporting it is not ready. **Behaviour change.**
 
@@ -295,7 +297,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#3]: https://github.com/pimalaya/ortie/issues/3
 [#4]: https://github.com/pimalaya/ortie/issues/4
 
-[unreleased]: https://github.com/pimalaya/ortie/compare/v2.2.0...master
+[unreleased]: https://github.com/pimalaya/ortie/compare/v2.3.0...master
+[2.3.0]: https://github.com/pimalaya/ortie/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/pimalaya/ortie/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/pimalaya/ortie/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/pimalaya/ortie/compare/v1.1.0...v2.0.0
