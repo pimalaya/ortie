@@ -276,8 +276,19 @@ fn deserialize_opt_command<'de, D: Deserializer<'de>>(de: D) -> Result<Option<Co
     command::deserialize(de).map(Some)
 }
 
+/// How to get a configuration, for the errors meeting none.
+#[cfg(feature = "wizard")]
+pub const NO_CONFIG_HINT: &str = "run `ortie configure` to generate one, or write it by hand: \
+     https://github.com/pimalaya/ortie/blob/master/config.sample.toml";
+
+/// How to get a configuration, for the errors meeting none.
+#[cfg(not(feature = "wizard"))]
+pub const NO_CONFIG_HINT: &str = "write one by hand: \
+     https://github.com/pimalaya/ortie/blob/master/config.sample.toml";
+
 /// Skips a field equal to its type's default, so a wizard-generated
 /// configuration omits defaulted scalars.
+#[cfg(feature = "wizard")]
 pub(crate) fn is_default<T: Default + PartialEq>(value: &T) -> bool {
     *value == T::default()
 }

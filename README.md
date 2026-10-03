@@ -35,6 +35,8 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 
 > [!TIP]
 > Ortie is written in [Rust](https://www.rust-lang.org/) and uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional functionality. The default feature set is declared in [Cargo.toml](./Cargo.toml).
+>
+> The default `wizard` feature brings the interactive `configure`; leave it out of a scripted or embedded build that never prompts.
 
 ## Coverage
 

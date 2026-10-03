@@ -20,10 +20,11 @@ use std::collections::BTreeMap;
 use schemars::schema_for;
 use serde_json::Value;
 
+#[cfg(feature = "wizard")]
+use crate::wizard::ConfigureOutput;
 use crate::{
     auth::get::AuthGetOutput,
     token::{inspect::TokenInspectOutput, show::TokenShowOutput},
-    wizard::ConfigureOutput,
 };
 
 /// Builds the command-to-schema map consumed by `json-schema`.
@@ -42,6 +43,7 @@ pub fn schemas() -> BTreeMap<String, Value> {
         };
     }
 
+    #[cfg(feature = "wizard")]
     insert!("ortie-configure", ConfigureOutput);
     insert!("ortie-auth-get", AuthGetOutput<'static>);
     insert!("ortie-token-show", TokenShowOutput<'static>);

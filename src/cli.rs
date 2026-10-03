@@ -10,6 +10,8 @@ use std::{
 
 use anyhow::{Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
+#[cfg(feature = "wizard")]
+use pimalaya_cli::prompt;
 use pimalaya_cli::{
     clap::{
         args::{AccountFlag, JsonFlag, LogFlags},
@@ -18,18 +20,18 @@ use pimalaya_cli::{
     },
     footer, long_version,
     printer::Printer,
-    prompt,
 };
 use pimalaya_config::toml::TomlConfig;
 
+#[cfg(feature = "wizard")]
+use crate::wizard::{self, ConfigureCommand};
 use crate::{
     account::Account,
     auth::AuthCommand,
-    config::Config,
+    config::{Config, NO_CONFIG_HINT},
     json_schema,
     repl::ReplCommand,
     token::TokenCommand,
-    wizard::{self, CONFIG_SAMPLE_URL, ConfigureCommand},
 };
 
 /// Top-level command-line interface for the `ortie` binary.
@@ -60,6 +62,7 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Configure an account interactively.
+    #[cfg(feature = "wizard")]
     #[command(visible_alias = "wizard")]
     Configure(ConfigureCommand),
     #[command(subcommand)]
@@ -85,6 +88,7 @@ impl Command {
         account_name: Option<&str>,
     ) -> Result<()> {
         match self {
+            #[cfg(feature = "wizard")]
             Self::Configure(cmd) => cmd.execute(printer, config_paths),
             Self::Auth(cmd) => cmd.execute(printer, config_paths, account_name),
             Self::Token(cmd) => {
@@ -108,6 +112,7 @@ impl Command {
 /// It is a hook rather than a gate, so declining decides nothing: what
 /// happens next is the caller's business, and for a command that is
 /// simply carrying on.
+#[cfg(feature = "wizard")]
 pub fn offer_configuration(
     printer: &mut impl Printer,
     config_paths: &[PathBuf],
@@ -122,6 +127,17 @@ pub fn offer_configuration(
     ConfigureCommand.execute(printer, config_paths)?;
 
     Ok(true)
+}
+
+/// Offers nothing in a build without the wizard, so the caller falls back
+/// to what it does when the offer is declined.
+#[cfg(not(feature = "wizard"))]
+pub fn offer_configuration(
+    _printer: &mut impl Printer,
+    _config_paths: &[PathBuf],
+    _path: &Path,
+) -> Result<bool> {
+    Ok(false)
 }
 
 /// Takes the named (or default) account out of the config at
@@ -156,7 +172,7 @@ pub(crate) fn take_account(
             match Config::from_paths_or_default(config_paths)? {
                 Some(config) => config,
                 None => bail!(
-                    "No configuration found at {}, run `ortie configure` to generate one or write it by hand: {CONFIG_SAMPLE_URL}",
+                    "No configuration found at {}, {NO_CONFIG_HINT}",
                     path.display(),
                 ),
             }

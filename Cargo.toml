@@ -12,12 +12,13 @@ homepage = "https://pimalaya.org"
 repository = "https://github.com/pimalaya/ortie"
 
 [features]
-default = ["rustls-ring"]
+default = ["rustls-ring", "wizard"]
 notify = ["dep:notify-rust"]
-native-tls = ["pimalaya-stream/native-tls", "io-oauth/native-tls", "io-pim-discovery/native-tls"]
-rustls-aws = ["pimalaya-stream/rustls-aws", "io-oauth/rustls-aws", "io-pim-discovery/rustls-aws"]
-rustls-ring = ["pimalaya-stream/rustls-ring", "io-oauth/rustls-ring", "io-pim-discovery/rustls-ring"]
-vendored = ["pimalaya-stream/vendored", "io-oauth/vendored", "io-pim-discovery/vendored", "notify-rust?/d_vendored"]
+native-tls = ["pimalaya-stream/native-tls", "io-oauth/native-tls", "io-pim-discovery?/native-tls"]
+rustls-aws = ["pimalaya-stream/rustls-aws", "io-oauth/rustls-aws", "io-pim-discovery?/rustls-aws"]
+rustls-ring = ["pimalaya-stream/rustls-ring", "io-oauth/rustls-ring", "io-pim-discovery?/rustls-ring"]
+vendored = ["pimalaya-stream/vendored", "io-oauth/vendored", "io-pim-discovery?/vendored", "notify-rust?/d_vendored"]
+wizard = ["dep:io-pim-discovery", "pimalaya-cli/prompt", "pimalaya-cli/wizard", "pimalaya-cli/spinner"]
 
 [profile.release]
 lto = "fat"
@@ -41,11 +42,11 @@ clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
 dirs = "7"
 humantime = "2.2"
 io-oauth = { version = "0.3", default-features = false, features = ["client", "jwt-bearer"] }
-io-pim-discovery = { version = "0.8", default-features = false, features = ["stream", "autoconfig", "pacc", "rfc6186", "rfc6764", "rfc8620", "rfc8414"] }
+io-pim-discovery = { version = "0.8", default-features = false, features = ["stream", "autoconfig", "pacc", "rfc6186", "rfc6764", "rfc8620", "rfc8414"], optional = true }
 log = "0.4"
 notify-rust = { version = "4.18", default-features = false, features = ["d"], optional = true }
 open = "5.3"
-pimalaya-cli = { version = "0.2", default-features = false, features = ["terminal", "prompt", "spinner", "wizard"] }
+pimalaya-cli = { version = "0.2", default-features = false, features = ["terminal"] }
 pimalaya-config = { version = "0.2.1", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.3", default-features = false, features = ["std"] }
 schemars = "1"

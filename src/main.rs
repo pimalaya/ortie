@@ -77,6 +77,7 @@ mod config;
 mod json_schema;
 mod repl;
 mod token;
+#[cfg(feature = "wizard")]
 mod wizard;
 
 use std::{
