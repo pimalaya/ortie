@@ -94,7 +94,7 @@ mod tests {
     fn every_command_key_builds_an_object_schema() {
         let schemas = schemas();
 
-        assert_eq!(schemas.len(), 4);
+        assert_eq!(schemas.len(), if cfg!(feature = "wizard") { 4 } else { 3 });
 
         for (cmd, schema) in schemas {
             assert!(cmd.starts_with("ortie-"), "{cmd} is not a CLI invocation");
