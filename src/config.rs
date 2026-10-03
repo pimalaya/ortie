@@ -68,11 +68,11 @@ pub struct AccountConfig {
     pub client_secret: Option<Secret>,
     /// Private key (PKCS#8 or PKCS#1 PEM) signing the JWT assertion of
     /// `grant = "client-credentials-jwt"`, re-read at every mint.
-    #[serde(default, deserialize_with = "opt_shell_expanded_path")]
+    #[serde(default, deserialize_with = "toml::opt_shell_expanded_path")]
     pub client_key: Option<PathBuf>,
     /// Client certificate (PEM or DER) whose SHA-1 thumbprint rides as
     /// the assertion `x5t` header, recomputed at every mint.
-    #[serde(default, deserialize_with = "opt_shell_expanded_path")]
+    #[serde(default, deserialize_with = "toml::opt_shell_expanded_path")]
     pub client_certificate: Option<PathBuf>,
     /// OAuth 2.0 grant flow run by the auth commands.
     #[serde(default)]
@@ -274,14 +274,6 @@ pub type NotifyConfig = ();
 
 fn deserialize_opt_command<'de, D: Deserializer<'de>>(de: D) -> Result<Option<Command>, D::Error> {
     command::deserialize(de).map(Some)
-}
-
-/// Shell-expands an optional path field at deserialize time.
-///
-/// TODO: swap for a shared pimalaya_config::toml::opt_shell_expanded_path
-/// once it exists, neverest and carillon hand-rolling this same helper.
-fn opt_shell_expanded_path<'de, D: Deserializer<'de>>(de: D) -> Result<Option<PathBuf>, D::Error> {
-    toml::shell_expanded_path(de).map(Some)
 }
 
 /// Skips a field equal to its type's default, so a wizard-generated

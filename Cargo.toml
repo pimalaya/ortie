@@ -46,7 +46,7 @@ log = "0.4"
 notify-rust = { version = "4.18", default-features = false, features = ["d"], optional = true }
 open = "5.3"
 pimalaya-cli = { version = "0.2", default-features = false, features = ["terminal", "prompt", "spinner", "wizard"] }
-pimalaya-config = { version = "0.2", default-features = false, features = ["toml", "secret"] }
+pimalaya-config = { version = "0.2.1", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.3", default-features = false, features = ["std"] }
 schemars = "1"
 secrecy = { version = "0.10", default-features = false, features = ["serde"] }
