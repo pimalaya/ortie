@@ -55,3 +55,7 @@ serde = { version = "1", default-features = false, features = ["alloc", "derive"
 serde_json = "1"
 shellexpand = "3.1"
 url = { version = "2.5", default-features = false, features = ["serde"] }
+
+[patch.crates-io]
+# NOTE: unreleased fixes, to be replaced by released versions.
+io-http = { git = "https://github.com/pimalaya/io-http", rev = "e1815307771c1ec65a86b77256d46c33241d3038" }

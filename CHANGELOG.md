@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the `wizard` cargo feature, on by default, gating the interactive configuration: the `configure` command and the offer a first run makes. A build without it drops the prompts and the dependencies only they use, and a missing configuration points at the documented sample instead.
 
+### Fixed
+
+- Fixed an OAuth 2.0 endpoint able to make Ortie buffer an endless response, spin forever on a connection closed mid-body, or panic on a hostile chunk size. io-http is pinned to an unreleased fix (e181530) that caps response heads at 64 KiB and bodies at 256 MiB.
+
 ## [2.3.0] - 2026-10-02
 
 ### Added
