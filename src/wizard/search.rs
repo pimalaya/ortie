@@ -402,7 +402,7 @@ fn is_oauth(method: &DiscoveryAuthMethod) -> bool {
     )
 }
 
-/// Lowercase wire name of a service, for the pick-list labels.
+/// Wire name of a service, for the pick-list labels.
 fn service_name(service: DiscoveryService) -> &'static str {
     match service {
         DiscoveryService::Imap => "imap",
@@ -413,6 +413,12 @@ fn service_name(service: DiscoveryService) -> &'static str {
         DiscoveryService::Carddav => "carddav",
         DiscoveryService::Webdav => "webdav",
         DiscoveryService::Managesieve => "managesieve",
+        DiscoveryService::Gmail => "gmail",
+        DiscoveryService::Gcal => "gcal",
+        DiscoveryService::Gpeople => "gpeople",
+        DiscoveryService::Msgraph => "msgraph",
+        DiscoveryService::MsgraphCalendar => "msgraphCalendar",
+        DiscoveryService::MsgraphContacts => "msgraphContacts",
     }
 }
 
