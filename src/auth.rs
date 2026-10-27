@@ -13,7 +13,10 @@ use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
 
 use crate::{
-    auth::{get::AuthGetCommand, resume::AuthResumeCommand},
+    auth::{
+        get::{AuthGetCommand, resume_invocation},
+        resume::AuthResumeCommand,
+    },
     cli::take_account,
 };
 
@@ -39,7 +42,8 @@ impl AuthCommand {
         match self {
             Self::Get(cmd) => {
                 let mut account = take_account(printer, config_paths, account_name)?;
-                cmd.execute(printer, &mut account)
+                let resume = resume_invocation(config_paths, account_name);
+                cmd.execute(printer, &mut account, &resume)
             }
             Self::Resume(cmd) => {
                 let mut account = take_account(printer, config_paths, account_name)?;

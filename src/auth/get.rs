@@ -12,6 +12,7 @@ use std::{
     collections::BTreeSet,
     fmt, fs,
     io::{IsTerminal, stdout},
+    path::PathBuf,
     time::Duration,
 };
 
@@ -75,9 +76,17 @@ pub struct AuthGetCommand;
 impl AuthGetCommand {
     /// Runs the account's grant and completes it into a stored access
     /// token, interactive shells chaining into resume.
-    pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
+    ///
+    /// The `resume` invocation starts the `auth resume` command printed
+    /// when the flow hands off (see [`resume_invocation`]).
+    pub fn execute(
+        self,
+        printer: &mut impl Printer,
+        account: &mut Account,
+        resume: &str,
+    ) -> Result<()> {
         if account.grant == GrantConfig::Device {
-            return execute_device(printer, account);
+            return execute_device(printer, account, resume);
         }
 
         if account.grant.is_client_credentials() {
@@ -138,7 +147,11 @@ impl AuthGetCommand {
 
             if !printer.is_json() {
                 println!();
-                print_manual_resume(&state, pkce_code_challenge.as_ref().map(|c| &c.verifier));
+                print_manual_resume(
+                    resume,
+                    &state,
+                    pkce_code_challenge.as_ref().map(|c| &c.verifier),
+                );
             }
 
             return Ok(());
@@ -162,7 +175,11 @@ impl AuthGetCommand {
                 "Ortie cannot capture the redirection {} automatically.",
                 redirect_uri.as_str(),
             );
-            print_manual_resume(&state, pkce_code_challenge.as_ref().map(|c| &c.verifier));
+            print_manual_resume(
+                resume,
+                &state,
+                pkce_code_challenge.as_ref().map(|c| &c.verifier),
+            );
 
             return Ok(());
         }
@@ -176,7 +193,11 @@ impl AuthGetCommand {
             Err(err) => {
                 println!();
                 println!("Ortie could not capture the redirection automatically ({err}).");
-                print_manual_resume(&state, pkce_code_challenge.as_ref().map(|c| &c.verifier));
+                print_manual_resume(
+                    resume,
+                    &state,
+                    pkce_code_challenge.as_ref().map(|c| &c.verifier),
+                );
 
                 return Ok(());
             }
@@ -199,7 +220,7 @@ impl AuthGetCommand {
 /// The values are attached to their flag with `=` and single quoted:
 /// a verifier or a state can begin with `-` and be read as a flag, and
 /// the quotes keep the shell from expanding a leading `~`.
-fn print_manual_resume(state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifier>) {
+fn print_manual_resume(resume: &str, state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifier>) {
     let state = shell_single_quote(&String::from_utf8_lossy(state.expose()));
 
     println!(
@@ -211,10 +232,10 @@ fn print_manual_resume(state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifi
     match pkce {
         Some(verifier) => {
             let verifier = shell_single_quote(&String::from_utf8_lossy(verifier.expose()));
-            println!("> ortie auth resume --state={state} --pkce={verifier} <REDIRECTED_URI>");
+            println!("> {resume} --state={state} --pkce={verifier} <REDIRECTED_URI>");
         }
         None => {
-            println!("> ortie auth resume --state={state} <REDIRECTED_URI>");
+            println!("> {resume} --state={state} <REDIRECTED_URI>");
         }
     }
 }
@@ -323,7 +344,7 @@ impl fmt::Display for AuthorizationUri<'_> {
 
 /// Requests a device and user code, then polls the token endpoint when
 /// the shell is interactive and hands off to `auth resume` otherwise.
-fn execute_device(printer: &mut impl Printer, account: &mut Account) -> Result<()> {
+fn execute_device(printer: &mut impl Printer, account: &mut Account, resume: &str) -> Result<()> {
     let Some(device_endpoint) = account.device_authorization_endpoint.clone() else {
         bail!("Missing endpoints.device-authorization in the account config");
     };
@@ -376,10 +397,7 @@ fn execute_device(printer: &mut impl Printer, account: &mut Account) -> Result<(
             println!();
             println!("Once authorized, run:");
             println!();
-            println!(
-                "> ortie auth resume {}",
-                shell_single_quote(&view.device_code)
-            );
+            println!("> {resume} {}", shell_single_quote(&view.device_code));
         }
         return Ok(());
     }
@@ -641,6 +659,31 @@ pub(crate) fn report_token_issued(
     printer.out(Message::new(msg))
 }
 
+/// Builds the invocation the printed `auth resume` commands start with.
+///
+/// It carries the `-c` and `-a` the grant ran with, single quoted, so the
+/// resume reaches the configuration and account that issued the state:
+/// the default one could hold another provider, whose token endpoint
+/// would refuse the code, or the same client, storing the token under
+/// the wrong account.
+pub fn resume_invocation(config_paths: &[PathBuf], account_name: Option<&str>) -> String {
+    let mut invocation = String::from("ortie");
+
+    if !config_paths.is_empty() {
+        let paths: Vec<_> = config_paths.iter().map(|p| p.to_string_lossy()).collect();
+        invocation.push_str(" -c ");
+        invocation.push_str(&shell_single_quote(&paths.join(":")));
+    }
+
+    if let Some(name) = account_name.filter(|name| !name.is_empty()) {
+        invocation.push_str(" -a ");
+        invocation.push_str(&shell_single_quote(name));
+    }
+
+    invocation.push_str(" auth resume");
+    invocation
+}
+
 /// Single-quote for safe paste into a POSIX shell command line.
 fn shell_single_quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
@@ -725,5 +768,21 @@ mod tests {
         assert_eq!(shell_single_quote("plain"), "'plain'");
         assert_eq!(shell_single_quote("a;b"), "'a;b'");
         assert_eq!(shell_single_quote("it's"), "'it'\\''s'");
+    }
+
+    #[test]
+    fn resume_invocation_carries_the_account_and_config() {
+        assert_eq!(resume_invocation(&[], None), "ortie auth resume");
+        assert_eq!(resume_invocation(&[], Some("")), "ortie auth resume");
+        assert_eq!(
+            resume_invocation(&[], Some("gmail")),
+            "ortie -a 'gmail' auth resume"
+        );
+
+        let paths = [PathBuf::from("/a.toml"), PathBuf::from("/b c.toml")];
+        assert_eq!(
+            resume_invocation(&paths, Some("work's")),
+            "ortie -c '/a.toml:/b c.toml' -a 'work'\\''s' auth resume"
+        );
     }
 }

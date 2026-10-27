@@ -16,6 +16,8 @@ When the account's redirection uses a non-loopback scheme the local listener can
 
 The printed command SHALL be runnable as printed, whatever the generated values look like: each value SHALL be attached to its flag with `=` and single quoted. A PKCE verifier is drawn from the RFC 7636 unreserved set and a state from URL-safe base64, so either can begin with `-` and be taken for a flag, which the `=` form settles before the parser sees it, or with `~`, which the quotes stop the shell expanding.
 
+The printed command, and the one the device grant prints when it hands off, SHALL carry the `-c` paths (joined by `:`) and the `-a` name `auth get` ran with, each single quoted, and omit either flag when it was not given. Resumed against another account, the code reaches a token endpoint that did not issue it, or the token lands in another account's storage.
+
 ### Requirement: Redirection resolution
 When `endpoints.redirection` is set it SHALL be used verbatim; otherwise Ortie binds `127.0.0.1:0` and uses the resulting `http://127.0.0.1:<port>` URL as an exact-match loopback redirect (the permitted variable-port exception).
 

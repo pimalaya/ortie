@@ -61,10 +61,15 @@ enum ReplCommandTree {
 
 impl ReplCommandTree {
     /// Dispatches the parsed line against the in-memory account.
-    fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
+    fn execute(
+        self,
+        printer: &mut impl Printer,
+        account: &mut Account,
+        resume: &str,
+    ) -> Result<()> {
         match self {
             Self::Token(cmd) => cmd.execute(printer, account),
-            Self::Auth(cmd) => cmd.execute(printer, account),
+            Self::Auth(cmd) => cmd.execute(printer, account, resume),
         }
     }
 }
@@ -81,9 +86,14 @@ enum ReplAuthCommand {
 }
 
 impl ReplAuthCommand {
-    fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
+    fn execute(
+        self,
+        printer: &mut impl Printer,
+        account: &mut Account,
+        resume: &str,
+    ) -> Result<()> {
         match self {
-            Self::Get(cmd) => cmd.execute(printer, account),
+            Self::Get(cmd) => cmd.execute(printer, account, resume),
             Self::Resume(cmd) => cmd.execute(printer, account),
         }
     }
@@ -92,7 +102,15 @@ impl ReplAuthCommand {
 impl ReplCommand {
     /// Runs the read-eval-print loop until EOF or a quit command,
     /// keeping the resolved token in the account across iterations.
-    pub fn execute(self, printer: &mut impl Printer, mut account: Account) -> Result<()> {
+    ///
+    /// The `resume` invocation is handed to `auth get`, for the
+    /// `auth resume` command it prints when the flow hands off.
+    pub fn execute(
+        self,
+        printer: &mut impl Printer,
+        mut account: Account,
+        resume: &str,
+    ) -> Result<()> {
         let stdin = io::stdin();
         let interactive = stdin.is_terminal();
 
@@ -121,7 +139,7 @@ impl ReplCommand {
             // terminate and flush each one, or the line-buffered stdout
             // holds it until the session ends.
             match ReplLine::try_parse_from(input.split_whitespace()) {
-                Ok(ReplLine { cmd }) => match cmd.execute(printer, &mut account) {
+                Ok(ReplLine { cmd }) => match cmd.execute(printer, &mut account, resume) {
                     Ok(()) => {
                         println!();
                         let _ = io::stdout().flush();
