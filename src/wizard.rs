@@ -420,8 +420,12 @@ fn first_label(host: &str) -> String {
 ///
 /// It renders as bare TOML on stdout, the framing living in the stderr
 /// welcome banner, or as the same data in an object under `--json`.
+///
+/// The TOML keeps the configuration's kebab-case keys (`client-id`),
+/// while the `--json` object speaks camelCase (`clientId`) like every
+/// output type: the loader reads one, the printer emits the other.
 #[derive(Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "camelCase")]
 pub struct ConfigureOutput {
     /// The account name, heading the `[accounts.<name>]` table.
     pub name: String,
@@ -574,14 +578,18 @@ impl fmt::Display for ConfigureOutput {
 
 /// The client secret in the config's `client-secret.raw` shape.
 #[derive(Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RawSecret {
     /// The secret value, stored in clear as the provider issued it.
     pub raw: String,
 }
 
 /// Endpoint subset of the account config fragment.
+///
+/// Its TOML rendering stays kebab-case (`device-authorization`), its
+/// `--json` object camelCase (`deviceAuthorization`).
 #[derive(Debug, Default, JsonSchema, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "camelCase")]
 pub struct Endpoints {
     /// Authorization endpoint of the authorization code grant.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -613,6 +621,7 @@ impl Endpoints {
 
 /// Storage subset of the account config fragment.
 #[derive(Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Storage {
     /// The command printing the stored token JSON on its stdout.
     pub read: StorageEntry,
@@ -622,6 +631,7 @@ pub struct Storage {
 
 /// One direction of the token storage, holding its command.
 #[derive(Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StorageEntry {
     /// The command run for this direction.
     pub command: StorageCommand,

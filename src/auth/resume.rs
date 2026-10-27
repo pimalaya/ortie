@@ -207,8 +207,8 @@ pub fn state_parser(state: &str) -> Result<Oauth20State, String> {
 
 /// Clap value parser for the PKCE code verifier argument.
 pub fn pkce_code_verifier_parser(verifier: &str) -> Result<Oauth20PkceCodeVerifier, String> {
-    // NOTE: the verifier body is omitted, clap surfacing this string on
-    // stderr.
+    // NOTE: the verifier body is omitted, clap surfacing this string in
+    // its parse error.
     match verifier.parse() {
         Ok(verifier) => Ok(verifier),
         Err(b) => Err(format!("Invalid 0x{b:x} found in PKCE code verifier")),

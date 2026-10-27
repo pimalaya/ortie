@@ -8,17 +8,20 @@
 //! Only the commands emitting data carry a key. `token refresh` and
 //! `auth resume` print a confirmation message, so they carry none, and
 //! the REPL carries none of its own: it dispatches the same `token` and
-//! `auth` leaves and prints their payloads unchanged.
+//! `auth` leaves and prints their payloads unchanged. The one key naming
+//! no command is `ortie-error`, the failure object any command prints
+//! instead of its payload.
 //!
 //! Every registered type is Ortie's own, so the machine contract stays a
 //! decision of this repository rather than of the libraries below it.
+//! The failure object is the exception, being the family's shared one.
 //!
 //! [`JsonSchemaCommand`]: pimalaya_cli::clap::commands::JsonSchemaCommand
 
 use std::collections::BTreeMap;
 
+use pimalaya_cli::{clap::commands::JsonSchemaRegistry, error::ErrorReport};
 use schemars::schema_for;
-use serde_json::Value;
 
 #[cfg(feature = "wizard")]
 use crate::wizard::ConfigureOutput;
@@ -27,11 +30,15 @@ use crate::{
     token::{inspect::TokenInspectOutput, show::TokenShowOutput},
 };
 
-/// Builds the command-to-schema map consumed by `json-schema`.
+/// The registry key of the failure object, which names no command.
+const ERROR_KEY: &str = "ortie-error";
+
+/// Builds the command-to-schema registry consumed by `json-schema`.
 ///
 /// Each value describes the type the command hands to the printer, so
-/// the description cannot drift from the emission.
-pub fn schemas() -> BTreeMap<String, Value> {
+/// the description cannot drift from the emission, and `ortie-error`
+/// the failure object every command prints instead.
+pub fn registry() -> JsonSchemaRegistry {
     let mut schemas = BTreeMap::new();
 
     macro_rules! insert {
@@ -48,8 +55,13 @@ pub fn schemas() -> BTreeMap<String, Value> {
     insert!("ortie-auth-get", AuthGetOutput<'static>);
     insert!("ortie-token-show", TokenShowOutput<'static>);
     insert!("ortie-token-inspect", TokenInspectOutput);
+    insert!(ERROR_KEY, ErrorReport);
 
-    schemas
+    JsonSchemaRegistry {
+        bin: "ortie",
+        version: env!("CARGO_PKG_VERSION"),
+        schemas,
+    }
 }
 
 #[cfg(test)]
@@ -82,7 +94,11 @@ mod tests {
     fn every_key_names_a_real_command() {
         let cli = Cli::command();
 
-        for cmd in schemas().keys() {
+        for cmd in registry().schemas.keys() {
+            if cmd == ERROR_KEY {
+                continue;
+            }
+
             let path: Vec<&str> = cmd.split('-').collect();
 
             assert_eq!(path[0], cli.get_name(), "{cmd} is not an ortie invocation");
@@ -91,10 +107,10 @@ mod tests {
     }
 
     #[test]
-    fn every_command_key_builds_an_object_schema() {
-        let schemas = schemas();
+    fn every_key_builds_an_object_schema() {
+        let schemas = registry().schemas;
 
-        assert_eq!(schemas.len(), if cfg!(feature = "wizard") { 4 } else { 3 });
+        assert_eq!(schemas.len(), if cfg!(feature = "wizard") { 5 } else { 4 });
 
         for (cmd, schema) in schemas {
             assert!(cmd.starts_with("ortie-"), "{cmd} is not a CLI invocation");
@@ -103,12 +119,17 @@ mod tests {
     }
 
     #[test]
+    fn every_payload_is_an_object() {
+        assert_eq!(registry().non_object_roots(), Vec::<&str>::new());
+    }
+
+    #[test]
     fn token_inspect_schema_describes_no_secret() {
-        let schemas = schemas();
+        let schemas = registry().schemas;
         let schema = schemas["ortie-token-inspect"].to_string();
 
-        assert!(!schema.contains("\"access_token\""));
-        assert!(!schema.contains("\"refresh_token\""));
-        assert!(schema.contains("\"with_refresh_token\""));
+        assert!(!schema.contains("\"accessToken\""));
+        assert!(!schema.contains("\"refreshToken\""));
+        assert!(schema.contains("\"withRefreshToken\""));
     }
 }

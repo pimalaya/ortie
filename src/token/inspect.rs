@@ -41,6 +41,7 @@ impl TokenInspectCommand {
 /// renderings agree on handing out nothing sensitive: the raw access
 /// token comes from `token show`, and the refresh token from storage.
 #[derive(Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TokenInspectOutput {
     /// The token type the server issued, usually `Bearer`.
     pub token_type: String,
@@ -134,7 +135,7 @@ mod tests {
 
         assert!(!json.contains("access-secret"));
         assert!(!json.contains("refresh-secret"));
-        assert!(json.contains("\"with_refresh_token\":true"));
-        assert!(json.contains("\"token_type\":\"Bearer\""));
+        assert!(json.contains("\"withRefreshToken\":true"));
+        assert!(json.contains("\"tokenType\":\"Bearer\""));
     }
 }

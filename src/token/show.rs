@@ -107,6 +107,7 @@ fn is_expired(issued_at: Option<u64>, expires_in: Option<usize>) -> bool {
 
 /// Printable raw access token, exposed for piping.
 #[derive(Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TokenShowOutput<'a> {
     /// The raw access token string.
     pub access_token: &'a str,

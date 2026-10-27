@@ -20,7 +20,7 @@ use std::io::{self, IsTerminal, Write};
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{error::ErrorReport, printer::Printer};
 
 use crate::{
     account::Account,
@@ -134,20 +134,41 @@ impl ReplCommand {
                 break;
             }
 
-            // NOTE: commands write their result with no trailing
-            // newline, so one-shot output pipes cleanly; the loop has to
-            // terminate and flush each one, or the line-buffered stdout
-            // holds it until the session ends.
-            match ReplLine::try_parse_from(input.split_whitespace()) {
-                Ok(ReplLine { cmd }) => match cmd.execute(printer, &mut account, resume) {
-                    Ok(()) => {
+            let result = match ReplLine::try_parse_from(input.split_whitespace()) {
+                Ok(ReplLine { cmd }) => cmd.execute(printer, &mut account, resume),
+                // NOTE: help and version are not failures, and clap
+                // prints them on stdout already.
+                Err(err) if !err.use_stderr() => {
+                    let _ = err.print();
+                    continue;
+                }
+                Err(err) if interactive => {
+                    let _ = err.print();
+                    continue;
+                }
+                Err(err) => Err(err.into()),
+            };
+
+            match result {
+                // NOTE: the printer ends each JSON value with a newline,
+                // flushed when piped, while a text result carries no
+                // trailing newline so one-shot output pipes cleanly: the
+                // loop terminates and flushes it, or the line-buffered
+                // stdout holds it until the session ends.
+                Ok(()) => {
+                    if !printer.is_json() {
                         println!();
                         let _ = io::stdout().flush();
                     }
-                    Err(err) => eprintln!("{err:?}"),
-                },
+                }
+                Err(err) if interactive => eprintln!("{err:?}"),
+                // NOTE: a piped session is a machine channel, so its
+                // errors reach stdout through the printer like any other
+                // command's, one per line, and stderr keeps the logs.
                 Err(err) => {
-                    let _ = err.print();
+                    let report: ErrorReport = err.into();
+                    printer.out(report)?;
+                    io::stdout().flush()?;
                 }
             }
         }

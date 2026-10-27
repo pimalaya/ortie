@@ -23,4 +23,4 @@ Each stdin line SHALL be parsed with the same `token` and `auth` command grammar
 `auth get` and `auth resume` in the REPL SHALL run against the session's in-memory account, so a token they issue updates the cached token and is served by a following `token show` without re-reading storage.
 
 ### Requirement: Interactive versus piped output
-When stdin is a TTY the session SHALL render a prompt on stderr; when piped it SHALL write results on stdout and errors on stderr, one flushed result per command, so an application can drive it.
+When stdin is a TTY the session SHALL render a prompt on stderr and report errors on stderr. When piped it SHALL write one flushed result per command on stdout, so an application can drive it, and SHALL print a parse error or a command error through the printer on stdout as the failure object (`ortie-error` under `--json`), one per line, then continue the loop. Under `--json` each result and each failure SHALL be one JSON value per line.

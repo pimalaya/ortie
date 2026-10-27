@@ -284,6 +284,7 @@ impl fmt::Display for AuthGetOutput<'_> {
 /// Printable outcome of the flow initiation: the authorization URI,
 /// with the state and PKCE verifier needed to resume it later.
 #[derive(JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthorizationUri<'a> {
     /// The composed authorization URI to open in a browser.
     #[schemars(with = "String")]
@@ -702,6 +703,7 @@ fn shell_single_quote(s: &str) -> String {
 /// Printable device authorization response, carrying what a resume
 /// handoff needs.
 #[derive(JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceAuthorization {
     /// The device code `auth resume` exchanges against the token
     /// endpoint.

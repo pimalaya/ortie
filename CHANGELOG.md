@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the `wizard` cargo feature, on by default, gating the interactive configuration: the `configure` command and the offer a first run makes. A build without it drops the prompts and the dependencies only they use, and a missing configuration points at the documented sample instead.
 
+- Added `ortie-error` to `json-schema`, the schema of the JSON failure object any command prints instead of its payload.
+
+### Changed
+
+- Changed piped `--json` output to print one value per line, and each schema of `json-schema` to carry an `$id` naming the contract version (pimalaya-cli `55b6693`).
+
+- **BREAKING**: `--json` keys are now camelCase.
+
+  `token show` prints `accessToken`, `token inspect` `tokenType`, `issuedAt`, `expiresIn` and `withRefreshToken`, `auth get` `authorizationUri`, `pkceCodeVerifier`, `deviceCode`, `userCode`, `verificationUri`, `verificationUriComplete` and `expiresIn`, and `configure` `clientId`, `clientSecret`, `autoRefresh` and `endpoints.deviceAuthorization`, where they used to be snake_case, or kebab-case for `configure`. Every key is now reachable by dot access in jq and JavaScript. The configuration file and the TOML `configure` prints keep their kebab-case keys, and regenerated JSON Schemas describe the new names.
+
+- **BREAKING**: a piped `ortie repl` prints a parse or command error on stdout, through the printer, instead of stderr.
+
+  Under `--json` it is one `ortie-error` object per line among the results, so a driver reads a single stream and tells a failure by its `error` key; the session continues as before. An interactive session keeps its errors on stderr.
+
 ### Fixed
 
 - Fixed the `auth resume` command printed by `auth get` dropping the `-a` and `-c` it ran with, so pasting it resumed the default account: its token endpoint refused a code issued for another provider, or, sharing the client, stored the token under the wrong account. The printed command now carries both, single quoted, in the authorization code and device hand-offs, and in the REPL. See [#16](https://github.com/pimalaya/ortie/issues/16).

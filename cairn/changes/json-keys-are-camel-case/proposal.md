@@ -1,7 +1,7 @@
 ---
 cairn: change
 id: json-keys-are-camel-case
-status: draft
+status: landed
 created: 2026-08-29
 ---
 

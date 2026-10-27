@@ -103,7 +103,7 @@ storage.write.command = ["tee", "{t}"]
         .unwrap();
     assert!(get.status.success(), "{get:?}");
     let v: Value = serde_json::from_slice(&get.stdout).unwrap();
-    assert_eq!(v["device_code"], "dc-test");
+    assert_eq!(v["deviceCode"], "dc-test");
     assert_eq!(polls.load(Ordering::SeqCst), 0);
 
     let resume = Command::new(&bin)
