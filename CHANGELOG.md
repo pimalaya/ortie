@@ -50,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed a failed storage write after a refresh leaving the session on the old refresh token, which a rotating server had already invalidated.
 - Fixed the `auth resume` command printed by `auth get` dropping its `-a` and `-c` ([#16](https://github.com/pimalaya/ortie/issues/16)).
 
   Pasting it resumed the default account, so the code was refused or the token stored under the wrong account.

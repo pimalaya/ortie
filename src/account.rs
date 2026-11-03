@@ -264,12 +264,15 @@ impl Account {
     /// Pipes the token response JSON to the write storage command.
     ///
     /// The local issuance time is stamped before the write, since no
-    /// server reports one, and the token is cached in memory after.
+    /// server reports one. The token is cached in memory before the
+    /// write: a server rotating refresh tokens has invalidated the old
+    /// one, so a failed write leaves a REPL session holding the new.
     pub fn write_to_storage(
         &mut self,
         mut res: Oauth20AccessTokenSuccessParams,
     ) -> Result<Oauth20AccessTokenSuccessParams> {
         res.issued_at = Some(now_secs());
+        self.token = Some(res.clone());
 
         let cmd = &mut self.write_storage_command;
         let json = String::try_from(&res)?.into_bytes();
@@ -308,7 +311,6 @@ impl Account {
             return Err(err2.context(err));
         }
 
-        self.token = Some(res.clone());
         Ok(res)
     }
 

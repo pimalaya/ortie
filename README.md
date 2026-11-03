@@ -25,6 +25,7 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 - **Client credentials grants**: headless machine tokens, by client secret or signed JWT assertion.
 - **Manual completion**: finish a flow by hand when the redirection server cannot bind.
 - **Token refresh**: on demand, or automatically when the token is read.
+- **Token revocation**: retire a token at the authorization server.
 - **PKCE**: S256 by default, following the OAuth 2.1 posture.
 - **Extra parameters**: provider-specific authorization parameters forwarded verbatim.
 - **Token storage**: read and write tokens through your own shell commands.
@@ -43,18 +44,33 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 | RFC    | What is covered |
 |--------|-----------------|
 | [6749] | The OAuth 2.0 framework: authorization code and client credentials grants, access token issuance and refresh |
+| [7009] | Token revocation: `token revoke` retires the refresh token, or the access token when none is stored |
 | [7523] | JWT client authentication on the client credentials grant: assertion signed with a private key, certificate `x5t` thumbprint (Microsoft certificate credentials) |
 | [7636] | PKCE: the S256 and plain code challenges protecting the authorization code in transit |
 | [7591] | Dynamic client registration: register a public client without any provider console |
 | [8414] | Authorization server metadata: the wizard reads it to discover a provider's endpoints and registration endpoint |
 | [8628] | Device authorization grant: device and user code request, token endpoint polling |
+| [8707] | Resource indicators: the `resource` parameter a server bound to one resource requires |
+| [9728] | Protected resource metadata: the wizard reads a service's resource and the authorization servers it names |
 
 [6749]: https://www.rfc-editor.org/rfc/rfc6749
+[7009]: https://www.rfc-editor.org/rfc/rfc7009
 [7523]: https://www.rfc-editor.org/rfc/rfc7523
 [7636]: https://www.rfc-editor.org/rfc/rfc7636
 [7591]: https://www.rfc-editor.org/rfc/rfc7591
 [8414]: https://www.rfc-editor.org/rfc/rfc8414
 [8628]: https://www.rfc-editor.org/rfc/rfc8628
+[8707]: https://www.rfc-editor.org/rfc/rfc8707
+[9728]: https://www.rfc-editor.org/rfc/rfc9728
+
+### OAuth 2.1
+
+Ortie follows the OAuth 2.1 draft and the security best current practice (RFC 9700):
+
+- Grants: authorization code, device, and client credentials authenticated by secret or signed JWT. The implicit and resource owner password grants, removed by OAuth 2.1, are not implemented.
+- PKCE: S256 on every authorization code flow by default, `pkce = "plain"` or `false` being escape hatches for servers that need them.
+- Redirects: a configured redirection URI is sent as written, for the server to match exactly. Without one, Ortie binds `http://127.0.0.1` on a random port, the loopback exception that lets the port vary (RFC 8252 section 7.3).
+- Refresh rotation: a refreshed token is stored as soon as the server answers, keeping the previous refresh token when no rotated one comes back. When storing fails, the error says so, and a REPL session keeps the new tokens.
 
 ## Installation
 
@@ -214,6 +230,7 @@ ortie auth resume <URI|DEVICE_CODE>    # finish a flow by hand
 ortie token show                       # print the stored access token
 ortie token refresh                    # force a refresh
 ortie token inspect                    # print type, scopes and expiry
+ortie token revoke                     # revoke the token at the server
 ```
 
 `ortie repl` answers those `token` commands from stdin instead, reading the secret store once so a keyring is unlocked one time rather than per call:

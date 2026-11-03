@@ -3,7 +3,7 @@
 //! The `token refresh` subcommand, making the stored access token fresh
 //! again, and the per-grant decision of how that is done.
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
 use log::debug;
 use pimalaya_cli::printer::Printer;
@@ -142,7 +142,12 @@ impl TokenRefreshCommand {
                     res.refresh_token = account.resolve_token()?.refresh_token;
                 }
 
-                let res = account.write_to_storage(res)?;
+                // NOTE: the server may have rotated the refresh token,
+                // the old one then being dead: a failed write loses the
+                // grant, which the error says.
+                let res = account.write_to_storage(res).context(
+                    "Store refreshed access token error, run `auth get` if the next refresh fails",
+                )?;
 
                 debug!("execute refresh access token success hook");
                 account.execute_on_refresh_success_hook(&res);

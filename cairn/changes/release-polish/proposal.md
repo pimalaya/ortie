@@ -1,14 +1,16 @@
 ---
 cairn: change
 id: release-polish
-status: draft
+status: landed
 created: 2026-07-25
 ---
 
 # Release polish
 
 ## Why
-Before releasing the minor that carries the device grant, the OAuth 2.1 posture should be verified and documented, and the refresh rotation window audited so a rotated refresh token can never be lost.
+The refresh rotation window had never been audited, so a rotated refresh token could have been lost, and the README did not state the OAuth 2.1 posture Ortie follows. The change was written before the minor carrying the device grant; that minor shipped as 2.1.0 without it, so what is left lands before the next major instead.
 
 ## What
-Audit the write-after-refresh window in `token refresh` to confirm a rotated refresh token is persisted before the old one can be lost. Add a README section on the 2.1 posture (grants supported, PKCE default, exact redirect matching with the loopback variable-port exception, rotation behaviour). Add CHANGELOG notes (pkce default flip, discover output shape, lib removal; no config migration). Re-check the final RFC if published and release the minor. This is verification and documentation only; the rotation-ordering behaviour it verifies is already spec (`token`).
+Audit of the write-after-refresh window in `token refresh`: the new token is written as soon as the server answers, with nothing fallible in between, and the previous refresh token is kept when no rotated one comes back. The window left is a failing storage write: a server rotating refresh tokens has invalidated the stored one by then. The token is now cached in memory before the write, so a REPL session keeps working on the issued tokens, and the error tells to run `auth get` if the next refresh fails. A README section states the posture: grants, PKCE default, exact redirect matching with the loopback variable-port exception, rotation.
+
+Dropped as obsolete: the changelog notes for the PKCE default flip, the discover output shape and the lib removal (all in the 2.0.0 and 2.1.0 entries), and releasing the minor; the final OAuth 2.1 RFC is not published yet.
