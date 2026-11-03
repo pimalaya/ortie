@@ -154,6 +154,8 @@ pub struct EndpointsConfig {
     pub device_authorization: Option<Url>,
     /// Where grants and refreshes exchange for a token.
     pub token: Option<Url>,
+    /// Where `token revoke` revokes the stored token (RFC 7009).
+    pub revocation: Option<Url>,
     /// Where the provider sends the browser back, a random
     /// `http://127.0.0.1:<port>` being bound when omitted.
     pub redirection: Option<Url>,

@@ -23,7 +23,10 @@ use pimalaya_cli::{clap::commands::JsonSchemaRegistry, error::ErrorReport};
 use crate::wizard::ConfigureOutput;
 use crate::{
     auth::get::AuthGetOutput,
-    token::{inspect::TokenInspectOutput, issued::TokenIssuedOutput, show::TokenShowOutput},
+    token::{
+        inspect::TokenInspectOutput, issued::TokenIssuedOutput, revoke::TokenRevokeOutput,
+        show::TokenShowOutput,
+    },
 };
 
 /// Builds the command-to-schema registry consumed by `json-schema`.
@@ -41,6 +44,7 @@ pub fn registry() -> JsonSchemaRegistry {
     registry.insert::<TokenShowOutput<'static>>("ortie-token-show");
     registry.insert::<TokenInspectOutput>("ortie-token-inspect");
     registry.insert::<TokenIssuedOutput>("ortie-token-refresh");
+    registry.insert::<TokenRevokeOutput>("ortie-token-revoke");
     registry.insert::<ErrorReport>("ortie-error");
 
     registry

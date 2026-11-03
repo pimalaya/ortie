@@ -38,6 +38,9 @@ The authorization server metadata SHALL be fetched at most once per run, from th
 ### Requirement: Metadata-driven PKCE
 The wizard SHALL write `pkce = "plain"` for an authorization code grant whose server metadata lists `plain` as its only code challenge method, and no `pkce` line otherwise, S256 being the default.
 
+### Requirement: Revocation endpoint prefilled
+The wizard SHALL write the server metadata's `revocation_endpoint` as `endpoints.revocation` when it advertises one.
+
 ### Requirement: Account name derived, not prompted
 The wizard SHALL NOT prompt for an account name. It derives one from the input (the first label of the email domain, bare domain, or issuer host) and uses it as the `[accounts.<name>]` table key; the user renames it by editing that key.
 

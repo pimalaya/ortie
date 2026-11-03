@@ -127,6 +127,11 @@ fn run(printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
         config.pkce = suggested_pkce(metadata.as_ref());
     }
 
+    config.endpoints.revocation = metadata
+        .as_ref()
+        .and_then(|metadata| metadata.revocation_endpoint.as_ref())
+        .map(ToString::to_string);
+
     // NOTE: the application comes first, since what a token may request
     // is a property of the application requesting it.
     let scopes = client::configure(&mut config, metadata.as_ref())?;
@@ -575,6 +580,9 @@ impl fmt::Display for AccountDraft {
         if let Some(url) = &self.endpoints.token {
             writeln!(f, "endpoints.token = {}", toml_string(url))?;
         }
+        if let Some(url) = &self.endpoints.revocation {
+            writeln!(f, "endpoints.revocation = {}", toml_string(url))?;
+        }
         if let Some(url) = &self.endpoints.redirection {
             writeln!(f, "endpoints.redirection = {}", toml_string(url))?;
         }
@@ -622,6 +630,8 @@ pub struct Endpoints {
     pub device_authorization: Option<String>,
     /// Token endpoint shared by grants and refreshes.
     pub token: Option<String>,
+    /// Revocation endpoint of `token revoke`, from the server metadata.
+    pub revocation: Option<String>,
     /// Redirection endpoint, when the provider pins one.
     pub redirection: Option<String>,
 }
@@ -768,7 +778,7 @@ fn default_scopes(
 mod tests {
     use pimalaya_config::toml::TomlConfig;
 
-    use crate::config::{Config, GrantConfig};
+    use crate::config::{Config, GrantConfig, PkceConfig};
 
     use super::*;
 
@@ -937,9 +947,11 @@ mod tests {
             endpoints: Endpoints {
                 authorization: Some("https://as/auth".to_string()),
                 token: Some("https://as/token".to_string()),
+                revocation: Some("https://as/revoke".to_string()),
                 ..Default::default()
             },
             scopes: vec!["mail".to_string(), "offline_access".to_string()],
+            pkce: Some("plain"),
             storage: Some(Storage {
                 read: StorageEntry {
                     command: StorageCommand::Argv(vec![
@@ -979,6 +991,11 @@ mod tests {
             account.endpoints.token.unwrap().as_str(),
             "https://as/token"
         );
+        assert_eq!(
+            account.endpoints.revocation.unwrap().as_str(),
+            "https://as/revoke"
+        );
+        assert_eq!(account.pkce, PkceConfig::Plain);
         assert!(account.auto_refresh);
     }
 }

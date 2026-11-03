@@ -72,6 +72,8 @@ pub struct Account {
     pub device_authorization_endpoint: Option<Url>,
     /// Token endpoint shared by grants and refreshes.
     pub token_endpoint: Option<Url>,
+    /// The revocation endpoint of `token revoke` (RFC 7009).
+    pub revocation_endpoint: Option<Url>,
     /// Redirection endpoint registered with the provider.
     pub redirection_endpoint: Option<Url>,
     /// Command printing the stored token JSON on its stdout.
@@ -127,6 +129,7 @@ impl From<AccountConfig> for Account {
             authorization,
             device_authorization,
             token,
+            revocation,
             redirection,
         } = endpoints;
 
@@ -185,6 +188,7 @@ impl From<AccountConfig> for Account {
             authorization_endpoint: authorization,
             device_authorization_endpoint: device_authorization,
             token_endpoint: token,
+            revocation_endpoint: revocation,
             redirection_endpoint: redirection,
             read_storage_command: read_cmd,
             write_storage_command: write_cmd,

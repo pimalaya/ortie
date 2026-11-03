@@ -57,6 +57,7 @@ client-id = ""
 endpoints.authorization = ""
 #endpoints.device-authorization = ""  # required when grant = "device"
 endpoints.token = ""
+#endpoints.revocation = ""            # used by `ortie token revoke` (RFC 7009)
 
 # Optional redirection endpoint, defaulting to `http://127.0.0.1:0`, whose
 # port the OS picks. Set it to match a redirect URI the provider pins.

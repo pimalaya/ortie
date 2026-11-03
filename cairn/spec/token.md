@@ -31,3 +31,6 @@ When auto-refresh triggers, Ortie SHALL exchange the refresh token where one exi
 
 ### Requirement: Token inspect reports metadata, not secrets
 `token inspect` SHALL emit, in both renderings, the metadata of the stored token and not the token itself: the token type, when it was issued, what remains of its lifetime, whether a refresh token is held, and the granted scope. The access token and the refresh token SHALL NOT be serialized. The raw access token stays available from `token show`.
+
+### Requirement: Revoke command
+`token revoke` SHALL revoke the stored refresh token when present, else the access token, against `endpoints.revocation` with the matching `token_type_hint` (RFC 7009), and print the kind it revoked (`{revoked}`, `refreshToken` or `accessToken`). A rejection SHALL fail with the server's error code. Storage SHALL be left as it is.

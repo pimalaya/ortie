@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - Added `resources` to the account configuration, the RFC 8707 resource indicators sent on the authorization request and the code exchange.
+- Added `token revoke`, revoking the stored refresh token, or the access token when none is stored (RFC 7009).
+- Added `endpoints.revocation` to the account configuration, prefilled by the wizard from the server metadata.
+- Added `ortie-token-revoke` to `json-schema`.
 - Added the `wizard` cargo feature, on by default, gating `configure` and the first-run offer.
 
   A build without it drops the prompts and the dependencies only they use.

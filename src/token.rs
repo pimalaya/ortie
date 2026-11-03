@@ -6,6 +6,7 @@
 pub mod inspect;
 pub mod issued;
 pub mod refresh;
+pub mod revoke;
 pub mod show;
 
 use anyhow::Result;
@@ -14,19 +15,24 @@ use pimalaya_cli::printer::Printer;
 
 use crate::{
     account::Account,
-    token::{inspect::TokenInspectCommand, refresh::TokenRefreshCommand, show::TokenShowCommand},
+    token::{
+        inspect::TokenInspectCommand, refresh::TokenRefreshCommand, revoke::TokenRevokeCommand,
+        show::TokenShowCommand,
+    },
 };
 
-/// Display and refresh an existing OAuth 2.0 access token.
+/// Display, refresh and revoke an existing OAuth 2.0 access token.
 ///
-/// Show the access token, inspect the metadata associated to it, or
-/// refresh it with the refresh token when one is available.
+/// Show the access token, inspect the metadata associated to it,
+/// refresh it with the refresh token when one is available, or revoke
+/// it at the authorization server.
 #[derive(Subcommand, Debug)]
 pub enum TokenCommand {
     #[command(visible_alias = "get")]
     Show(TokenShowCommand),
     Inspect(TokenInspectCommand),
     Refresh(TokenRefreshCommand),
+    Revoke(TokenRevokeCommand),
 }
 
 impl TokenCommand {
@@ -36,6 +42,7 @@ impl TokenCommand {
             Self::Show(cmd) => cmd.execute(printer, account),
             Self::Inspect(cmd) => cmd.execute(printer, account),
             Self::Refresh(cmd) => cmd.execute(printer, account),
+            Self::Revoke(cmd) => cmd.execute(printer, account),
         }
     }
 }
