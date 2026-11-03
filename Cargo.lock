@@ -972,8 +972,6 @@ dependencies = [
 [[package]]
 name = "io-oauth"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "668203a06f8b0df0fb40fb85a02ab48f6d2330700399db8dfea7903c1e5ee52e"
 dependencies = [
  "anyhow",
  "base64-codec",
@@ -994,8 +992,6 @@ dependencies = [
 [[package]]
 name = "io-pim-discovery"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5218d94452254851d229fab353a7fda97c720b3f060af676b8a7310eeb81ec41"
 dependencies = [
  "anyhow",
  "base64-codec",

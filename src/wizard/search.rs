@@ -210,6 +210,7 @@ fn collect_oauth(configs: &[DiscoveryServiceConfig]) -> Vec<Discovered> {
             {
                 Some(existing) => {
                     merge_scopes(&mut existing.method, method);
+                    merge_resource(&mut existing.method, method);
                     existing.services.insert(config.service);
                 }
                 None => discovered.push(Discovered {
@@ -298,6 +299,8 @@ fn grants_of(metadata: &DiscoveryOauthServerMetadata) -> Vec<DiscoveryAuthMethod
             authorization_endpoint: authorization_endpoint.to_string(),
             token_endpoint: token_endpoint.clone(),
             scope: scope.clone(),
+            resource: None,
+            scopes_supported: metadata.scopes_supported.clone(),
         });
     }
 
@@ -306,6 +309,8 @@ fn grants_of(metadata: &DiscoveryOauthServerMetadata) -> Vec<DiscoveryAuthMethod
             device_authorization_endpoint: device_authorization_endpoint.to_string(),
             token_endpoint,
             scope,
+            resource: None,
+            scopes_supported: metadata.scopes_supported.clone(),
         });
     }
 
@@ -392,6 +397,45 @@ fn merge_scopes(existing: &mut DiscoveryAuthMethod, incoming: &DiscoveryAuthMeth
     *existing_scope = (!tokens.is_empty()).then(|| tokens.join(" "));
 }
 
+/// Takes the incoming grant's resource, with the scopes it advertises,
+/// when the existing grant has none.
+///
+/// One resource only: whether a server accepts several RFC 8707
+/// indicators on one authorization request is unverified, so the first
+/// service in compose priority order binds the token.
+fn merge_resource(existing: &mut DiscoveryAuthMethod, incoming: &DiscoveryAuthMethod) {
+    let (
+        DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
+            resource,
+            scopes_supported,
+            ..
+        }
+        | DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
+            resource,
+            scopes_supported,
+            ..
+        },
+        DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
+            resource: Some(incoming),
+            scopes_supported: incoming_scopes,
+            ..
+        }
+        | DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
+            resource: Some(incoming),
+            scopes_supported: incoming_scopes,
+            ..
+        },
+    ) = (existing, incoming)
+    else {
+        return;
+    };
+
+    if resource.is_none() {
+        *resource = Some(incoming.clone());
+        *scopes_supported = incoming_scopes.clone();
+    }
+}
+
 /// Whether an authentication method is one of the OAuth 2.0 flows.
 fn is_oauth(method: &DiscoveryAuthMethod) -> bool {
     matches!(
@@ -433,6 +477,8 @@ mod tests {
             authorization_endpoint: authorization.to_string(),
             token_endpoint: token.to_string(),
             scope: scope.map(ToString::to_string),
+            resource: None,
+            scopes_supported: Vec::new(),
         }
     }
 
@@ -554,6 +600,7 @@ mod tests {
             authorization_endpoint,
             token_endpoint,
             scope,
+            ..
         } = &found[0].method
         else {
             panic!("expected an authorization code grant");
@@ -581,6 +628,40 @@ mod tests {
         assert!(collect_oauth(&[basic]).is_empty());
     }
 
+    /// IMAP comes first without a resource, JMAP brings the first one
+    /// and CalDAV a second one, which does not replace it.
+    #[test]
+    fn merged_grant_takes_the_first_resource_with_its_scopes() {
+        let bound =
+            |resource: &str, scopes: &[&str]| DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
+                authorization_endpoint: "https://as/auth".to_string(),
+                token_endpoint: "https://as/token".to_string(),
+                scope: None,
+                resource: Some(resource.to_string()),
+                scopes_supported: scopes.iter().map(ToString::to_string).collect(),
+            };
+
+        let imap = config(
+            DiscoveryService::Imap,
+            vec![code_grant("https://as/auth", "https://as/token", None)],
+        );
+        let jmap = config(
+            DiscoveryService::Jmap,
+            vec![bound("https://api/jmap", &["mail", "offline_access"])],
+        );
+        let caldav = config(
+            DiscoveryService::Caldav,
+            vec![bound("https://dav/calendars", &["calendars"])],
+        );
+
+        let found = collect_oauth(&[imap, jmap, caldav]);
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].method,
+            bound("https://api/jmap", &["mail", "offline_access"])
+        );
+    }
+
     /// Both endpoints yield both flows, the redirect one leading since
     /// a desktop completes it without a second device.
     #[test]
@@ -596,15 +677,19 @@ mod tests {
         assert_eq!(
             grants_of(&both),
             [
-                code_grant(
-                    "https://as/auth",
-                    "https://as/token",
-                    Some("mail offline_access")
-                ),
+                DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
+                    authorization_endpoint: "https://as/auth".to_string(),
+                    token_endpoint: "https://as/token".to_string(),
+                    scope: Some("mail offline_access".to_string()),
+                    resource: None,
+                    scopes_supported: scopes.map(ToString::to_string).to_vec(),
+                },
                 DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
                     device_authorization_endpoint: "https://as/device".to_string(),
                     token_endpoint: "https://as/token".to_string(),
                     scope: Some("mail offline_access".to_string()),
+                    resource: None,
+                    scopes_supported: scopes.map(ToString::to_string).to_vec(),
                 },
             ]
         );
@@ -621,6 +706,8 @@ mod tests {
                 device_authorization_endpoint: "https://as/device".to_string(),
                 token_endpoint: "https://as/token".to_string(),
                 scope: None,
+                resource: None,
+                scopes_supported: Vec::new(),
             }]
         );
     }

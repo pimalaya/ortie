@@ -94,6 +94,10 @@ pub struct AccountConfig {
     /// OAuth 2.0 scopes requested for the access token.
     #[serde(default)]
     pub scopes: Vec<String>,
+    /// RFC 8707 resource indicators the token is meant for, sent on the
+    /// authorization request and the code exchange.
+    #[serde(default)]
+    pub resources: Vec<Url>,
     /// PKCE posture of the authorization code grant.
     #[serde(default)]
     pub pkce: PkceConfig,

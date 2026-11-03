@@ -23,6 +23,9 @@ The parallel discovery run SHALL be bounded by a short deadline so a single unre
 ### Requirement: Grant-based service reduction
 Discovery SHALL reduce services to deduplicated OAuth 2.0 grants tagged with the services sharing them, and present the grant as the unit of choice. Two grants SHALL be reduced into one when they are the same flow against the same authorization server, compared by the host of the endpoint that starts the flow rather than by the endpoint URLs: mechanisms disagree on the exact spelling a provider's endpoints are written with, and the pick list must not ask the user to arbitrate between two spellings of one server. The first spelling seen wins the entry's endpoints, which is the highest-priority mechanism's since compose yields its outputs in mechanism-priority order, and the scopes and services of both are merged into it. The entry SHALL be labelled by its flow and the services it authenticates, never by its endpoints.
 
+### Requirement: Resource-bound grants
+The wizard SHALL write the chosen grant's discovered resource into `resources`, and, when the grant requests no scope of its own, preselect the scopes its protected resource advertises. A grant merged across services SHALL keep the first resource seen in compose priority order, with that resource's scopes.
+
 ### Requirement: A single candidate is not a choice
 A step whose reduction leaves exactly one candidate SHALL carry it through without prompting. This holds for the grant pick list and for the application pick list alike: a prompt with nothing to arbitrate is noise, and the entry it would have offered is the one the wizard uses.
 

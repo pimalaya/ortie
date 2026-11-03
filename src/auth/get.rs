@@ -119,6 +119,7 @@ impl AuthGetCommand {
             scope: BTreeSet::from_iter(account.scopes.iter().map(Into::into)),
             state: Some(Cow::Borrowed(&state)),
             pkce_code_challenge: pkce_code_challenge.as_ref().map(Cow::Borrowed),
+            resource: account.resources.clone(),
             extras: account
                 .extras
                 .iter()

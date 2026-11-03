@@ -140,6 +140,7 @@ impl AuthResumeCommand {
             client_id: account.client_id.as_str().into(),
             client_secret: None,
             pkce_code_verifier: self.pkce.as_ref().map(Cow::Borrowed),
+            resource: account.resources.clone(),
         })?;
 
         match res {

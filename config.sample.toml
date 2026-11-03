@@ -65,6 +65,12 @@ endpoints.token = ""
 # OAuth 2.0 scopes granted to the access token.
 scopes = []
 
+# RFC 8707 resource indicators the token is meant for, sent as one `resource`
+# parameter each on the authorization request and the code exchange. A server
+# bound to a resource (Fastmail) refuses a request without it with
+# `invalid_target`; the wizard fills it from the service's RFC 9728 metadata.
+#resources = ["https://api.example.com/jmap/session"]
+
 # Proof Key for Code Exchange (RFC 7636), used by the authorization code grant
 # and enabled with the S256 method by default, aligning with OAuth 2.1.
 #
@@ -82,7 +88,6 @@ scopes = []
 #   extras.access_type = "offline"          # Google: required for a refresh token
 #   extras.prompt = "consent"               # Google: force the consent screen
 #   extras.login_hint = "user@example.com"
-#   extras.resource = "https://api.example.com/"  # RFC 8707 (Fastmail needs it)
 #extras.access_type = "offline"
 
 # Whether `ortie token show` refreshes an expired access token by itself,

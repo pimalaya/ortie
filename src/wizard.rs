@@ -33,7 +33,7 @@ pub mod storage;
 
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     fmt,
     fs::{self, OpenOptions},
     io::{IsTerminal, Write, stdin, stdout},
@@ -117,8 +117,6 @@ fn run(printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
     // command picks depend on map ordering, so the generated one claims
     // the default only when no other account does.
     config.default = !existing.as_ref().is_some_and(|config| config.has_default);
-
-    fill_provider_defaults(&mut config);
 
     // NOTE: the metadata answers two later steps at once, its
     // registration endpoint deciding whether dynamic registration is on
@@ -469,9 +467,9 @@ pub struct AccountDraft {
     pub endpoints: Endpoints,
     /// The scopes the token will carry.
     pub scopes: Vec<String>,
-    /// Extra authorization-request parameters a provider requires but
-    /// discovery does not surface; see cairn/changes/discovery-layering/.
-    pub extras: BTreeMap<String, String>,
+    /// The RFC 8707 resource indicators the token is meant for, when the
+    /// service endpoint publishes its RFC 9728 metadata.
+    pub resources: Vec<String>,
     /// Whether token show refreshes an expired token by itself, which
     /// the wizard always enables.
     pub auto_refresh: bool,
@@ -491,7 +489,7 @@ impl AccountDraft {
             grant: None,
             endpoints: Endpoints::default(),
             scopes: Vec::new(),
-            extras: BTreeMap::new(),
+            resources: Vec::new(),
             auto_refresh: true,
             storage: None,
         }
@@ -505,6 +503,8 @@ impl From<Discovered> for AccountDraft {
                 authorization_endpoint,
                 token_endpoint,
                 scope,
+                resource,
+                scopes_supported,
             } => Self {
                 grant: Some("authorization-code"),
                 endpoints: Endpoints {
@@ -512,13 +512,16 @@ impl From<Discovered> for AccountDraft {
                     token: Some(token_endpoint),
                     ..Default::default()
                 },
-                scopes: split_scopes(scope),
+                scopes: default_scopes(scope, resource.is_some(), scopes_supported),
+                resources: resource.into_iter().collect(),
                 ..Self::empty()
             },
             DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
                 device_authorization_endpoint,
                 token_endpoint,
                 scope,
+                resource,
+                scopes_supported,
             } => Self {
                 grant: Some("device"),
                 endpoints: Endpoints {
@@ -526,7 +529,8 @@ impl From<Discovered> for AccountDraft {
                     token: Some(token_endpoint),
                     ..Default::default()
                 },
-                scopes: split_scopes(scope),
+                scopes: default_scopes(scope, resource.is_some(), scopes_supported),
+                resources: resource.into_iter().collect(),
                 ..Self::empty()
             },
             // NOTE: search resolves every issuer into one of the grants
@@ -571,8 +575,8 @@ impl fmt::Display for AccountDraft {
             writeln!(f, "scopes = {}", toml_array(&self.scopes))?;
         }
 
-        for (key, value) in &self.extras {
-            writeln!(f, "extras.{key} = {}", toml_string(value))?;
+        if !self.resources.is_empty() {
+            writeln!(f, "resources = {}", toml_array(&self.resources))?;
         }
 
         writeln!(f, "auto-refresh = {}", self.auto_refresh)?;
@@ -718,45 +722,21 @@ pub fn split_scopes(scope: Option<String>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Fills the defaults a provider needs but discovery does not surface.
+/// The scopes a discovered grant preselects: the ones it requests, else
+/// the ones its protected resource advertises.
 ///
-/// Fastmail bounces the flow pre-consent without the RFC 8707 resource
-/// indicator, and its discovered grant carries no scopes, so both are
-/// supplied. A stopgap; see cairn/changes/discovery-layering/.
-fn fill_provider_defaults(config: &mut AccountDraft) {
-    let hosts = config.endpoints.hosts();
-
-    if hosts.contains("api.fastmail.com") {
-        config
-            .extras
-            .entry("resource".to_string())
-            .or_insert_with(|| "https://api.fastmail.com/jmap/session".to_string());
-
-        if config.scopes.is_empty() {
-            config.scopes = advertised_scopes(&config.endpoints)
-                .into_iter()
-                .map(ToString::to_string)
-                .collect();
-        }
+/// The authorization server's own list is not preselected, being every
+/// scope it issues for any resource; it only widens the options.
+fn default_scopes(
+    scope: Option<String>,
+    has_resource: bool,
+    scopes_supported: Vec<String>,
+) -> Vec<String> {
+    match scope {
+        Some(_) => split_scopes(scope),
+        None if has_resource => scopes_supported,
+        None => Vec::new(),
     }
-}
-
-/// The scopes a provider advertises outside its RFC 8414 metadata,
-/// folded into the scope options.
-///
-/// Empty for providers whose scopes discovery or metadata already
-/// fills. A stopgap; see cairn/changes/discovery-layering/.
-fn advertised_scopes(endpoints: &Endpoints) -> Vec<&'static str> {
-    if endpoints.hosts().contains("api.fastmail.com") {
-        return vec![
-            "urn:ietf:params:oauth:scope:mail",
-            "urn:ietf:params:oauth:scope:contacts",
-            "urn:ietf:params:oauth:scope:calendars",
-            "offline_access",
-        ];
-    }
-
-    Vec::new()
 }
 
 #[cfg(test)]
@@ -790,6 +770,8 @@ mod tests {
                 authorization_endpoint: "https://as/auth".to_string(),
                 token_endpoint: "https://as/token".to_string(),
                 scope: Some("mail offline_access".to_string()),
+                resource: None,
+                scopes_supported: vec!["openid".to_string()],
             },
             services: BTreeSet::new(),
         });
@@ -808,6 +790,8 @@ mod tests {
                 device_authorization_endpoint: "https://as/device".to_string(),
                 token_endpoint: "https://as/token".to_string(),
                 scope: None,
+                resource: None,
+                scopes_supported: vec!["openid".to_string()],
             },
             services: BTreeSet::new(),
         });
@@ -815,6 +799,22 @@ mod tests {
         assert_eq!(device.grant, Some("device"));
         assert_eq!(device.endpoints.authorization, None);
         assert!(device.scopes.is_empty());
+
+        // NOTE: a grant bound to a resource preselects what the resource
+        // advertises, the server list being every scope it issues.
+        let bound = AccountDraft::from(Discovered {
+            method: DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
+                authorization_endpoint: "https://as/auth".to_string(),
+                token_endpoint: "https://as/token".to_string(),
+                scope: None,
+                resource: Some("https://api.example.test/jmap".to_string()),
+                scopes_supported: vec!["mail".to_string(), "offline_access".to_string()],
+            },
+            services: BTreeSet::new(),
+        });
+
+        assert_eq!(bound.resources, ["https://api.example.test/jmap"]);
+        assert_eq!(bound.scopes, ["mail", "offline_access"]);
     }
 
     /// An argv reads back as a TOML array and a shell line as a string,
@@ -889,7 +889,7 @@ mod tests {
     /// the config loader accepts, both command shapes included.
     #[test]
     fn a_fragment_parses_back_into_the_account_it_came_from() {
-        let mut config = AccountDraft {
+        let config = AccountDraft {
             name: "posteo".to_string(),
             client_id: Some("client".to_string()),
             grant: Some("authorization-code"),
@@ -914,12 +914,9 @@ mod tests {
                     ),
                 },
             }),
+            resources: vec!["https://api.example.test/jmap".to_string()],
             ..AccountDraft::empty()
         };
-        config.extras.insert(
-            "resource".to_string(),
-            "https://api.fastmail.com/jmap/session".to_string(),
-        );
 
         let mut file = tempfile::NamedTempFile::new().unwrap();
         write!(file, "{config}").unwrap();
@@ -934,49 +931,14 @@ mod tests {
         assert_eq!(account.grant, GrantConfig::AuthorizationCode);
         assert_eq!(account.scopes, ["mail", "offline_access"]);
         assert_eq!(
-            account.extras.get("resource").map(String::as_str),
-            Some("https://api.fastmail.com/jmap/session")
+            account.resources,
+            [Url::parse("https://api.example.test/jmap").unwrap()]
         );
         assert_eq!(
             account.endpoints.token.unwrap().as_str(),
             "https://as/token"
         );
         assert!(account.auto_refresh);
-    }
-
-    #[test]
-    fn fastmail_gets_its_resource_indicator_and_scopes() {
-        let mut config = AccountDraft {
-            endpoints: Endpoints {
-                token: Some("https://api.fastmail.com/oauth/refresh".to_string()),
-                ..Default::default()
-            },
-            ..AccountDraft::empty()
-        };
-
-        fill_provider_defaults(&mut config);
-
-        assert_eq!(
-            config.extras.get("resource").map(String::as_str),
-            Some("https://api.fastmail.com/jmap/session")
-        );
-        assert!(config.scopes.contains(&"offline_access".to_string()));
-    }
-
-    #[test]
-    fn other_providers_get_no_quirk() {
-        let mut config = AccountDraft {
-            endpoints: Endpoints {
-                token: Some("https://as.example.test/token".to_string()),
-                ..Default::default()
-            },
-            ..AccountDraft::empty()
-        };
-
-        fill_provider_defaults(&mut config);
-
-        assert!(config.extras.is_empty());
-        assert!(config.scopes.is_empty());
     }
 }
 

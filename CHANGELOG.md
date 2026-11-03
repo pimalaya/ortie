@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added `resources` to the account configuration, the RFC 8707 resource indicators sent on the authorization request and the code exchange.
 - Added the `wizard` cargo feature, on by default, gating `configure` and the first-run offer.
 
   A build without it drops the prompts and the dependencies only they use.
@@ -36,6 +37,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed every `json-schema` schema to require the keys a command always prints.
 - Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
 - Changed the io-pim-discovery requirement to 0.10.
+- Changed the wizard to read the resource and its scopes from the RFC 9728 metadata of the service, rather than from a Fastmail host match.
+
+  It writes `resources` in place of `extras.resource`.
 
 ### Fixed
 

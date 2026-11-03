@@ -57,6 +57,8 @@ pub struct Account {
     pub tls: Tls,
     /// OAuth 2.0 scopes requested for the access token.
     pub scopes: Vec<String>,
+    /// The RFC 8707 resource indicators the token is meant for.
+    pub resources: Vec<Url>,
     /// PKCE posture of the authorization code grant.
     pub pkce: PkceConfig,
     /// Extra parameters forwarded verbatim to the authorization request
@@ -112,6 +114,7 @@ impl From<AccountConfig> for Account {
             tls,
             alpn,
             scopes,
+            resources,
             pkce,
             extras,
             auto_refresh,
@@ -175,6 +178,7 @@ impl From<AccountConfig> for Account {
             grant,
             tls: tls.into_tls(alpn),
             scopes,
+            resources,
             pkce,
             extras,
             auto_refresh,

@@ -19,7 +19,7 @@ use anyhow::Result;
 use io_pim_discovery::rfc8414::DiscoveryOauthServerMetadata;
 use pimalaya_cli::prompt;
 
-use crate::wizard::{AccountDraft, advertised_scopes};
+use crate::wizard::AccountDraft;
 
 /// The scope options the application step leaves for the scope step.
 pub enum Source {
@@ -62,8 +62,8 @@ pub fn prompt(config: &mut AccountDraft, source: Source) -> Result<()> {
 /// The options for a client bound to no registered set.
 ///
 /// The discovered scopes lead, being the narrow per-service ones the
-/// wizard resolved, then comes everything the server metadata and the
-/// provider quirks advertise.
+/// wizard resolved, then comes everything the server metadata
+/// advertises.
 pub fn advertised(
     config: &AccountDraft,
     metadata: Option<&DiscoveryOauthServerMetadata>,
@@ -74,11 +74,7 @@ pub fn advertised(
         .map(|metadata| metadata.scopes_supported.clone())
         .unwrap_or_default();
 
-    let quirks = advertised_scopes(&config.endpoints)
-        .into_iter()
-        .map(ToString::to_string);
-
-    for scope in supported.into_iter().chain(quirks) {
+    for scope in supported {
         if !options.contains(&scope) {
             options.push(scope);
         }
@@ -89,42 +85,34 @@ pub fn advertised(
 
 #[cfg(test)]
 mod tests {
-    use crate::wizard::Endpoints;
+    use serde_json::{from_value, json};
 
     use super::*;
 
-    /// The discovered scope leads and is not repeated by the quirk list
-    /// it also belongs to.
+    /// The discovered scopes lead, and the metadata list widens them
+    /// without repeating one.
     #[test]
     fn advertised_options_lead_with_the_discovered_scopes() {
         let config = AccountDraft {
-            endpoints: Endpoints {
-                token: Some("https://api.fastmail.com/oauth/refresh".to_string()),
-                ..Default::default()
-            },
-            scopes: vec!["urn:ietf:params:oauth:scope:mail".to_string()],
+            scopes: vec!["mail".to_string()],
             ..AccountDraft::empty()
         };
+        let metadata: DiscoveryOauthServerMetadata = from_value(json!({
+            "issuer": "https://as.example.test/",
+            "scopes_supported": ["openid", "mail", "offline_access"],
+        }))
+        .unwrap();
 
-        let Source::Advertised(options) = advertised(&config, None) else {
+        let Source::Advertised(options) = advertised(&config, Some(&metadata)) else {
             panic!("expected advertised options");
         };
 
-        assert_eq!(options[0], "urn:ietf:params:oauth:scope:mail");
-        assert_eq!(
-            options.iter().filter(|scope| *scope == &options[0]).count(),
-            1
-        );
-        assert!(options.contains(&"offline_access".to_string()));
+        assert_eq!(options, ["mail", "openid", "offline_access"]);
     }
 
     #[test]
-    fn a_provider_without_quirks_offers_only_what_was_discovered() {
+    fn without_metadata_only_the_discovered_scopes_are_offered() {
         let config = AccountDraft {
-            endpoints: Endpoints {
-                token: Some("https://as.example.test/token".to_string()),
-                ..Default::default()
-            },
             scopes: vec!["mail".to_string()],
             ..AccountDraft::empty()
         };

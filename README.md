@@ -191,17 +191,17 @@ Work or school (Entra ID) accounts receive a JWT the Graph API accepts. Personal
 
 Fastmail advertises RFC 7591 dynamic registration, so bare `ortie` registers a client for you. Two specifics it fills in, worth knowing when writing the block by hand:
 
-1. RFC 8707 resource: without a resource indicator, the authorize endpoint bounces the request with `invalid_target`, before any consent screen. Its value is the JMAP session URL.
+1. RFC 8707 resource: without a resource indicator, the authorize endpoint bounces the request with `invalid_target`, before any consent screen. Its value is the JMAP session URL, which the wizard reads from the session's RFC 9728 metadata.
 2. Redirect: dynamic registration accepts only a reverse-DNS private-use scheme, `org.pimalaya.ortie://redirect`. No desktop browser routes it back, so `auth get` prints a manual `auth resume` command.
 
 ```toml
 endpoints.authorization = "https://api.fastmail.com/oauth/authorize"
 endpoints.token = "https://api.fastmail.com/oauth/refresh"
 scopes = ["urn:ietf:params:oauth:scope:mail", "urn:ietf:params:oauth:scope:contacts", "urn:ietf:params:oauth:scope:calendars", "offline_access"]
-extras.resource = "https://api.fastmail.com/jmap/session"
+resources = ["https://api.fastmail.com/jmap/session"]
 ```
 
-The wizard selects all four advertised scopes by default, and the multi-select is where you trim them. The Thunderbird application it also offers covers Fastmail with a loopback redirect, avoiding the manual resume.
+The wizard selects the four scopes the JMAP session advertises by default, and the multi-select is where you trim them. The Thunderbird application it also offers covers Fastmail with a loopback redirect, avoiding the manual resume.
 
 ## Usage
 
