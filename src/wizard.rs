@@ -53,10 +53,7 @@ use io_pim_discovery::{
 
 use pimalaya_config::toml::TomlConfig;
 
-use crate::{
-    config::{Config, is_default},
-    wizard::search::Discovered,
-};
+use crate::{config::Config, wizard::search::Discovered};
 
 /// The documented sample configuration, shown in the welcome banner and
 /// pointed at whenever discovery finds nothing.
@@ -142,7 +139,7 @@ fn run(printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
     // non-interactive, the fragment going to stdout and no file being
     // touched, which is what `ortie configure >> config.toml` does.
     if printer.is_json() || !stdout().is_terminal() {
-        return printer.out(config);
+        return printer.out(ConfigureOutput::from(&config));
     }
 
     match existing {
@@ -256,11 +253,11 @@ pub fn print_welcome(path: &Path) {
 
 /// Offers to write the generated account to a configuration file that
 /// does not exist yet, printing it instead when the offer is declined.
-fn save_or_print(printer: &mut impl Printer, path: &Path, config: ConfigureOutput) -> Result<()> {
+fn save_or_print(printer: &mut impl Printer, path: &Path, config: AccountDraft) -> Result<()> {
     let prompt = format!("Save this account to {}?", path.display());
 
     if !prompt::bool(prompt, true)? {
-        return printer.out(config);
+        return printer.out(ConfigureOutput::from(&config));
     }
 
     if let Some(parent) = path
@@ -281,11 +278,11 @@ fn save_or_print(printer: &mut impl Printer, path: &Path, config: ConfigureOutpu
 
 /// Offers to append the generated account to the configuration file
 /// already there, printing it instead when the offer is declined.
-fn append_or_print(printer: &mut impl Printer, path: &Path, config: ConfigureOutput) -> Result<()> {
+fn append_or_print(printer: &mut impl Printer, path: &Path, config: AccountDraft) -> Result<()> {
     let prompt = format!("Append account `{}` to {}?", config.name, path.display());
 
     if !prompt::bool(prompt, true)? {
-        return printer.out(config);
+        return printer.out(ConfigureOutput::from(&config));
     }
 
     let mut file = OpenOptions::new()
@@ -312,7 +309,7 @@ fn append_or_print(printer: &mut impl Printer, path: &Path, config: ConfigureOut
 /// not claim the default is only reachable through `-a`. One still
 /// missing its client id cannot authorize yet, and was told what to fill
 /// in already.
-fn print_saved(path: &Path, config: &ConfigureOutput) {
+fn print_saved(path: &Path, config: &AccountDraft) {
     let name = &config.name;
 
     eprintln!();
@@ -332,7 +329,7 @@ fn print_saved(path: &Path, config: &ConfigureOutput) {
 ///
 /// Discovering nothing stops the wizard rather than prompting for
 /// hand-entered endpoints (see [`stop_undiscovered`]).
-fn configure_discovery(input: &str) -> Result<ConfigureOutput> {
+fn configure_discovery(input: &str) -> Result<AccountDraft> {
     let spinner = Spinner::start("Searching for OAuth 2.0 grants");
 
     // NOTE: an issuer URL names an authorization server directly, so
@@ -360,14 +357,14 @@ fn configure_discovery(input: &str) -> Result<ConfigureOutput> {
         _ => prompt::item("Choose an OAuth 2.0 grant:", found, None)?,
     };
 
-    Ok(ConfigureOutput::from(choice))
+    Ok(AccountDraft::from(choice))
 }
 
 /// Stops the wizard when discovery found nothing for `input`.
 ///
 /// It errors out on the documented sample rather than dropping into a
 /// hand-entry flow, the wizard configuring only what it discovers.
-fn stop_undiscovered(input: &str) -> Result<ConfigureOutput> {
+fn stop_undiscovered(input: &str) -> Result<AccountDraft> {
     bail!(
         "Could not automatically discover an OAuth 2.0 grant for `{input}`.\n\n\
          Write your account configuration by hand instead, starting from the \
@@ -380,7 +377,7 @@ fn stop_undiscovered(input: &str) -> Result<ConfigureOutput> {
 ///
 /// A server publishing none costs only fewer scope options and no
 /// dynamic registration entry.
-fn probe_metadata(config: &ConfigureOutput) -> Option<DiscoveryOauthServerMetadata> {
+fn probe_metadata(config: &AccountDraft) -> Option<DiscoveryOauthServerMetadata> {
     let spinner = Spinner::start("Reading the authorization server metadata");
 
     match search::metadata(&config.endpoints.hosts()) {
@@ -415,57 +412,74 @@ fn first_label(host: &str) -> String {
     host.split('.').next().unwrap_or(host).to_string()
 }
 
-/// The account resolved by the wizard, printed as a ready-to-append
-/// config fragment.
+/// The account the wizard printed instead of placing it.
 ///
-/// It renders as bare TOML on stdout, the framing living in the stderr
-/// welcome banner, or as the same data in an object under `--json`.
-///
-/// The TOML keeps the configuration's kebab-case keys (`client-id`),
-/// while the `--json` object speaks camelCase (`clientId`) like every
-/// output type: the loader reads one, the printer emits the other.
+/// Its text form is the bare TOML fragment, the framing living on
+/// stderr, so `ortie configure > <config>` holds a loadable document.
+/// Under `--json`, the fragment travels as `document`, beside the two
+/// facts a script needs without parsing it.
 #[derive(Debug, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigureOutput {
+    /// The account name, which is the `[accounts.<name>]` table key.
+    name: String,
+    /// Whether the account claims the default.
+    default: bool,
+    /// The rendered TOML document.
+    document: String,
+}
+
+impl From<&AccountDraft> for ConfigureOutput {
+    fn from(draft: &AccountDraft) -> Self {
+        Self {
+            name: draft.name.clone(),
+            default: draft.default,
+            document: draft.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for ConfigureOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.document)
+    }
+}
+
+/// The account the wizard resolves, step by step, before it is placed.
+///
+/// Its `Display` is the ready-to-append config fragment, in the
+/// configuration's kebab-case keys (`client-id`); [`ConfigureOutput`] is
+/// what the printer emits of it.
+#[derive(Debug)]
+pub struct AccountDraft {
     /// The account name, heading the `[accounts.<name>]` table.
     pub name: String,
     /// Whether this account is picked when none is named, claimed only
     /// when no other account already does.
-    #[serde(skip_serializing_if = "is_default")]
-    #[schemars(default)]
     pub default: bool,
-    /// The OAuth 2.0 client identifier, when already registered.
-    ///
-    /// Always serialized, empty included, so both output shapes carry
-    /// the placeholder the user fills in by hand.
+    /// The OAuth 2.0 client identifier, when already registered, an
+    /// empty placeholder in the fragment otherwise.
     pub client_id: Option<String>,
     /// The client secret paired with the identifier, for providers
     /// issuing one.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub client_secret: Option<RawSecret>,
     /// The wire name of the discovered grant flow.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub grant: Option<&'static str>,
     /// The discovered endpoints.
     pub endpoints: Endpoints,
     /// The scopes the token will carry.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    #[schemars(default)]
     pub scopes: Vec<String>,
     /// Extra authorization-request parameters a provider requires but
     /// discovery does not surface; see cairn/changes/discovery-layering/.
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    #[schemars(default)]
     pub extras: BTreeMap<String, String>,
     /// Whether token show refreshes an expired token by itself, which
     /// the wizard always enables.
     pub auto_refresh: bool,
     /// The commands persisting and reading back the token.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub storage: Option<Storage>,
 }
 
-impl ConfigureOutput {
+impl AccountDraft {
     /// An account with nothing resolved yet, the base every discovered
     /// grant fills in.
     pub fn empty() -> Self {
@@ -484,7 +498,7 @@ impl ConfigureOutput {
     }
 }
 
-impl From<Discovered> for ConfigureOutput {
+impl From<Discovered> for AccountDraft {
     fn from(discovered: Discovered) -> Self {
         match discovered.method {
             DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
@@ -522,7 +536,7 @@ impl From<Discovered> for ConfigureOutput {
     }
 }
 
-impl fmt::Display for ConfigureOutput {
+impl fmt::Display for AccountDraft {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "[accounts.{}]", toml_key(&self.name))?;
 
@@ -577,31 +591,22 @@ impl fmt::Display for ConfigureOutput {
 }
 
 /// The client secret in the config's `client-secret.raw` shape.
-#[derive(Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
 pub struct RawSecret {
     /// The secret value, stored in clear as the provider issued it.
     pub raw: String,
 }
 
 /// Endpoint subset of the account config fragment.
-///
-/// Its TOML rendering stays kebab-case (`device-authorization`), its
-/// `--json` object camelCase (`deviceAuthorization`).
-#[derive(Debug, Default, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Default)]
 pub struct Endpoints {
     /// Authorization endpoint of the authorization code grant.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub authorization: Option<String>,
     /// Device authorization endpoint of the device grant.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub device_authorization: Option<String>,
     /// Token endpoint shared by grants and refreshes.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
     /// Redirection endpoint, when the provider pins one.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub redirection: Option<String>,
 }
 
@@ -620,8 +625,7 @@ impl Endpoints {
 }
 
 /// Storage subset of the account config fragment.
-#[derive(Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
 pub struct Storage {
     /// The command printing the stored token JSON on its stdout.
     pub read: StorageEntry,
@@ -630,8 +634,7 @@ pub struct Storage {
 }
 
 /// One direction of the token storage, holding its command.
-#[derive(Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
 pub struct StorageEntry {
     /// The command run for this direction.
     pub command: StorageCommand,
@@ -646,8 +649,7 @@ pub struct StorageEntry {
 /// Only what genuinely needs shell features falls back to a
 /// [`Shell`](Self::Shell) line: the macOS keychain write, where
 /// `$(cat)` bridges a secret, and anything typed by hand.
-#[derive(Debug, Eq, JsonSchema, PartialEq, Serialize)]
-#[serde(untagged)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum StorageCommand {
     /// A program and its arguments, run with no shell.
     Argv(Vec<String>),
@@ -721,7 +723,7 @@ pub fn split_scopes(scope: Option<String>) -> Vec<String> {
 /// Fastmail bounces the flow pre-consent without the RFC 8707 resource
 /// indicator, and its discovered grant carries no scopes, so both are
 /// supplied. A stopgap; see cairn/changes/discovery-layering/.
-fn fill_provider_defaults(config: &mut ConfigureOutput) {
+fn fill_provider_defaults(config: &mut AccountDraft) {
     let hosts = config.endpoints.hosts();
 
     if hosts.contains("api.fastmail.com") {
@@ -783,7 +785,7 @@ mod tests {
 
     #[test]
     fn a_discovered_grant_becomes_its_config_shape() {
-        let code = ConfigureOutput::from(Discovered {
+        let code = AccountDraft::from(Discovered {
             method: DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
                 authorization_endpoint: "https://as/auth".to_string(),
                 token_endpoint: "https://as/token".to_string(),
@@ -801,7 +803,7 @@ mod tests {
         assert_eq!(code.scopes, ["mail", "offline_access"]);
         assert!(code.auto_refresh);
 
-        let device = ConfigureOutput::from(Discovered {
+        let device = AccountDraft::from(Discovered {
             method: DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
                 device_authorization_endpoint: "https://as/device".to_string(),
                 token_endpoint: "https://as/token".to_string(),
@@ -819,7 +821,7 @@ mod tests {
     /// and a name TOML would read as a path gets quoted.
     #[test]
     fn the_fragment_carries_no_leading_comment() {
-        let mut config = ConfigureOutput {
+        let mut config = AccountDraft {
             default: true,
             name: "posteo".to_string(),
             client_id: Some("client".to_string()),
@@ -842,7 +844,7 @@ mod tests {
                     command: StorageCommand::Shell("pass insert -m -f posteo".to_string()),
                 },
             }),
-            ..ConfigureOutput::empty()
+            ..AccountDraft::empty()
         };
 
         let rendered = config.to_string();
@@ -887,7 +889,7 @@ mod tests {
     /// the config loader accepts, both command shapes included.
     #[test]
     fn a_fragment_parses_back_into_the_account_it_came_from() {
-        let mut config = ConfigureOutput {
+        let mut config = AccountDraft {
             name: "posteo".to_string(),
             client_id: Some("client".to_string()),
             grant: Some("authorization-code"),
@@ -912,7 +914,7 @@ mod tests {
                     ),
                 },
             }),
-            ..ConfigureOutput::empty()
+            ..AccountDraft::empty()
         };
         config.extras.insert(
             "resource".to_string(),
@@ -944,12 +946,12 @@ mod tests {
 
     #[test]
     fn fastmail_gets_its_resource_indicator_and_scopes() {
-        let mut config = ConfigureOutput {
+        let mut config = AccountDraft {
             endpoints: Endpoints {
                 token: Some("https://api.fastmail.com/oauth/refresh".to_string()),
                 ..Default::default()
             },
-            ..ConfigureOutput::empty()
+            ..AccountDraft::empty()
         };
 
         fill_provider_defaults(&mut config);
@@ -963,12 +965,12 @@ mod tests {
 
     #[test]
     fn other_providers_get_no_quirk() {
-        let mut config = ConfigureOutput {
+        let mut config = AccountDraft {
             endpoints: Endpoints {
                 token: Some("https://as.example.test/token".to_string()),
                 ..Default::default()
             },
-            ..ConfigureOutput::empty()
+            ..AccountDraft::empty()
         };
 
         fill_provider_defaults(&mut config);
@@ -1052,7 +1054,7 @@ mod frame_tests {
             .expect("read the existing config")
             .expect("an existing config");
 
-        let mut config = ConfigureOutput::empty();
+        let mut config = AccountDraft::empty();
         config.name = account_name("work", Some(&existing));
         config.default = !existing.has_default;
         config.client_id = Some("b".to_string());

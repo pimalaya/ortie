@@ -23,7 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **BREAKING**: `--json` keys are now camelCase.
 
-  `token show` prints `accessToken`, `token inspect` `tokenType`, `issuedAt`, `expiresIn` and `withRefreshToken`, `auth get` `authorizationUri`, `pkceCodeVerifier`, `deviceCode`, `userCode`, `verificationUri`, `verificationUriComplete` and `expiresIn`, and `configure` `clientId`, `clientSecret`, `autoRefresh` and `endpoints.deviceAuthorization`, where they used to be snake_case, or kebab-case for `configure`. Every key is now reachable by dot access in jq and JavaScript. The configuration file and the TOML `configure` prints keep their kebab-case keys, and regenerated JSON Schemas describe the new names.
+  `token show` prints `accessToken`, `token inspect` `tokenType`, `issuedAt`, `expiresIn` and `withRefreshToken`, and `auth get` `authorizationUri`, `pkceCodeVerifier`, `deviceCode`, `userCode`, `verificationUri`, `verificationUriComplete` and `expiresIn`, where they used to be snake_case. The configuration file and the TOML `configure` prints keep their kebab-case keys.
+
+- **BREAKING**: changed `configure --json` to print `{name, default, document}`, `document` being the TOML fragment the text output prints, rather than the account as an object.
+
+- **BREAKING**: changed `token inspect --json` to print `issuedAt` as an RFC 3339 instant in UTC, rather than Unix epoch seconds.
 
 - Changed base64 encoding and decoding to [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
 

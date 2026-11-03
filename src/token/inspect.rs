@@ -10,10 +10,10 @@ use std::{
 
 use anyhow::Result;
 use clap::Parser;
-use humantime::format_duration;
+use humantime::{format_duration, format_rfc3339_seconds};
 use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 use io_oauth::rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams;
 
@@ -45,7 +45,10 @@ impl TokenInspectCommand {
 pub struct TokenInspectOutput {
     /// The token type the server issued, usually `Bearer`.
     pub token_type: String,
-    /// Unix epoch seconds the token was issued at, when known.
+    /// When the token was issued, an RFC 3339 instant in UTC, `null` when
+    /// unknown.
+    #[serde(serialize_with = "serialize_rfc3339")]
+    #[schemars(with = "Option<String>")]
     pub issued_at: Option<u64>,
     /// The lifetime granted at issuance, in seconds, when known.
     pub expires_in: Option<usize>,
@@ -53,6 +56,17 @@ pub struct TokenInspectOutput {
     pub with_refresh_token: bool,
     /// The granted scope, when the server reported one.
     pub scope: Option<String>,
+}
+
+/// Serializes Unix epoch seconds as an RFC 3339 instant in UTC.
+fn serialize_rfc3339<S: Serializer>(secs: &Option<u64>, s: S) -> Result<S::Ok, S::Error> {
+    match secs {
+        Some(secs) => {
+            let instant = UNIX_EPOCH + Duration::from_secs(*secs);
+            s.collect_str(&format_rfc3339_seconds(instant))
+        }
+        None => s.serialize_none(),
+    }
 }
 
 impl From<Oauth20AccessTokenSuccessParams> for TokenInspectOutput {
@@ -137,5 +151,6 @@ mod tests {
         assert!(!json.contains("refresh-secret"));
         assert!(json.contains("\"withRefreshToken\":true"));
         assert!(json.contains("\"tokenType\":\"Bearer\""));
+        assert!(json.contains("\"issuedAt\":\"2023-11-14T22:13:20Z\""));
     }
 }

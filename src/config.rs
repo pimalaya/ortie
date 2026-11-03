@@ -286,13 +286,6 @@ pub const NO_CONFIG_HINT: &str = "run `ortie configure` to generate one, or writ
 pub const NO_CONFIG_HINT: &str = "write one by hand: \
      https://github.com/pimalaya/ortie/blob/master/config.sample.toml";
 
-/// Skips a field equal to its type's default, so a wizard-generated
-/// configuration omits defaulted scalars.
-#[cfg(feature = "wizard")]
-pub(crate) fn is_default<T: Default + PartialEq>(value: &T) -> bool {
-    *value == T::default()
-}
-
 /// TLS provider selector, folded into the pimalaya-stream config.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
