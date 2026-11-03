@@ -15,7 +15,7 @@ The wizard SHALL be reached by `configure` (alias `wizard`) and by the offer a m
 The wizard reached from the missing-configuration offer SHALL open with a welcome banner on stderr, before the first prompt, in three short paragraphs: the greeting, what Ortie is (named without reference to the tools that consume its tokens), and what the wizard is about to do, closing on the documented sample configuration as the escape hatch for writing an account by hand. The banner renders on stderr so it never pollutes a redirected fragment, and it is skipped under `--json`. It SHALL NOT suggest a stdout redirection, which can only be set up before the command is run.
 
 ### Requirement: Input orients the flow
-A single prompt SHALL accept an email address, a bare domain, or an issuer URL, and nothing else. An email or bare domain runs io-pim-discovery's parallel discovery; an issuer URL resolves that issuer's RFC 8414 authorization server metadata into the grants it advertises. The wizard SHALL NOT offer any hand-entry of OAuth 2.0 endpoints.
+A single prompt SHALL accept an email address, a bare domain, or an issuer URL, and nothing else. An email or bare domain runs io-pim-discovery's parallel discovery; a URL resolves its RFC 8414 authorization server metadata into the grants it advertises, or, when it has none, its RFC 9728 protected resource metadata into the grants of the authorization servers it names, each bound to the resource and narrowed to its scopes. The wizard SHALL NOT offer any hand-entry of OAuth 2.0 endpoints.
 
 ### Requirement: Discovery is time-bounded
 The parallel discovery run SHALL be bounded by a short deadline so a single unreachable endpoint cannot stall the interactive wizard. Each mechanism runs independently; any that has not reported by the deadline is abandoned, and only what completed in time is offered.
@@ -30,10 +30,13 @@ The wizard SHALL write the chosen grant's discovered resource into `resources`, 
 A step whose reduction leaves exactly one candidate SHALL carry it through without prompting. This holds for the grant pick list and for the application pick list alike: a prompt with nothing to arbitrate is noise, and the entry it would have offered is the one the wizard uses.
 
 ### Requirement: Issuers resolve to concrete grants
-A discovered `OauthIssuer` entry, and a typed issuer URL, SHALL be resolved through the issuer's RFC 8414 metadata into every grant it advertises: the authorization code grant when an authorization endpoint is published, the device authorization grant when a device authorization endpoint is, and both when both are, since RFC 8414 section 2 and RFC 8628 section 4 let a server advertise them side by side and the choice between them belongs to the pick list. Both need the token endpoint, so a document without one advertises nothing. An issuer whose metadata cannot be resolved into any grant SHALL be dropped from the pick list rather than emitted as a bare issuer comment.
+A discovered `OauthIssuer` entry, and a typed issuer URL, SHALL be resolved through the issuer's RFC 8414 metadata into every grant it advertises: the authorization code grant when an authorization endpoint is published, the device authorization grant when a device authorization endpoint is, and both when both are, since RFC 8414 section 2 and RFC 8628 section 4 let a server advertise them side by side and the choice between them belongs to the pick list. A document listing `grant_types_supported` SHALL offer only the flows it names. Both need the token endpoint, so a document without one advertises nothing. An issuer whose metadata cannot be resolved into any grant SHALL be dropped from the pick list rather than emitted as a bare issuer comment.
 
 ### Requirement: One metadata probe per run
 The authorization server metadata SHALL be fetched at most once per run, from the hosts of the chosen grant's endpoints, and shared by the steps that need it: its `scopes_supported` widens the scope options, and its `registration_endpoint` decides whether dynamic registration is offered.
+
+### Requirement: Metadata-driven PKCE
+The wizard SHALL write `pkce = "plain"` for an authorization code grant whose server metadata lists `plain` as its only code challenge method, and no `pkce` line otherwise, S256 being the default.
 
 ### Requirement: Account name derived, not prompted
 The wizard SHALL NOT prompt for an account name. It derives one from the input (the first label of the email domain, bare domain, or issuer host) and uses it as the `[accounts.<name>]` table key; the user renames it by editing that key.

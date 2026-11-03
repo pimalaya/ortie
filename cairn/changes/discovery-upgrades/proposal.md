@@ -1,14 +1,16 @@
 ---
 cairn: change
 id: discovery-upgrades
-status: draft
+status: landed
 created: 2026-07-25
 ---
 
 # Discovery upgrades
 
 ## Why
-`auth discover <URI>` currently dead-ends on `://` inputs (straight to manual entry) and the grant/PKCE choices are hand-picked rather than driven by what the server advertises. io-pim-discovery can already resolve RFC 8414 issuer metadata and enable RFC 9728, so metadata-driven discovery is wiring, not new protocol work.
+The wizard picked grants and the PKCE method by hand rather than from what the server advertises. Most of the metadata-driven discovery landed with 2.1.0 (issuers resolved through RFC 8414 into every grant whose endpoint is published, `auth discover` folded into bare `ortie`); what it left: a typed URL that is a protected resource rather than an issuer dead-ended, a server's `grant_types_supported` and `code_challenge_methods_supported` were ignored.
 
 ## What
-Enable io-pim-discovery's rfc9728 feature. On `auth discover <URI>`, resolve RFC 8414 issuer metadata first (`ComposeClientStd::oauth_server`), fall back to RFC 9728 resource metadata then its authorization servers, and only then to manual entry pre-seeded with the issuer. Surface grant choice from metadata: `grant_types_supported` and `device_authorization_endpoint` drive which grants are offered, and `code_challenge_methods_supported` drives the suggested `pkce` value. Unresolvable bare issuer picks get a metadata-resolution retry instead of dead-ending.
+A typed URL whose RFC 8414 metadata does not resolve SHALL be tried as a protected resource: its RFC 9728 metadata names the authorization servers, whose grants are bound to the resource and its scopes (io-pim-discovery's `rfc9728` feature, enabled by discovery-layering). The offered grants follow `grant_types_supported` when the document lists it. The wizard writes `pkce = "plain"` when the metadata lists `plain` alone, S256 staying the default otherwise, including for a document listing no method, since providers supporting PKCE omit it.
+
+Dropped from the original plan: the manual entry pre-seeded with the issuer (the wizard configures only what it discovers since 2.1.0, stopping on the sample configuration) and the retry for unresolvable bare issuers (the wizard already re-resolves every issuer compose left bare, then drops it).

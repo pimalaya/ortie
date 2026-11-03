@@ -41,6 +41,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   It writes `resources` in place of `extras.resource`.
 
+- Changed the wizard to resolve a typed URL that is no issuer through its RFC 9728 protected resource metadata.
+- Changed the wizard to offer only the grants a server lists in `grant_types_supported`.
+- Changed the wizard to write `pkce = "plain"` for a server supporting only the plain method.
+
 ### Fixed
 
 - Fixed the `auth resume` command printed by `auth get` dropping its `-a` and `-c` ([#16](https://github.com/pimalaya/ortie/issues/16)).

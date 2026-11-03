@@ -26,6 +26,7 @@ use io_pim_discovery::{
         config::{DiscoveryAuthMethod, DiscoveryService, DiscoveryServiceConfig},
     },
     rfc8414::DiscoveryOauthServerMetadata,
+    rfc9728::DiscoveryOauthResourceMetadata,
     shared::dns::system_resolver,
 };
 use log::debug;
@@ -42,6 +43,14 @@ const DEFAULT_RESOLVER: &str = "tcp://1.1.1.1:53";
 /// mechanisms that have not reported by then are abandoned and only
 /// what completed in time is offered.
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(6);
+
+/// The `grant_type` of the authorization code grant (RFC 6749 section
+/// 4.1.3).
+const AUTHORIZATION_CODE_GRANT_TYPE: &str = "authorization_code";
+
+/// The `grant_type` of the device authorization grant (RFC 8628 section
+/// 3.4).
+const DEVICE_CODE_GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:device_code";
 
 /// One deduplicated OAuth 2.0 grant and the services sharing it.
 ///
@@ -117,23 +126,28 @@ pub fn search(email: &str) -> Result<Vec<Discovered>> {
     Ok(found)
 }
 
-/// Resolves a typed issuer URL into the grants its RFC 8414 metadata
+/// Resolves a typed URL into the grants its RFC 8414 metadata
 /// advertises, or into nothing when it names no usable endpoint.
 ///
-/// The issuer twin of [`search`]: the user named an authorization
-/// server directly, so there is no domain to fan out over and no
-/// service to tag the grant with.
+/// The URL twin of [`search`]: the user named a server directly, so
+/// there is no domain to fan out over and no service to tag the grant
+/// with. A URL that is no issuer may be a protected resource: its RFC
+/// 9728 metadata then names the authorization servers, whose grants are
+/// bound to it.
 pub fn search_issuer(input: &str) -> Result<Vec<Discovered>> {
-    let issuer: Url = input
+    let url: Url = input
         .parse()
         .with_context(|| format!("Invalid issuer URL `{input}`"))?;
 
-    debug!("resolve authorization server metadata for {issuer}");
-    let Some(metadata) = compose_client().oauth_server(&issuer) else {
-        return Ok(Vec::new());
+    let client = compose_client();
+
+    debug!("resolve authorization server metadata for {url}");
+    let grants = match client.oauth_server(&url) {
+        Some(metadata) => grants_of(&metadata),
+        None => resource_grants(&client, &url),
     };
 
-    let found = grants_of(&metadata)
+    let found = grants
         .into_iter()
         .map(|method| Discovered {
             method,
@@ -142,6 +156,58 @@ pub fn search_issuer(input: &str) -> Result<Vec<Discovered>> {
         .collect();
 
     Ok(found)
+}
+
+/// The grants of the authorization servers a protected resource's RFC
+/// 9728 metadata names, each bound to the resource and its scopes.
+fn resource_grants(client: &DiscoveryComposeClientStd, url: &Url) -> Vec<DiscoveryAuthMethod> {
+    debug!("resolve protected resource metadata for {url}");
+    let Some(resource) = client.oauth_resource(url) else {
+        return Vec::new();
+    };
+
+    let mut grants = Vec::new();
+
+    for server in &resource.authorization_servers {
+        let Some(metadata) = client.oauth_server(server) else {
+            debug!("skip unresolvable authorization server {server}");
+            continue;
+        };
+
+        for mut grant in grants_of(&metadata) {
+            bind_resource(&mut grant, &resource);
+            grants.push(grant);
+        }
+    }
+
+    grants
+}
+
+/// Binds a grant to a protected resource, narrowing its scopes to the
+/// resource's when it lists any.
+fn bind_resource(grant: &mut DiscoveryAuthMethod, metadata: &DiscoveryOauthResourceMetadata) {
+    let (DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
+        scope,
+        resource,
+        scopes_supported,
+        ..
+    }
+    | DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
+        scope,
+        resource,
+        scopes_supported,
+        ..
+    }) = grant
+    else {
+        return;
+    };
+
+    *resource = Some(metadata.resource.to_string());
+
+    if !metadata.scopes_supported.is_empty() {
+        *scope = Some(metadata.scopes_supported.join(" "));
+        *scopes_supported = metadata.scopes_supported.clone();
+    }
 }
 
 /// Fetches the authorization server metadata backing `endpoints`,
@@ -283,6 +349,10 @@ fn resolve_issuers(client: &DiscoveryComposeClientStd, found: &mut Vec<Discovere
 ///
 /// Both flows need the token endpoint, so a document without one
 /// advertises nothing.
+///
+/// A document listing `grant_types_supported` offers only the flows it
+/// names; one omitting it defaults to `authorization_code` (RFC 8414
+/// section 2), the device flow then following its endpoint alone.
 fn grants_of(metadata: &DiscoveryOauthServerMetadata) -> Vec<DiscoveryAuthMethod> {
     let Some(token_endpoint) = &metadata.token_endpoint else {
         return Vec::new();
@@ -294,7 +364,14 @@ fn grants_of(metadata: &DiscoveryOauthServerMetadata) -> Vec<DiscoveryAuthMethod
 
     let mut grants = Vec::new();
 
-    if let Some(authorization_endpoint) = &metadata.authorization_endpoint {
+    let grant_types = &metadata.grant_types_supported;
+    let supports = |grant_type: &str| {
+        grant_types.is_empty() || grant_types.iter().any(|supported| supported == grant_type)
+    };
+
+    if let Some(authorization_endpoint) = &metadata.authorization_endpoint
+        && supports(AUTHORIZATION_CODE_GRANT_TYPE)
+    {
         grants.push(DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
             authorization_endpoint: authorization_endpoint.to_string(),
             token_endpoint: token_endpoint.clone(),
@@ -304,7 +381,9 @@ fn grants_of(metadata: &DiscoveryOauthServerMetadata) -> Vec<DiscoveryAuthMethod
         });
     }
 
-    if let Some(device_authorization_endpoint) = &metadata.device_authorization_endpoint {
+    if let Some(device_authorization_endpoint) = &metadata.device_authorization_endpoint
+        && supports(DEVICE_CODE_GRANT_TYPE)
+    {
         grants.push(DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
             device_authorization_endpoint: device_authorization_endpoint.to_string(),
             token_endpoint,
@@ -714,6 +793,63 @@ mod tests {
 
     /// Neither flow endpoint leaves nothing the wizard can run, and no
     /// token endpoint leaves nothing that could complete.
+    /// A document naming its grant types offers only those, whatever
+    /// endpoints it publishes.
+    #[test]
+    fn listed_grant_types_gate_the_offered_flows() {
+        let mut metadata = metadata_of(
+            Some("https://as/auth"),
+            Some("https://as/device"),
+            Some("https://as/token"),
+            &[],
+        );
+        metadata.grant_types_supported = vec![
+            "authorization_code".to_string(),
+            "refresh_token".to_string(),
+        ];
+
+        let grants = grants_of(&metadata);
+        assert_eq!(grants.len(), 1);
+        assert!(matches!(
+            grants[0],
+            DiscoveryAuthMethod::OauthAuthorizationCodeGrant { .. }
+        ));
+    }
+
+    /// A resource narrows the server's scopes to its own and becomes
+    /// the grant's resource.
+    #[test]
+    fn a_resource_binds_the_grants_of_its_servers() {
+        let metadata = metadata_of(
+            Some("https://as/auth"),
+            None,
+            Some("https://as/token"),
+            &["openid", "mail"],
+        );
+        let resource: DiscoveryOauthResourceMetadata = serde_json::from_value(serde_json::json!({
+            "resource": "https://api.example.test/jmap",
+            "authorization_servers": ["https://as/"],
+            "scopes_supported": ["mail"],
+        }))
+        .unwrap();
+
+        let mut grant = grants_of(&metadata).remove(0);
+        bind_resource(&mut grant, &resource);
+
+        let DiscoveryAuthMethod::OauthAuthorizationCodeGrant {
+            scope,
+            resource,
+            scopes_supported,
+            ..
+        } = grant
+        else {
+            panic!("expected an authorization code grant");
+        };
+        assert_eq!(resource.as_deref(), Some("https://api.example.test/jmap"));
+        assert_eq!(scope.as_deref(), Some("mail"));
+        assert_eq!(scopes_supported, ["mail"]);
+    }
+
     #[test]
     fn metadata_without_a_runnable_flow_resolves_to_nothing() {
         let bare = metadata_of(None, None, Some("https://as/token"), &[]);

@@ -123,6 +123,10 @@ fn run(printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
     // offer and its scopes widening what an unbound client may ask for.
     let metadata = probe_metadata(&config);
 
+    if config.grant == Some("authorization-code") {
+        config.pkce = suggested_pkce(metadata.as_ref());
+    }
+
     // NOTE: the application comes first, since what a token may request
     // is a property of the application requesting it.
     let scopes = client::configure(&mut config, metadata.as_ref())?;
@@ -467,6 +471,9 @@ pub struct AccountDraft {
     pub endpoints: Endpoints,
     /// The scopes the token will carry.
     pub scopes: Vec<String>,
+    /// The PKCE method, written only when the server supports `plain`
+    /// alone, S256 being the default.
+    pub pkce: Option<&'static str>,
     /// The RFC 8707 resource indicators the token is meant for, when the
     /// service endpoint publishes its RFC 9728 metadata.
     pub resources: Vec<String>,
@@ -489,6 +496,7 @@ impl AccountDraft {
             grant: None,
             endpoints: Endpoints::default(),
             scopes: Vec::new(),
+            pkce: None,
             resources: Vec::new(),
             auto_refresh: true,
             storage: None,
@@ -573,6 +581,10 @@ impl fmt::Display for AccountDraft {
 
         if !self.scopes.is_empty() {
             writeln!(f, "scopes = {}", toml_array(&self.scopes))?;
+        }
+
+        if let Some(pkce) = self.pkce {
+            writeln!(f, "pkce = {}", toml_string(pkce))?;
         }
 
         if !self.resources.is_empty() {
@@ -722,6 +734,19 @@ pub fn split_scopes(scope: Option<String>) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The PKCE method the metadata asks for: `plain` when the server lists
+/// it alone.
+///
+/// A server listing no method keeps the S256 default: RFC 8414 reads
+/// that as no PKCE support, but providers supporting it omit the list.
+fn suggested_pkce(metadata: Option<&DiscoveryOauthServerMetadata>) -> Option<&'static str> {
+    let methods = &metadata?.code_challenge_methods_supported;
+    let s256 = methods.iter().any(|method| method == "S256");
+    let plain = methods.iter().any(|method| method == "plain");
+
+    (plain && !s256).then_some("plain")
+}
+
 /// The scopes a discovered grant preselects: the ones it requests, else
 /// the ones its protected resource advertises.
 ///
@@ -761,6 +786,22 @@ mod tests {
             default_account_name("https://login.microsoftonline.com/common/v2.0"),
             "login"
         );
+    }
+
+    #[test]
+    fn only_a_plain_only_server_gets_a_pkce_line() {
+        let metadata = |methods: &[&str]| -> DiscoveryOauthServerMetadata {
+            serde_json::from_value(serde_json::json!({
+                "issuer": "https://as.example.test/",
+                "code_challenge_methods_supported": methods,
+            }))
+            .unwrap()
+        };
+
+        assert_eq!(suggested_pkce(Some(&metadata(&["plain"]))), Some("plain"));
+        assert_eq!(suggested_pkce(Some(&metadata(&["S256", "plain"]))), None);
+        assert_eq!(suggested_pkce(Some(&metadata(&[]))), None);
+        assert_eq!(suggested_pkce(None), None);
     }
 
     #[test]
