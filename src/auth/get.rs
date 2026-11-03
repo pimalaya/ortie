@@ -17,10 +17,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
-use base64::{
-    Engine,
-    prelude::{BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD},
-};
+use base64_codec::codec::{Base64Alphabet, Base64Codec};
 use clap::Parser;
 use log::debug;
 use pimalaya_cli::printer::Printer;
@@ -102,7 +99,7 @@ impl AuthGetCommand {
         // NOTE: re-encode the random state in URL-safe base64 so it
         // round-trips through the redirect URI without escaping.
         let state = Oauth20State::default();
-        let state = BASE64_URL_SAFE_NO_PAD.encode(state.expose());
+        let state = base64_url(state.expose());
         let state = Oauth20State::deserialize(StringDeserializer::<Error>::new(state)).unwrap();
 
         let pkce_code_challenge = match account.pkce {
@@ -548,7 +545,7 @@ pub(crate) fn request_client_credentials_token(
 
         // NOTE: the CSRF state generator is the random source of the
         // unique jti, re-encoded in URL-safe base64.
-        let jti = BASE64_URL_SAFE_NO_PAD.encode(Oauth20State::default().expose());
+        let jti = base64_url(Oauth20State::default().expose());
 
         let claims = Oauth20JwtBearerClaims {
             iss: account.client_id.as_str().into(),
@@ -605,9 +602,30 @@ fn certificate_der(bytes: Vec<u8>) -> Result<Vec<u8>> {
         .map(str::trim)
         .collect();
 
-    BASE64_STANDARD
-        .decode(body)
-        .context("Decode PEM client certificate body")
+    // NOTE: the codec decodes leniently and never fails, so a body it
+    // did not read clean is refused here.
+    let mut der = Vec::new();
+    if !Base64Codec::default().decode_vec(body.as_bytes(), &mut der) {
+        bail!("Invalid base64 in PEM client certificate body");
+    }
+
+    Ok(der)
+}
+
+/// Encodes `bytes` in unpadded URL-safe base64, which survives a URI and
+/// a JWT claim without escaping.
+fn base64_url(bytes: &[u8]) -> String {
+    let codec = Base64Codec {
+        alphabet: Base64Alphabet::Url,
+        pad: false,
+        ..Base64Codec::default()
+    };
+
+    let mut encoded = Vec::new();
+    codec.encode_vec(bytes, &mut encoded);
+
+    // NOTE: the base64 alphabet is ASCII, so this never falls back.
+    String::from_utf8(encoded).unwrap_or_default()
 }
 
 /// Maps a client credentials error response into the reported error.

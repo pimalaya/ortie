@@ -52,10 +52,9 @@
 //! carries the logs. Doc comments on the command structs double as the
 //! CLI help: the first paragraph is `-h`, the rest completes `--help`.
 //!
-//! Each command emitting data prints one `*Output` type, and
+//! Each command prints one `*Output` type, a confirmation included, and
 //! [`json_schema`] maps its invocation to that type's JSON Schema, which
-//! `ortie json-schema` writes out. A command reporting a confirmation
-//! prints a `Message` and carries no schema.
+//! `ortie json-schema` writes out.
 //!
 //! Device authorization (RFC 8628) is `grant = "device"`. The headless
 //! grants are `grant = "client-credentials"` (RFC 6749 section 4.4),
@@ -89,10 +88,15 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use pimalaya_cli::{error::ErrorReport, log::Logger, printer::Printer, printer::StdoutPrinter};
 use pimalaya_config::toml::TomlConfig;
+use simd_cpu::SimdCpu;
 
 use crate::{cli::Cli, config::Config};
 
 fn main() {
+    // NOTE: the base64 codecs below read the installed CPU token, the
+    // portable baseline until one is installed.
+    let _ = SimdCpu::install_detected();
+
     let cli = Cli::parse();
 
     Logger::try_init(&cli.log).expect("init logger");

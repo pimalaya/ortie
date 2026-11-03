@@ -1514,7 +1514,7 @@ name = "ortie"
 version = "2.3.0"
 dependencies = [
  "anyhow",
- "base64",
+ "base64-codec",
  "clap",
  "dirs 7.0.0",
  "env_logger",
@@ -1534,6 +1534,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shellexpand",
+ "simd-cpu",
  "tempfile",
  "url",
 ]

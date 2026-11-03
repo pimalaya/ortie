@@ -15,7 +15,7 @@ use std::{
     time::Duration,
 };
 
-use base64::{Engine, prelude::BASE64_STANDARD, prelude::BASE64_URL_SAFE_NO_PAD};
+use base64_codec::codec::{Base64Alphabet, Base64Codec};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -248,9 +248,11 @@ fn jwt_kind_mints_a_fresh_assertion_per_reacquisition() {
 
     // NOTE: PEM-armored flavor, covering the armor-to-DER decoding.
     let cert = dir.path().join("cert.pem");
+    let mut cert_body = Vec::new();
+    Base64Codec::default().encode_vec(CERT_DER, &mut cert_body);
     let cert_pem = format!(
         "-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----\n",
-        BASE64_STANDARD.encode(CERT_DER)
+        String::from_utf8(cert_body).unwrap()
     );
     std::fs::write(&cert, cert_pem).unwrap();
 
@@ -299,8 +301,14 @@ fn jwt_kind_mints_a_fresh_assertion_per_reacquisition() {
         assertions.push(assertion);
     }
 
+    let url = Base64Codec {
+        alphabet: Base64Alphabet::Url,
+        ..Base64Codec::default()
+    };
     let decode_json = |part: &str| -> Value {
-        serde_json::from_slice(&BASE64_URL_SAFE_NO_PAD.decode(part).unwrap()).unwrap()
+        let mut json = Vec::new();
+        assert!(url.decode_vec(part.as_bytes(), &mut json), "{part}");
+        serde_json::from_slice(&json).unwrap()
     };
 
     let mut jtis = Vec::new();

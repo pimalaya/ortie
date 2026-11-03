@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Changed piped `--json` output to print one value per line, and each schema of `json-schema` to carry an `$id` naming the contract version (pimalaya-cli `55b6693`).
+- Changed piped `--json` output to print one value per line, and each schema of `json-schema` to carry an `$id` naming the contract version (pimalaya-cli 0.3).
 
 - **BREAKING**: changed `token refresh`, `auth resume`, and `auth get` when its grant issues the token itself, to print the stored token's receipt, `{expiresIn, withRefreshToken}`, rather than a `{"message": …}` sentence (pimalaya-cli 0.3 has no message type). The text output reads as before.
 
@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   `token show` prints `accessToken`, `token inspect` `tokenType`, `issuedAt`, `expiresIn` and `withRefreshToken`, `auth get` `authorizationUri`, `pkceCodeVerifier`, `deviceCode`, `userCode`, `verificationUri`, `verificationUriComplete` and `expiresIn`, and `configure` `clientId`, `clientSecret`, `autoRefresh` and `endpoints.deviceAuthorization`, where they used to be snake_case, or kebab-case for `configure`. Every key is now reachable by dot access in jq and JavaScript. The configuration file and the TOML `configure` prints keep their kebab-case keys, and regenerated JSON Schemas describe the new names.
 
+- Changed base64 encoding and decoding to [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
+
 - **BREAKING**: a piped `ortie repl` prints a parse or command error on stdout, through the printer, instead of stderr.
 
   Under `--json` it is one `ortie-error` object per line among the results, so a driver reads a single stream and tells a failure by its `error` key; the session continues as before. An interactive session keeps its errors on stderr.
@@ -32,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed the `auth resume` command printed by `auth get` dropping the `-a` and `-c` it ran with, so pasting it resumed the default account: its token endpoint refused a code issued for another provider, or, sharing the client, stored the token under the wrong account. The printed command now carries both, single quoted, in the authorization code and device hand-offs, and in the REPL. See [#16](https://github.com/pimalaya/ortie/issues/16).
-- Fixed an OAuth 2.0 endpoint able to make Ortie buffer an endless response, spin forever on a connection closed mid-body, or panic on a hostile chunk size. io-http is pinned to an unreleased fix (e181530) that caps response heads at 64 KiB and bodies at 256 MiB.
+- Fixed an OAuth 2.0 endpoint able to make Ortie buffer an endless response, spin forever on a connection closed mid-body, or panic on a hostile chunk size. io-oauth 0.4 runs on io-http 0.6, which caps response heads at 64 KiB and bodies at 256 MiB.
 
 ## [2.3.0] - 2026-10-02
 
