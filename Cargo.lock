@@ -109,6 +109,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
+name = "base64-codec"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8c21fac036871f0cc54f32f04486210962fea0b2450233906c1b5b957be5262"
+dependencies = [
+ "simd-cpu",
+]
+
+[[package]]
 name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -159,9 +168,9 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "cc"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86e055fa6e3e40ad6187ba25b6855eeb635d5271f8e0f0e1e9a5826b8d75bea0"
+checksum = "375989decec1a0fa424442bed520fa12ede43a48475ce8c7417d2c69b32b5f6b"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -402,9 +411,9 @@ dependencies = [
 
 [[package]]
 name = "ctutils"
-version = "0.4.7"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2376ffd6f96d8a9db59875b4b6b0237d6900b5baf64279714e05493ce64828a"
+checksum = "261af4dc7a06ea8a527a8717d8cbba3417530d6ea14e1edb3de6b67806be474f"
 dependencies = [
  "cmov",
 ]
@@ -499,6 +508,7 @@ dependencies = [
  "block-buffer",
  "const-oid",
  "crypto-common",
+ "ctutils",
  "zeroize",
 ]
 
@@ -792,6 +802,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "hmac"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
+dependencies = [
+ "digest",
+]
+
+[[package]]
 name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -943,7 +962,8 @@ dependencies = [
 [[package]]
 name = "io-http"
 version = "0.5.0"
-source = "git+https://github.com/pimalaya/io-http?rev=e1815307771c1ec65a86b77256d46c33241d3038#e1815307771c1ec65a86b77256d46c33241d3038"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fe2064378f85c13e3f3aca141308fa541c4478ff5cf5ebadd7dcbcce1a44281"
 dependencies = [
  "anyhow",
  "base64",
@@ -957,14 +977,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "io-oauth"
-version = "0.3.0"
+name = "io-http"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab83f26e12cbd90c095c167a9611ad599be3fe086398ee93c01ab7b71fb5934e"
+checksum = "7a9086cd840a757b9dd4105caad54a59fdb440c49be33882491a07274ca32e06"
+dependencies = [
+ "anyhow",
+ "base64-codec",
+ "httparse",
+ "log",
+ "pimalaya-stream",
+ "secrecy",
+ "thiserror",
+ "url",
+]
+
+[[package]]
+name = "io-oauth"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98faa946c5d7c2fede0d5af4eec05d6596154cc291483bd9b60fcfc0d46aa0ae"
 dependencies = [
  "anyhow",
  "base64",
- "io-http",
+ "io-http 0.6.0",
  "log",
  "pimalaya-stream",
  "rand",
@@ -987,7 +1023,7 @@ dependencies = [
  "anyhow",
  "base64",
  "domain",
- "io-http",
+ "io-http 0.5.0",
  "ipconfig",
  "log",
  "pimalaya-stream",
@@ -1058,9 +1094,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jiff"
-version = "0.2.38"
+version = "0.2.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2b005715dcbeb0089a3c0dab99f2ff1cc3b2525323552703d648585d342a383"
+checksum = "3ac703058abac89e5c39b0b879dce2b6b14a4ba36600c7e7e3d0c60a6883ef3c"
 dependencies = [
  "defmt",
  "jiff-core",
@@ -1073,9 +1109,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-core"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e52fe76043ccecc9005d2305ebaadf7d7fc0cc89ca6baa10a94d6bc68c7128c"
+checksum = "aee43309eb53bafb8c36d35d6e444769c8f8e6206a9fbf7546f5db9d7d4a0e93"
 dependencies = [
  "defmt",
  "log",
@@ -1083,9 +1119,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-static"
-version = "0.2.38"
+version = "0.2.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cc9817253cf7c7ee4684451bd327e88d6f3658014e54a29198625590650695c"
+checksum = "6dc32470c67eb7d0e9ccb74303fa925313dc04cecb1aa048beaa6f391e36a93d"
 dependencies = [
  "jiff-core",
  "proc-macro2",
@@ -1548,10 +1584,12 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pimalaya-cli"
-version = "0.2.6"
-source = "git+https://github.com/pimalaya/cli?rev=55b66933950f02541892407667e5e0b254245871#55b66933950f02541892407667e5e0b254245871"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fe9eda0c6d281d896f4bbb0e88fa2b88f5ae3bfc8daab083de922959e5d549f"
 dependencies = [
  "anyhow",
+ "base64",
  "clap",
  "clap_complete",
  "clap_mangen",
@@ -1572,12 +1610,12 @@ dependencies = [
 
 [[package]]
 name = "pimalaya-config"
-version = "0.2.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb9490d3768c22b4480248dbbff7b8207c2a2e60665da3086d6010de18e4a141"
+checksum = "8ea46595a4484b0a6e8af89ee9597d5d10cd7ccec39442137aafc969f0a5587a"
 dependencies = [
  "anyhow",
- "dirs 6.0.0",
+ "dirs 7.0.0",
  "log",
  "secrecy",
  "serde",
@@ -1611,9 +1649,9 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pkcs1"
-version = "0.8.0-rc.5"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f485dbafe293ea6ccaa7d82bc591651a796eb8a9aec3df040b057b706073dbc3"
+checksum = "6250dd7321adbe93d12b750aee0ced159fd13e77f625edcdf1cb6f83cd99f650"
 dependencies = [
  "der",
  "spki",
@@ -1802,14 +1840,15 @@ checksum = "323c417e1d9665a65b263ec744ba09030cfb277e9daa0b018a4ab62e57bc8189"
 
 [[package]]
 name = "rsa"
-version = "0.10.0-rc.19"
+version = "0.10.0-rc.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33405e321e16ef941ca66e254f6904c3aafd3c7ff001fb88bf11c73eb75c2b85"
+checksum = "2389407c34c6039d7c8740520ec758090883c5b92df93a5edada2779256bf2e0"
 dependencies = [
  "const-oid",
  "crypto-bigint",
  "crypto-primes",
  "digest",
+ "hmac",
  "pkcs1",
  "pkcs8",
  "rand_core",
@@ -2173,6 +2212,12 @@ dependencies = [
  "digest",
  "rand_core",
 ]
+
+[[package]]
+name = "simd-cpu"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d362f934351780e3ec67adf32bcb5bc341f23a393076d17a600a699c0c93b726"
 
 [[package]]
 name = "simd_cesu8"
