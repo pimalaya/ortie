@@ -5,12 +5,11 @@
 //! payload. [`JsonSchemaCommand`] writes one file per entry, named after
 //! its key the way the man pages are.
 //!
-//! Only the commands emitting data carry a key. `token refresh` and
-//! `auth resume` print a confirmation message, so they carry none, and
-//! the REPL carries none of its own: it dispatches the same `token` and
-//! `auth` leaves and prints their payloads unchanged. The one key naming
-//! no command is `ortie-error`, the failure object any command prints
-//! instead of its payload.
+//! Every command printing a value carries a key. The REPL carries none of
+//! its own: it dispatches the same `token` and `auth` leaves and prints
+//! their payloads unchanged. The one key naming no command is
+//! `ortie-error`, the failure object any command prints instead of its
+//! payload.
 //!
 //! Every registered type is Ortie's own, so the machine contract stays a
 //! decision of this repository rather than of the libraries below it.
@@ -18,109 +17,62 @@
 //!
 //! [`JsonSchemaCommand`]: pimalaya_cli::clap::commands::JsonSchemaCommand
 
-use std::collections::BTreeMap;
-
 use pimalaya_cli::{clap::commands::JsonSchemaRegistry, error::ErrorReport};
-use schemars::schema_for;
 
 #[cfg(feature = "wizard")]
 use crate::wizard::ConfigureOutput;
 use crate::{
     auth::get::AuthGetOutput,
-    token::{inspect::TokenInspectOutput, show::TokenShowOutput},
+    token::{inspect::TokenInspectOutput, issued::TokenIssuedOutput, show::TokenShowOutput},
 };
-
-/// The registry key of the failure object, which names no command.
-const ERROR_KEY: &str = "ortie-error";
 
 /// Builds the command-to-schema registry consumed by `json-schema`.
 ///
-/// Each value describes the type the command hands to the printer, so
-/// the description cannot drift from the emission, and `ortie-error`
-/// the failure object every command prints instead.
+/// Each value describes the type the command hands to the printer, as
+/// printed, so the description cannot drift from the emission, and
+/// `ortie-error` the failure object every command prints instead.
 pub fn registry() -> JsonSchemaRegistry {
-    let mut schemas = BTreeMap::new();
-
-    macro_rules! insert {
-        ($key:expr, $ty:ty) => {
-            schemas.insert(
-                $key.to_string(),
-                serde_json::to_value(schema_for!($ty)).unwrap(),
-            );
-        };
-    }
+    let mut registry = JsonSchemaRegistry::new("ortie", env!("CARGO_PKG_VERSION"));
 
     #[cfg(feature = "wizard")]
-    insert!("ortie-configure", ConfigureOutput);
-    insert!("ortie-auth-get", AuthGetOutput<'static>);
-    insert!("ortie-token-show", TokenShowOutput<'static>);
-    insert!("ortie-token-inspect", TokenInspectOutput);
-    insert!(ERROR_KEY, ErrorReport);
+    registry.insert::<ConfigureOutput>("ortie-configure");
+    registry.insert::<AuthGetOutput<'static>>("ortie-auth-get");
+    registry.insert::<TokenIssuedOutput>("ortie-auth-resume");
+    registry.insert::<TokenShowOutput<'static>>("ortie-token-show");
+    registry.insert::<TokenInspectOutput>("ortie-token-inspect");
+    registry.insert::<TokenIssuedOutput>("ortie-token-refresh");
+    registry.insert::<ErrorReport>("ortie-error");
 
-    JsonSchemaRegistry {
-        bin: "ortie",
-        version: env!("CARGO_PKG_VERSION"),
-        schemas,
-    }
+    registry
 }
 
 #[cfg(test)]
 mod tests {
-    use clap::{Command, CommandFactory};
+    use clap::CommandFactory;
 
     use crate::cli::Cli;
 
     use super::*;
 
-    /// Whether `path` walks down to a real subcommand of `cmd`.
-    ///
-    /// A command name may itself hold a hyphen, so each step tries the
-    /// longest join first and backtracks.
-    fn resolves(cmd: &Command, path: &[&str]) -> bool {
-        if path.is_empty() {
-            return true;
-        }
+    /// The commands printing nothing a schema could describe: a bare `ortie`
+    /// shows the help, or runs the wizard `configure` describes, and the REPL
+    /// prints the payloads of the leaves it dispatches.
+    const SILENT: &[&str] = &["ortie", "ortie-repl"];
 
-        (1..=path.len()).rev().any(|take| {
-            let name = path[..take].join("-");
-
-            cmd.get_subcommands()
-                .find(|sub| sub.get_name() == name)
-                .is_some_and(|sub| resolves(sub, &path[take..]))
-        })
-    }
-
+    /// Every runnable command is described, and every key names one: a
+    /// renamed subcommand cannot leave a schema nobody can ask for, nor a
+    /// new one print undescribed data.
     #[test]
-    fn every_key_names_a_real_command() {
-        let cli = Cli::command();
-
-        for cmd in registry().schemas.keys() {
-            if cmd == ERROR_KEY {
-                continue;
-            }
-
-            let path: Vec<&str> = cmd.split('-').collect();
-
-            assert_eq!(path[0], cli.get_name(), "{cmd} is not an ortie invocation");
-            assert!(resolves(&cli, &path[1..]), "{cmd} names no command");
-        }
-    }
-
-    #[test]
-    fn every_key_builds_an_object_schema() {
-        let schemas = registry().schemas;
-
-        assert_eq!(schemas.len(), if cfg!(feature = "wizard") { 5 } else { 4 });
-
-        for (cmd, schema) in schemas {
-            assert!(cmd.starts_with("ortie-"), "{cmd} is not a CLI invocation");
-            assert!(schema.is_object(), "{cmd} schema is not an object");
-        }
+    fn the_registry_matches_the_command_tree() {
+        assert_eq!(
+            registry().check(&Cli::command(), SILENT),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
     fn every_payload_is_an_object() {
-        assert_eq!(registry().non_object_roots(), Vec::<&str>::new());
+        assert_eq!(registry().non_object_roots(), Vec::<String>::new());
     }
 
     #[test]

@@ -4,6 +4,7 @@
 //! persisted in storage rather than running a grant.
 
 pub mod inspect;
+pub mod issued;
 pub mod refresh;
 pub mod show;
 

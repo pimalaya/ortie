@@ -3,13 +3,10 @@
 //! The `token refresh` subcommand, making the stored access token fresh
 //! again, and the per-grant decision of how that is done.
 
-use std::time::Duration;
-
 use anyhow::{Result, anyhow, bail};
 use clap::Parser;
-use humantime::format_duration;
 use log::debug;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 use secrecy::SecretBox;
 
 use pimalaya_config::secret::Secret;
@@ -26,6 +23,7 @@ use crate::{
     account::Account,
     auth::get::{client_credentials_error, request_client_credentials_token},
     config::GrantConfig,
+    token::issued::TokenIssuedOutput,
 };
 
 /// How an expired token gets fresh again, decided per grant.
@@ -81,16 +79,7 @@ impl TokenRefreshCommand {
             }
         };
 
-        let msg = "Access token successfully refreshed";
-        let msg = match token.expires_in {
-            None => format!("{msg} (unknown expiry)"),
-            Some(exp) => {
-                let exp = Duration::from_secs(exp as u64 + 1);
-                format!("{msg} (expires in {})", format_duration(exp))
-            }
-        };
-
-        printer.out(Message::new(msg))
+        printer.out(TokenIssuedOutput::refreshed(&token))
     }
 
     /// Re-runs the client credentials grant, persists what it issues

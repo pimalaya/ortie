@@ -143,7 +143,7 @@ impl AuthResumeCommand {
         })?;
 
         match res {
-            Ok(res) => report_token_issued(printer, account, &res),
+            Ok(res) => printer.out(report_token_issued(account, &res)?),
             Err(res) => {
                 debug!("execute issue access token error hook");
                 account.execute_on_issue_error_hook(&res);
@@ -188,7 +188,11 @@ impl AuthResumeCommand {
             interval: 5,
         };
 
-        complete_device_token_poll(printer, account, &token_endpoint, &device)
+        printer.out(complete_device_token_poll(
+            account,
+            &token_endpoint,
+            &device,
+        )?)
     }
 }
 

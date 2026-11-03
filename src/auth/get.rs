@@ -22,9 +22,8 @@ use base64::{
     prelude::{BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD},
 };
 use clap::Parser;
-use humantime::format_duration;
 use log::debug;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use secrecy::ExposeSecret;
 use serde::{
@@ -60,6 +59,7 @@ use crate::{
     account::Account,
     auth::resume::AuthResumeCommand,
     config::{GrantConfig, PkceConfig},
+    token::issued::TokenIssuedOutput,
 };
 
 /// Initiate a new OAuth 2.0 grant from scratch.
@@ -270,6 +270,9 @@ pub enum AuthGetOutput<'a> {
     Authorization(&'a AuthorizationUri<'a>),
     /// The device-authorization handoff, entered on another device.
     Device(&'a DeviceAuthorization),
+    /// The token the grant issued in-process: the client credentials grant,
+    /// or an interactive grant once its redirection or polling completed.
+    Issued(TokenIssuedOutput),
 }
 
 impl fmt::Display for AuthGetOutput<'_> {
@@ -277,6 +280,7 @@ impl fmt::Display for AuthGetOutput<'_> {
         match self {
             Self::Authorization(view) => view.fmt(f),
             Self::Device(view) => view.fmt(f),
+            Self::Issued(issued) => issued.fmt(f),
         }
     }
 }
@@ -413,17 +417,17 @@ fn execute_device(printer: &mut impl Printer, account: &mut Account, resume: &st
         println!("Open {open_uri} and enter the code {}", device.user_code);
     }
     println!("Waiting for authorization…");
-    complete_device_token_poll(printer, account, &token_endpoint, &device)
+    let issued = complete_device_token_poll(account, &token_endpoint, &device)?;
+    printer.out(AuthGetOutput::Issued(issued))
 }
 
 /// Polls the token endpoint until the device grant completes, then
 /// stores the token and fires the on-issue hooks.
 pub(crate) fn complete_device_token_poll(
-    printer: &mut impl Printer,
     account: &mut Account,
     token_endpoint: &Url,
     device: &Oauth20DeviceAuthSuccessParams,
-) -> Result<()> {
+) -> Result<TokenIssuedOutput> {
     let client_secret = account.client_secret.clone().map(Secret::get).transpose()?;
     let mut client = Oauth20ClientStd::connect(
         token_endpoint.clone(),
@@ -435,7 +439,7 @@ pub(crate) fn complete_device_token_poll(
     // NOTE: the outer Result is the transport, the inner one the token
     // body the server answered with.
     match client.await_device_access_token(&account.tls, device) {
-        Ok(Ok(res)) => report_token_issued(printer, account, &res),
+        Ok(Ok(res)) => report_token_issued(account, &res),
         Ok(Err(res)) => {
             debug!("execute issue access token error hook");
             account.execute_on_issue_error_hook(&res);
@@ -486,7 +490,10 @@ const JWT_ASSERTION_VALIDITY: Duration = Duration::from_secs(600);
 /// user code and no resume, then persists like the interactive grants.
 fn execute_client_credentials(printer: &mut impl Printer, account: &mut Account) -> Result<()> {
     match request_client_credentials_token(account)? {
-        Ok(res) => report_token_issued(printer, account, &res),
+        Ok(res) => {
+            let issued = report_token_issued(account, &res)?;
+            printer.out(AuthGetOutput::Issued(issued))
+        }
         Err(res) => {
             debug!("execute issue access token error hook");
             account.execute_on_issue_error_hook(&res);
@@ -639,25 +646,16 @@ pub(crate) fn client_credentials_error(
     }
 }
 
-/// Persists the token, fires the on-issue success hooks and prints the
-/// success message, shared by every grant that issues one.
+/// Persists the token and fires the on-issue success hooks, shared by every
+/// grant that issues one, answering the receipt its command prints.
 pub(crate) fn report_token_issued(
-    printer: &mut impl Printer,
     account: &mut Account,
     res: &Oauth20AccessTokenSuccessParams,
-) -> Result<()> {
+) -> Result<TokenIssuedOutput> {
     account.write_to_storage(res.clone())?;
     debug!("execute issue access token success hook");
     account.execute_on_issue_success_hook(res);
-    let msg = "Access token successfully issued";
-    let msg = match res.expires_in {
-        None => format!("{msg} (unknown expiry)"),
-        Some(exp) => {
-            let exp = Duration::from_secs(exp as u64 + 1);
-            format!("{msg} (expires in {})", format_duration(exp))
-        }
-    };
-    printer.out(Message::new(msg))
+    Ok(TokenIssuedOutput::issued(res))
 }
 
 /// Builds the invocation the printed `auth resume` commands start with.

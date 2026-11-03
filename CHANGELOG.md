@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Changed piped `--json` output to print one value per line, and each schema of `json-schema` to carry an `$id` naming the contract version (pimalaya-cli `55b6693`).
 
+- **BREAKING**: changed `token refresh`, `auth resume`, and `auth get` when its grant issues the token itself, to print the stored token's receipt, `{expiresIn, withRefreshToken}`, rather than a `{"message": …}` sentence (pimalaya-cli 0.3 has no message type). The text output reads as before.
+
+  `json-schema` describes it as `ortie-token-refresh` and `ortie-auth-resume`, and as a third alternative of `ortie-auth-get`. Every schema now marks a key the command always prints as required, `null` or not, and `completion`, `manual` and `json-schema` are described too.
+
 - **BREAKING**: `--json` keys are now camelCase.
 
   `token show` prints `accessToken`, `token inspect` `tokenType`, `issuedAt`, `expiresIn` and `withRefreshToken`, `auth get` `authorizationUri`, `pkceCodeVerifier`, `deviceCode`, `userCode`, `verificationUri`, `verificationUriComplete` and `expiresIn`, and `configure` `clientId`, `clientSecret`, `autoRefresh` and `endpoints.deviceAuthorization`, where they used to be snake_case, or kebab-case for `configure`. Every key is now reachable by dot access in jq and JavaScript. The configuration file and the TOML `configure` prints keep their kebab-case keys, and regenerated JSON Schemas describe the new names.
