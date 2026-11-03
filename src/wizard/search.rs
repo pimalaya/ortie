@@ -443,6 +443,7 @@ mod tests {
             username: None,
             auth,
             source: DiscoveryConfigSource::Pacc,
+            resolved: false,
         }
     }
 
