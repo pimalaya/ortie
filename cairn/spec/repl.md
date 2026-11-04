@@ -17,10 +17,13 @@ status: current
 - THEN each prints the access token without re-running the read storage command
 
 ### Requirement: Command grammar reuse
-Each stdin line SHALL be parsed with the same `token` and `auth` command grammar as the one-shot CLI (the account-less configuration wizard has no REPL form; `ortie configure` runs it). A parse error or a command error SHALL be reported and the loop SHALL continue, never terminating the process.
+Each stdin line SHALL be split as a shell splits it, quotes and escapes included, then parsed with the same `token` and `auth` command grammar as the one-shot CLI (the account-less configuration wizard has no REPL form; `ortie configure` runs it). A line whose quote is not closed, a parse error or a command error SHALL be reported and the loop SHALL continue, never terminating the process.
 
 ### Requirement: Auth runs against the session account
 `auth get` and `auth resume` in the REPL SHALL run against the session's in-memory account, so a token they issue updates the cached token and is served by a following `token show` without re-reading storage.
 
 ### Requirement: Interactive versus piped output
 When stdin is a TTY the session SHALL render a prompt on stderr and report errors on stderr. When piped it SHALL write one flushed result per command on stdout, so an application can drive it, and SHALL print a parse error or a command error through the printer on stdout as the failure object (`ortie-error` under `--json`), one per line, then continue the loop. Under `--json` each result and each failure SHALL be one JSON value per line.
+
+### Requirement: A line's JSON flag
+A REPL line SHALL accept `--json`, printing that line's result or failure as JSON; the following lines SHALL keep the session's output format.

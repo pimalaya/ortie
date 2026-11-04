@@ -35,6 +35,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   An interactive session keeps its errors on stderr.
 
+- Changed `ortie repl` to split its lines as a shell does, quotes and escapes included.
+- Changed `ortie repl` to accept `--json` on a line, for that line only.
 - Changed piped `--json` output to print one value per line.
 - Changed every `json-schema` schema to carry an `$id` naming the contract version.
 - Changed every `json-schema` schema to require the keys a command always prints.

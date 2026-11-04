@@ -167,3 +167,141 @@ storage.write.command = ["false"]
     assert!(lines[0]["error"].is_string(), "stdout: {stdout}");
     assert_eq!(lines[1]["accessToken"], "at-fresh", "stdout: {stdout}");
 }
+
+/// A line is split as a shell splits it: a quoted word is one argument
+/// without its quotes, and a quote left open fails that line only.
+#[test]
+fn lines_are_split_as_a_shell_splits_them() {
+    let dir = TempDir::new().unwrap();
+    let token = dir.path().join("token.json");
+    std::fs::write(
+        &token,
+        r#"{"access_token":"at-test","token_type":"Bearer"}"#,
+    )
+    .unwrap();
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        format!(
+            r#"
+[accounts.device]
+default = true
+client-id = "c"
+grant = "device"
+endpoints.device-authorization = "http://127.0.0.1:1/devicecode"
+endpoints.token = "http://127.0.0.1:1/token"
+storage.read.command = ["cat", "{t}"]
+storage.write.command = ["tee", "{t}"]
+"#,
+            t = token.display()
+        ),
+    )
+    .unwrap();
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_ortie"));
+
+    let mut child = Command::new(&bin)
+        .args(["-c", config.to_str().unwrap(), "--json", "repl"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"token \"show\"\nauth resume 'dc-test\ntoken show\nquit\n")
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+
+    assert!(out.status.success(), "{out:?}");
+
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let lines: Vec<Value> = stdout
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+
+    assert_eq!(lines.len(), 3, "stdout: {stdout}");
+    assert_eq!(lines[0]["accessToken"], "at-test");
+    let error = lines[1]["error"].as_str().unwrap_or_default();
+    assert!(error.contains("quote is not closed"), "stdout: {stdout}");
+    assert_eq!(lines[2]["accessToken"], "at-test");
+}
+
+/// Runs a piped text session over `input` on an account whose read
+/// storage command counts its runs, returning the output and the count.
+fn run_counted_session(input: &[u8]) -> (std::process::Output, usize) {
+    let dir = TempDir::new().unwrap();
+    let token = dir.path().join("token.json");
+    std::fs::write(
+        &token,
+        r#"{"access_token":"at-test","token_type":"Bearer"}"#,
+    )
+    .unwrap();
+    let reads = dir.path().join("reads");
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        format!(
+            r#"
+[accounts.device]
+default = true
+client-id = "c"
+grant = "device"
+endpoints.device-authorization = "http://127.0.0.1:1/devicecode"
+endpoints.token = "http://127.0.0.1:1/token"
+storage.read.command = ["sh", "-c", "echo read >> '{r}'; cat '{t}'"]
+storage.write.command = ["tee", "{t}"]
+"#,
+            r = reads.display(),
+            t = token.display()
+        ),
+    )
+    .unwrap();
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_ortie"));
+
+    let mut child = Command::new(&bin)
+        .args(["-c", config.to_str().unwrap(), "repl"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(input).unwrap();
+    let out = child.wait_with_output().unwrap();
+
+    let reads = std::fs::read_to_string(reads).unwrap_or_default();
+    (out, reads.lines().count())
+}
+
+/// A piped session, the way an application keeps one alive, renders no
+/// prompt and reads storage once for all its commands.
+#[test]
+fn a_piped_session_has_no_prompt_and_reads_storage_once() {
+    let (out, reads) = run_counted_session(b"token show\ntoken show\ntoken inspect\nquit\n");
+
+    assert!(out.status.success(), "{out:?}");
+    assert_eq!(reads, 1, "{out:?}");
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(stdout.matches("at-test").count(), 2, "stdout: {stdout}");
+
+    let output = format!("{stdout}{}", String::from_utf8_lossy(&out.stderr));
+    assert!(!output.contains("ortie>"), "output: {output}");
+}
+
+/// A line's `--json` switches that line to JSON, the next ones staying
+/// on the session's text output.
+#[test]
+fn a_line_json_flag_applies_to_that_line() {
+    let (out, _) = run_counted_session(b"token inspect --json\ntoken show\nquit\n");
+
+    assert!(out.status.success(), "{out:?}");
+
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let mut lines = stdout.lines();
+    let inspect: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
+    assert_eq!(inspect["tokenType"], "Bearer", "stdout: {stdout}");
+    assert_eq!(lines.next(), Some("at-test"), "stdout: {stdout}");
+}

@@ -10,7 +10,8 @@
 //!
 //! The session is bound to the `-a` or default account like any other
 //! command, and each input line is parsed as a `token` or `auth`
-//! subcommand dispatched against the in-memory account.
+//! subcommand dispatched against the in-memory account. Lines are split as
+//! a shell splits them, so a quoted value keeps its spaces.
 //!
 //! The stdio pipe is the authorisation boundary, so the token is never
 //! handed to another process the way a shared agent would. On exit the
@@ -18,9 +19,13 @@
 
 use std::io::{self, IsTerminal, Write};
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
-use pimalaya_cli::{error::ErrorReport, printer::Printer};
+use pimalaya_cli::{
+    clap::args::JsonFlag,
+    error::ErrorReport,
+    printer::{Printer, StdoutPrinter},
+};
 
 use crate::{
     account::Account,
@@ -44,6 +49,10 @@ pub struct ReplCommand;
 struct ReplLine {
     #[command(subcommand)]
     cmd: ReplCommandTree,
+    /// Switch this line's output to JSON, the session's other lines
+    /// keeping theirs.
+    #[command(flatten)]
+    json: JsonFlag,
 }
 
 /// The `token` and `auth` commands, the subset of the CLI tree running
@@ -134,45 +143,62 @@ impl ReplCommand {
                 break;
             }
 
-            let result = match ReplLine::try_parse_from(input.split_whitespace()) {
-                Ok(ReplLine { cmd }) => cmd.execute(printer, &mut account, resume),
+            let result = match shlex::split(input).map(ReplLine::try_parse_from) {
+                None => Err(anyhow!("Cannot split the line: a quote is not closed")),
+                // NOTE: a line asking for JSON in a text session prints
+                // through a JSON printer of its own, its failure included.
+                Some(Ok(ReplLine { cmd, json })) if json.enabled && !printer.is_json() => {
+                    let mut printer = StdoutPrinter::new(&json);
+                    let result = cmd.execute(&mut printer, &mut account, resume);
+                    answer(&mut printer, interactive, result)?;
+                    continue;
+                }
+                Some(Ok(ReplLine { cmd, .. })) => cmd.execute(printer, &mut account, resume),
                 // NOTE: help and version are not failures, and clap
                 // prints them on stdout already.
-                Err(err) if !err.use_stderr() => {
+                Some(Err(err)) if !err.use_stderr() => {
                     let _ = err.print();
                     continue;
                 }
-                Err(err) if interactive => {
+                Some(Err(err)) if interactive => {
                     let _ = err.print();
                     continue;
                 }
-                Err(err) => Err(err.into()),
+                Some(Err(err)) => Err(err.into()),
             };
 
-            match result {
-                // NOTE: the printer ends each JSON value with a newline,
-                // flushed when piped, while a text result carries no
-                // trailing newline so one-shot output pipes cleanly: the
-                // loop terminates and flushes it, or the line-buffered
-                // stdout holds it until the session ends.
-                Ok(()) => {
-                    if !printer.is_json() {
-                        println!();
-                        let _ = io::stdout().flush();
-                    }
-                }
-                Err(err) if interactive => eprintln!("{err:?}"),
-                // NOTE: a piped session is a machine channel, so its
-                // errors reach stdout through the printer like any other
-                // command's, one per line, and stderr keeps the logs.
-                Err(err) => {
-                    let report: ErrorReport = err.into();
-                    printer.out(report)?;
-                    io::stdout().flush()?;
-                }
-            }
+            answer(printer, interactive, result)?;
         }
 
         Ok(())
     }
+}
+
+/// Prints the outcome of one line: a newline closing a text result, or
+/// the failure, on stderr when interactive and through the printer on
+/// stdout when piped.
+fn answer(printer: &mut impl Printer, interactive: bool, result: Result<()>) -> Result<()> {
+    match result {
+        // NOTE: the printer ends each JSON value with a newline, flushed
+        // when piped, while a text result carries no trailing newline so
+        // one-shot output pipes cleanly: the loop terminates and flushes
+        // it, or the line-buffered stdout holds it until the session ends.
+        Ok(()) => {
+            if !printer.is_json() {
+                println!();
+                let _ = io::stdout().flush();
+            }
+        }
+        Err(err) if interactive => eprintln!("{err:?}"),
+        // NOTE: a piped session is a machine channel, so its errors reach
+        // stdout through the printer like any other command's, one per
+        // line, and stderr keeps the logs.
+        Err(err) => {
+            let report: ErrorReport = err.into();
+            printer.out(report)?;
+            io::stdout().flush()?;
+        }
+    }
+
+    Ok(())
 }
