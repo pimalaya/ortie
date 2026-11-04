@@ -27,7 +27,7 @@ use pimalaya_config::toml::TomlConfig;
 use crate::wizard::{self, ConfigureCommand};
 use crate::{
     account::Account,
-    auth::{AuthCommand, get::resume_invocation},
+    auth::{AuthCommand, get::invocation},
     config::{Config, NO_CONFIG_HINT},
     json_schema,
     mcp::McpCommand,
@@ -99,8 +99,8 @@ impl Command {
             }
             Self::Repl(cmd) => {
                 let account = take_account(printer, config_paths, account_name)?;
-                let resume = resume_invocation(config_paths, account_name);
-                cmd.execute(printer, account, &resume)
+                let invocation = invocation(config_paths, account_name);
+                cmd.execute(printer, account, &invocation)
             }
             Self::Mcp(cmd) => {
                 let account = take_account(printer, config_paths, account_name)?;

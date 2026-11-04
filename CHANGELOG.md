@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `token revoke`, revoking the stored refresh token, or the access token when none is stored (RFC 7009).
 - Added `endpoints.revocation` to the account configuration, prefilled by the wizard from the server metadata.
 - Added `ortie-token-revoke` to `json-schema`.
+- Added `auth listen`, catching the redirection of a flow a non-interactive or `--json` `auth get` handed off, then completing it as `auth resume` does.
+- Added `redirectUri` to the `auth get` handoff object, and `ortie-auth-listen` to `json-schema`.
 - Added `ortie mcp`, a Model Context Protocol server over stdio running the grants of one account for an agent.
 
   Its tools answer receipts and metadata, never a token: the state, the PKCE verifier and the device code stay in the server, which stores the token once the user consents. `token_revoke` is listed only with `--allow-revoke`.
@@ -55,6 +57,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed the wizard to write `pkce = "plain"` for a server supporting only the plain method.
 
 ### Fixed
+
+- Fixed the `auth resume` command printed by `auth get` dropping a generated redirect URI.
+
+  The code was exchanged without the `redirect_uri` its authorization request carried, which RFC 6749 section 4.1.3 requires. The printed commands now carry `--redirect-uri`.
 
 - Fixed a failed storage write after a refresh leaving the session on the old refresh token, which a rotating server had already invalidated.
 - Fixed the `auth resume` command printed by `auth get` dropping its `-a` and `-c` ([#16](https://github.com/pimalaya/ortie/issues/16)).

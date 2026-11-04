@@ -4,6 +4,7 @@
 //! running the grant configured on the account.
 
 pub mod get;
+pub mod listen;
 pub mod resume;
 
 use std::path::PathBuf;
@@ -14,7 +15,8 @@ use pimalaya_cli::printer::Printer;
 
 use crate::{
     auth::{
-        get::{AuthGetCommand, resume_invocation},
+        get::{AuthGetCommand, invocation},
+        listen::AuthListenCommand,
         resume::AuthResumeCommand,
     },
     cli::take_account,
@@ -22,11 +24,13 @@ use crate::{
 
 /// Get a fresh access token by running the account's OAuth grant.
 ///
-/// Start an authorization-code, device or client-credentials grant, or
-/// resume one with a redirected URI or a device code.
+/// Start an authorization-code, device or client-credentials grant, listen
+/// for the redirection of a handed-off one, or resume one with a redirected
+/// URI or a device code.
 #[derive(Subcommand, Debug)]
 pub enum AuthCommand {
     Get(AuthGetCommand),
+    Listen(AuthListenCommand),
     #[command(visible_alias = "continue")]
     Resume(AuthResumeCommand),
 }
@@ -42,8 +46,12 @@ impl AuthCommand {
         match self {
             Self::Get(cmd) => {
                 let mut account = take_account(printer, config_paths, account_name)?;
-                let resume = resume_invocation(config_paths, account_name);
-                cmd.execute(printer, &mut account, &resume)
+                let invocation = invocation(config_paths, account_name);
+                cmd.execute(printer, &mut account, &invocation)
+            }
+            Self::Listen(cmd) => {
+                let mut account = take_account(printer, config_paths, account_name)?;
+                cmd.execute(printer, &mut account)
             }
             Self::Resume(cmd) => {
                 let mut account = take_account(printer, config_paths, account_name)?;

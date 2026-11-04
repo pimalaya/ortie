@@ -6,7 +6,7 @@ change: auth-listen
 ## ADDED Requirements
 
 ### Requirement: Loopback listen
-`auth listen` SHALL, on an authorization-code account, bind the loopback redirect URI given by `--redirect-uri` or `endpoints.redirection`, wait for one redirect, then complete the flow as `auth resume` does with that redirected URI and its `--state` and `--pkce`. It SHALL be refused on the device and client credentials grants, and on a redirect URI that is not loopback http(s) with a port.
+`auth listen` SHALL, on an authorization-code account, bind the loopback redirect URI given by `--redirect-uri` or `endpoints.redirection`, wait for one redirect, then complete the flow as `auth resume` does with that redirected URI and its `--state` and `--pkce`. It SHALL be refused on the device and client credentials grants, and on a redirect URI that is not loopback http(s).
 
 ## MODIFIED Requirements
 

@@ -65,8 +65,8 @@ use crate::{
 /// `device`, `client-credentials` or `client-credentials-jwt`.
 ///
 /// Interactive shells complete the flow, while non-interactive ones and
-/// `--json` hand off to `auth resume`. The client credentials kinds
-/// complete headlessly in one shot.
+/// `--json` hand off to `auth listen` or `auth resume`. The client
+/// credentials kinds complete headlessly in one shot.
 #[derive(Debug, Parser)]
 pub struct AuthGetCommand;
 
@@ -74,16 +74,16 @@ impl AuthGetCommand {
     /// Runs the account's grant and completes it into a stored access
     /// token, interactive shells chaining into resume.
     ///
-    /// The `resume` invocation starts the `auth resume` command printed
-    /// when the flow hands off (see [`resume_invocation`]).
+    /// The `invocation` starts the `auth listen` and `auth resume`
+    /// commands printed when the flow hands off (see [`invocation`]).
     pub fn execute(
         self,
         printer: &mut impl Printer,
         account: &mut Account,
-        resume: &str,
+        invocation: &str,
     ) -> Result<()> {
         if account.grant == GrantConfig::Device {
-            return execute_device(printer, account, resume);
+            return execute_device(printer, account, invocation);
         }
 
         if account.grant.is_client_credentials() {
@@ -106,21 +106,24 @@ impl AuthGetCommand {
             pkce_code_verifier: pkce_code_challenge
                 .as_ref()
                 .map(|challenge| &challenge.verifier),
+            redirect_uri: &redirect_uri,
             interactive,
         };
 
-        // NOTE: JSON stays a clean structured object carrying the state
-        // and verifier, so only the human output appends the
-        // ready-to-run resume command.
+        // NOTE: JSON stays a clean structured object carrying the state,
+        // the verifier and the redirect URI, so only the human output
+        // appends the ready-to-run listen and resume commands.
         if printer.is_json() || !interactive {
             printer.out(AuthGetOutput::Authorization(&authorization_uri))?;
 
             if !printer.is_json() {
                 println!();
-                print_manual_resume(
-                    resume,
+                print_handoff(
+                    invocation,
                     &state,
                     pkce_code_challenge.as_ref().map(|c| &c.verifier),
+                    &redirect_uri,
+                    is_loopback_redirect(&redirect_uri),
                 );
             }
 
@@ -145,10 +148,12 @@ impl AuthGetCommand {
                 "Ortie cannot capture the redirection {} automatically.",
                 redirect_uri.as_str(),
             );
-            print_manual_resume(
-                resume,
+            print_handoff(
+                invocation,
                 &state,
                 pkce_code_challenge.as_ref().map(|c| &c.verifier),
+                &redirect_uri,
+                false,
             );
 
             return Ok(());
@@ -163,10 +168,12 @@ impl AuthGetCommand {
             Err(err) => {
                 println!();
                 println!("Ortie could not capture the redirection automatically ({err}).");
-                print_manual_resume(
-                    resume,
+                print_handoff(
+                    invocation,
                     &state,
                     pkce_code_challenge.as_ref().map(|c| &c.verifier),
+                    &redirect_uri,
+                    false,
                 );
 
                 return Ok(());
@@ -239,30 +246,47 @@ pub(crate) fn authorization_request(
     Ok(AuthorizationRequest { uri, state, pkce })
 }
 
-/// Prints the manual `auth resume` command finishing the flow by hand,
-/// filled with its state and, under PKCE, its code verifier.
+/// Prints the commands finishing the flow by hand, filled with its state,
+/// its redirect URI and, under PKCE, its code verifier: `auth listen`
+/// first when `listen` is set, then `auth resume`.
 ///
 /// The values are attached to their flag with `=` and single quoted:
 /// a verifier or a state can begin with `-` and be read as a flag, and
-/// the quotes keep the shell from expanding a leading `~`.
-fn print_manual_resume(resume: &str, state: &Oauth20State, pkce: Option<&Oauth20PkceCodeVerifier>) {
+/// the quotes keep the shell from expanding a leading `~`. The redirect
+/// URI is printed even when it was generated: the code exchange must
+/// repeat the one the authorization request carried.
+fn print_handoff(
+    invocation: &str,
+    state: &Oauth20State,
+    pkce: Option<&Oauth20PkceCodeVerifier>,
+    redirect_uri: &Url,
+    listen: bool,
+) {
     let state = shell_single_quote(&String::from_utf8_lossy(state.expose()));
+    let mut flags = format!("--state={state}");
 
-    println!(
-        "Once authorized, copy the URL your browser was redirected to, \
-	 then run the resume subcommand:"
-    );
-    println!();
-
-    match pkce {
-        Some(verifier) => {
-            let verifier = shell_single_quote(&String::from_utf8_lossy(verifier.expose()));
-            println!("> {resume} --state={state} --pkce={verifier} <REDIRECTED_URI>");
-        }
-        None => {
-            println!("> {resume} --state={state} <REDIRECTED_URI>");
-        }
+    if let Some(verifier) = pkce {
+        let verifier = shell_single_quote(&String::from_utf8_lossy(verifier.expose()));
+        flags.push_str(&format!(" --pkce={verifier}"));
     }
+
+    let redirect_uri = shell_single_quote(redirect_uri.as_str());
+    flags.push_str(&format!(" --redirect-uri={redirect_uri}"));
+
+    let resume = "copy the URL your browser was redirected to, then run the resume subcommand:";
+
+    if listen {
+        println!("Before authorizing, start the listener catching the redirection:");
+        println!();
+        println!("> {invocation} auth listen {flags}");
+        println!();
+        println!("Or, once authorized, {resume}");
+    } else {
+        println!("Once authorized, {resume}");
+    }
+
+    println!();
+    println!("> {invocation} auth resume {flags} <REDIRECTED_URI>");
 }
 
 /// Whether the local listener can service the redirection, which means
@@ -326,6 +350,10 @@ pub struct AuthorizationUri<'a> {
     #[serde(serialize_with = "serialize_pkce_code_verifier")]
     #[schemars(with = "Option<String>")]
     pkce_code_verifier: Option<&'a Oauth20PkceCodeVerifier>,
+    /// The redirect URI the authorization request carries, which the code
+    /// exchange repeats.
+    #[schemars(with = "String")]
+    redirect_uri: &'a Url,
     /// Whether the flow was initiated from an interactive shell.
     interactive: bool,
 }
@@ -361,6 +389,8 @@ impl fmt::Display for AuthorizationUri<'_> {
             writeln!(f, " - pkce: {verifier}")?;
         }
 
+        writeln!(f, " - redirect URI: {}", self.redirect_uri)?;
+
         writeln!(f)?;
         if self.interactive {
             writeln!(f, "Sending authorization request to your browser:")
@@ -374,7 +404,11 @@ impl fmt::Display for AuthorizationUri<'_> {
 
 /// Requests a device and user code, then polls the token endpoint when
 /// the shell is interactive and hands off to `auth resume` otherwise.
-fn execute_device(printer: &mut impl Printer, account: &mut Account, resume: &str) -> Result<()> {
+fn execute_device(
+    printer: &mut impl Printer,
+    account: &mut Account,
+    invocation: &str,
+) -> Result<()> {
     let interactive = stdout().is_terminal();
     let (token_endpoint, device) = request_device_authorization(account)?;
 
@@ -394,7 +428,10 @@ fn execute_device(printer: &mut impl Printer, account: &mut Account, resume: &st
             println!();
             println!("Once authorized, run:");
             println!();
-            println!("> {resume} {}", shell_single_quote(&view.device_code));
+            println!(
+                "> {invocation} auth resume {}",
+                shell_single_quote(&view.device_code)
+            );
         }
         return Ok(());
     }
@@ -717,14 +754,15 @@ pub(crate) fn report_token_issued(
     Ok(TokenIssuedOutput::issued(res))
 }
 
-/// Builds the invocation the printed `auth resume` commands start with.
+/// Builds the invocation the printed `auth listen` and `auth resume`
+/// commands start with.
 ///
 /// It carries the `-c` and `-a` the grant ran with, single quoted, so the
-/// resume reaches the configuration and account that issued the state:
+/// command reaches the configuration and account that issued the state:
 /// the default one could hold another provider, whose token endpoint
 /// would refuse the code, or the same client, storing the token under
 /// the wrong account.
-pub fn resume_invocation(config_paths: &[PathBuf], account_name: Option<&str>) -> String {
+pub fn invocation(config_paths: &[PathBuf], account_name: Option<&str>) -> String {
     let mut invocation = String::from("ortie");
 
     if !config_paths.is_empty() {
@@ -738,7 +776,6 @@ pub fn resume_invocation(config_paths: &[PathBuf], account_name: Option<&str>) -
         invocation.push_str(&shell_single_quote(name));
     }
 
-    invocation.push_str(" auth resume");
     invocation
 }
 
@@ -830,18 +867,15 @@ mod tests {
     }
 
     #[test]
-    fn resume_invocation_carries_the_account_and_config() {
-        assert_eq!(resume_invocation(&[], None), "ortie auth resume");
-        assert_eq!(resume_invocation(&[], Some("")), "ortie auth resume");
-        assert_eq!(
-            resume_invocation(&[], Some("gmail")),
-            "ortie -a 'gmail' auth resume"
-        );
+    fn invocation_carries_the_account_and_config() {
+        assert_eq!(invocation(&[], None), "ortie");
+        assert_eq!(invocation(&[], Some("")), "ortie");
+        assert_eq!(invocation(&[], Some("gmail")), "ortie -a 'gmail'");
 
         let paths = [PathBuf::from("/a.toml"), PathBuf::from("/b c.toml")];
         assert_eq!(
-            resume_invocation(&paths, Some("work's")),
-            "ortie -c '/a.toml:/b c.toml' -a 'work'\\''s' auth resume"
+            invocation(&paths, Some("work's")),
+            "ortie -c '/a.toml:/b c.toml' -a 'work'\\''s'"
         );
     }
 }

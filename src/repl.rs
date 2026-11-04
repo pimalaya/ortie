@@ -29,7 +29,7 @@ use pimalaya_cli::{
 
 use crate::{
     account::Account,
-    auth::{get::AuthGetCommand, resume::AuthResumeCommand},
+    auth::{get::AuthGetCommand, listen::AuthListenCommand, resume::AuthResumeCommand},
     token::TokenCommand,
 };
 
@@ -74,11 +74,11 @@ impl ReplCommandTree {
         self,
         printer: &mut impl Printer,
         account: &mut Account,
-        resume: &str,
+        invocation: &str,
     ) -> Result<()> {
         match self {
             Self::Token(cmd) => cmd.execute(printer, account),
-            Self::Auth(cmd) => cmd.execute(printer, account, resume),
+            Self::Auth(cmd) => cmd.execute(printer, account, invocation),
         }
     }
 }
@@ -90,6 +90,7 @@ impl ReplCommandTree {
 #[derive(Debug, Subcommand)]
 enum ReplAuthCommand {
     Get(AuthGetCommand),
+    Listen(AuthListenCommand),
     #[command(visible_alias = "continue")]
     Resume(AuthResumeCommand),
 }
@@ -99,10 +100,11 @@ impl ReplAuthCommand {
         self,
         printer: &mut impl Printer,
         account: &mut Account,
-        resume: &str,
+        invocation: &str,
     ) -> Result<()> {
         match self {
-            Self::Get(cmd) => cmd.execute(printer, account, resume),
+            Self::Get(cmd) => cmd.execute(printer, account, invocation),
+            Self::Listen(cmd) => cmd.execute(printer, account),
             Self::Resume(cmd) => cmd.execute(printer, account),
         }
     }
@@ -112,13 +114,13 @@ impl ReplCommand {
     /// Runs the read-eval-print loop until EOF or a quit command,
     /// keeping the resolved token in the account across iterations.
     ///
-    /// The `resume` invocation is handed to `auth get`, for the
-    /// `auth resume` command it prints when the flow hands off.
+    /// The `invocation` is handed to `auth get`, for the `auth listen` and
+    /// `auth resume` commands it prints when the flow hands off.
     pub fn execute(
         self,
         printer: &mut impl Printer,
         mut account: Account,
-        resume: &str,
+        invocation: &str,
     ) -> Result<()> {
         let stdin = io::stdin();
         let interactive = stdin.is_terminal();
@@ -149,11 +151,11 @@ impl ReplCommand {
                 // through a JSON printer of its own, its failure included.
                 Some(Ok(ReplLine { cmd, json })) if json.enabled && !printer.is_json() => {
                     let mut printer = StdoutPrinter::new(&json);
-                    let result = cmd.execute(&mut printer, &mut account, resume);
+                    let result = cmd.execute(&mut printer, &mut account, invocation);
                     answer(&mut printer, interactive, result)?;
                     continue;
                 }
-                Some(Ok(ReplLine { cmd, .. })) => cmd.execute(printer, &mut account, resume),
+                Some(Ok(ReplLine { cmd, .. })) => cmd.execute(printer, &mut account, invocation),
                 // NOTE: help and version are not failures, and clap
                 // prints them on stdout already.
                 Some(Err(err)) if !err.use_stderr() => {

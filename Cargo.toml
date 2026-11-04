@@ -57,8 +57,3 @@ shellexpand = "3.1"
 shlex = "2"
 simd-cpu = { version = "0.1", default-features = false, features = ["std"] }
 url = { version = "2.5", default-features = false, features = ["serde"] }
-
-[patch.crates-io]
-# NOTE: unreleased client::await_redirect_on, to be replaced by the io-oauth
-# release carrying it.
-io-oauth = { git = "https://github.com/pimalaya/io-oauth", rev = "48b7a1b7f3c741771c940b89f808d7cef12371fa" }

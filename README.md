@@ -23,7 +23,7 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 - **Authorization code grant**: browser sign-in, with a built-in server catching the redirection.
 - **Device authorization grant**: a short code typed on another device, for hosts with no browser.
 - **Client credentials grants**: headless machine tokens, by client secret or signed JWT assertion.
-- **Manual completion**: finish a flow by hand when the redirection server cannot bind.
+- **Manual completion**: finish a handed-off flow with `auth listen`, or by hand with `auth resume`.
 - **Token refresh**: on demand, or automatically when the token is read.
 - **Token revocation**: retire a token at the authorization server.
 - **PKCE**: S256 by default, following the OAuth 2.1 posture.
@@ -227,6 +227,7 @@ Configure an account, authorize it, then read its token:
 ```sh
 ortie configure                        # discover a provider and write the account
 ortie auth get                         # authorize and store a first token
+ortie auth listen --state=… --pkce=… --redirect-uri=…  # catch a handed-off redirection
 ortie auth resume <URI|DEVICE_CODE>    # finish a flow by hand
 ortie token show                       # print the stored access token
 ortie token refresh                    # force a refresh

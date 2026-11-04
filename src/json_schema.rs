@@ -40,6 +40,7 @@ pub fn registry() -> JsonSchemaRegistry {
     #[cfg(feature = "wizard")]
     registry.insert::<ConfigureOutput>("ortie-configure");
     registry.insert::<AuthGetOutput<'static>>("ortie-auth-get");
+    registry.insert::<TokenIssuedOutput>("ortie-auth-listen");
     registry.insert::<TokenIssuedOutput>("ortie-auth-resume");
     registry.insert::<TokenShowOutput<'static>>("ortie-token-show");
     registry.insert::<TokenInspectOutput>("ortie-token-inspect");
