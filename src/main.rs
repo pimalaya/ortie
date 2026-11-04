@@ -20,6 +20,9 @@
 //! [`repl`] holds those same two trees open against one account, so the
 //! secret store is unlocked once instead of per command.
 //!
+//! [`mcp`] serves them to an agent as Model Context Protocol tools, the
+//! flows running in the server so no secret reaches the agent.
+//!
 //! The [`wizard`] ends on a bare, valid TOML fragment: written to a
 //! config file, appended to the one already there, or printed on stdout,
 //! which is where `--json` and a redirected stdout stop. Its banner,
@@ -74,6 +77,7 @@ mod auth;
 mod cli;
 mod config;
 mod json_schema;
+mod mcp;
 mod repl;
 mod token;
 #[cfg(feature = "wizard")]

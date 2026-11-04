@@ -61,7 +61,7 @@ mod tests {
     /// The commands printing nothing a schema could describe: a bare `ortie`
     /// shows the help, or runs the wizard `configure` describes, and the REPL
     /// prints the payloads of the leaves it dispatches.
-    const SILENT: &[&str] = &["ortie", "ortie-repl"];
+    const SILENT: &[&str] = &["ortie", "ortie-repl", "ortie-mcp"];
 
     /// Every runnable command is described, and every key names one: a
     /// renamed subcommand cannot leave a schema nobody can ask for, nor a

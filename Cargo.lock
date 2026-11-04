@@ -972,8 +972,7 @@ dependencies = [
 [[package]]
 name = "io-oauth"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72f7335836065cd3e3eda866e6d003bbfa92f8e55137d45a58dd03f23091f370"
+source = "git+https://github.com/pimalaya/io-oauth?rev=48b7a1b7f3c741771c940b89f808d7cef12371fa#48b7a1b7f3c741771c940b89f808d7cef12371fa"
 dependencies = [
  "anyhow",
  "base64-codec",

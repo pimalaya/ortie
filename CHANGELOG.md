@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `token revoke`, revoking the stored refresh token, or the access token when none is stored (RFC 7009).
 - Added `endpoints.revocation` to the account configuration, prefilled by the wizard from the server metadata.
 - Added `ortie-token-revoke` to `json-schema`.
+- Added `ortie mcp`, a Model Context Protocol server over stdio running the grants of one account for an agent.
+
+  Its tools answer receipts and metadata, never a token: the state, the PKCE verifier and the device code stay in the server, which stores the token once the user consents. `token_revoke` is listed only with `--allow-revoke`.
+
 - Added the `wizard` cargo feature, on by default, gating `configure` and the first-run offer.
 
   A build without it drops the prompts and the dependencies only they use.

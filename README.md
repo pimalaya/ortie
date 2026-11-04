@@ -31,6 +31,7 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 - **Token storage**: read and write tokens through your own shell commands.
 - **Hooks**: a shell command or a desktop notification on issuance and refresh.
 - **Persistent session**: unlock the secret store once, then answer token commands over stdin.
+- **MCP server**: an agent drives the grants through `ortie mcp`, and no tool returns a token.
 - **JSON output**: `--json` on every data command, its payload described by `ortie json-schema`.
 - **TLS**: [rustls](https://crates.io/crates/rustls) with ring (`rustls-ring`, default) or aws (`rustls-aws`) crypto, or [native-tls](https://crates.io/crates/native-tls) (`native-tls`).
 
@@ -237,6 +238,16 @@ ortie token revoke                     # revoke the token at the server
 
 ```sh
 printf 'token show\n' | ortie repl
+```
+
+`ortie mcp` runs a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio for one account, so an agent can obtain and renew its token. `auth_get` answers the authorization URI to open, or the user code to enter, and the server keeps the state, the PKCE verifier and the device code to itself: it catches the redirection or polls the device code, then stores the token once the user consents, and `auth_status` reports the outcome. `auth_resume` takes the redirected URL when no listener can catch it, and `token_inspect` and `token_refresh` work on the stored token. No tool returns the token, which applications keep reading through `ortie token show`; `token_revoke` is listed only with `--allow-revoke`.
+
+```json
+{
+  "mcpServers": {
+    "ortie": { "command": "ortie", "args": ["mcp", "--account", "work"] }
+  }
+}
 ```
 
 Every command and every flag is documented behind `--help`. `--json` switches data commands to machine-readable objects, `ortie json-schema --dir <DIR>` writing the JSON Schema of each, and logs go to stderr, with `--log-level <LEVEL>` and `--log-file <PATH>` setting their verbosity and destination.

@@ -90,43 +90,15 @@ impl AuthGetCommand {
             return execute_client_credentials(printer, account);
         }
 
-        let Some(authorization_endpoint) = &account.authorization_endpoint else {
-            bail!("Missing endpoints.authorization in the account config");
-        };
-
         let interactive = stdout().is_terminal();
-
-        // NOTE: re-encode the random state in URL-safe base64 so it
-        // round-trips through the redirect URI without escaping.
-        let state = Oauth20State::default();
-        let state = base64_url(state.expose());
-        let state = Oauth20State::deserialize(StringDeserializer::<Error>::new(state)).unwrap();
-
-        let pkce_code_challenge = match account.pkce {
-            PkceConfig::S256 => Some(Oauth20PkceCodeChallenge::default()),
-            PkceConfig::Plain => Some(Oauth20PkceCodeChallenge {
-                method: Oauth20PkceCodeChallengeMethod::Plain,
-                verifier: Oauth20PkceCodeVerifier::default(),
-            }),
-            PkceConfig::Off => None,
-        };
 
         let redirect_uri = account.redirection()?;
 
-        let auth_uri = Oauth20AuthRequestParams {
-            client_id: account.client_id.as_str().into(),
-            redirect_uri: Some(Cow::from(redirect_uri.as_str())),
-            scope: BTreeSet::from_iter(account.scopes.iter().map(Into::into)),
-            state: Some(Cow::Borrowed(&state)),
-            pkce_code_challenge: pkce_code_challenge.as_ref().map(Cow::Borrowed),
-            resource: account.resources.clone(),
-            extras: account
-                .extras
-                .iter()
-                .map(|(key, value)| (key.as_str().into(), value.as_str().into()))
-                .collect(),
-        }
-        .build_url(authorization_endpoint);
+        let AuthorizationRequest {
+            uri: auth_uri,
+            state,
+            pkce: pkce_code_challenge,
+        } = authorization_request(account, &redirect_uri)?;
 
         let authorization_uri = AuthorizationUri {
             authorization_uri: &auth_uri,
@@ -212,6 +184,61 @@ impl AuthGetCommand {
     }
 }
 
+/// An authorization request ready to send: the URL to open, with the
+/// state and the PKCE challenge the redirect is checked against.
+pub(crate) struct AuthorizationRequest {
+    /// The authorization URL, opened in a browser.
+    pub uri: Url,
+    /// The generated CSRF state.
+    pub state: Oauth20State,
+    /// The generated PKCE challenge, `None` when the account turns PKCE
+    /// off.
+    pub pkce: Option<Oauth20PkceCodeChallenge>,
+}
+
+/// Builds the account's authorization request redirecting to
+/// `redirect_uri`, with a fresh state and PKCE challenge.
+pub(crate) fn authorization_request(
+    account: &Account,
+    redirect_uri: &Url,
+) -> Result<AuthorizationRequest> {
+    let Some(authorization_endpoint) = &account.authorization_endpoint else {
+        bail!("Missing endpoints.authorization in the account config");
+    };
+
+    // NOTE: re-encode the random state in URL-safe base64 so it
+    // round-trips through the redirect URI without escaping.
+    let state = Oauth20State::default();
+    let state = base64_url(state.expose());
+    let state = Oauth20State::deserialize(StringDeserializer::<Error>::new(state)).unwrap();
+
+    let pkce = match account.pkce {
+        PkceConfig::S256 => Some(Oauth20PkceCodeChallenge::default()),
+        PkceConfig::Plain => Some(Oauth20PkceCodeChallenge {
+            method: Oauth20PkceCodeChallengeMethod::Plain,
+            verifier: Oauth20PkceCodeVerifier::default(),
+        }),
+        PkceConfig::Off => None,
+    };
+
+    let uri = Oauth20AuthRequestParams {
+        client_id: account.client_id.as_str().into(),
+        redirect_uri: Some(Cow::from(redirect_uri.as_str())),
+        scope: BTreeSet::from_iter(account.scopes.iter().map(Into::into)),
+        state: Some(Cow::Borrowed(&state)),
+        pkce_code_challenge: pkce.as_ref().map(Cow::Borrowed),
+        resource: account.resources.clone(),
+        extras: account
+            .extras
+            .iter()
+            .map(|(key, value)| (key.as_str().into(), value.as_str().into()))
+            .collect(),
+    }
+    .build_url(authorization_endpoint);
+
+    Ok(AuthorizationRequest { uri, state, pkce })
+}
+
 /// Prints the manual `auth resume` command finishing the flow by hand,
 /// filled with its state and, under PKCE, its code verifier.
 ///
@@ -244,7 +271,7 @@ fn print_manual_resume(resume: &str, state: &Oauth20State, pkce: Option<&Oauth20
 /// Anything else, a remote host or the reverse-DNS private-use scheme
 /// Fastmail's dynamic registration mandates, dead-ends in the browser,
 /// so the flow finishes by hand through `auth resume`.
-fn is_loopback_redirect(uri: &Url) -> bool {
+pub(crate) fn is_loopback_redirect(uri: &Url) -> bool {
     let http_scheme = matches!(uri.scheme(), "http" | "https");
     let loopback_host = match uri.host() {
         Some(Host::Domain(domain)) => domain == "localhost",
@@ -348,41 +375,8 @@ impl fmt::Display for AuthorizationUri<'_> {
 /// Requests a device and user code, then polls the token endpoint when
 /// the shell is interactive and hands off to `auth resume` otherwise.
 fn execute_device(printer: &mut impl Printer, account: &mut Account, resume: &str) -> Result<()> {
-    let Some(device_endpoint) = account.device_authorization_endpoint.clone() else {
-        bail!("Missing endpoints.device-authorization in the account config");
-    };
-    let Some(token_endpoint) = account.token_endpoint.clone() else {
-        bail!("Missing endpoints.token in the account config");
-    };
-
     let interactive = stdout().is_terminal();
-    let params = Oauth20DeviceAuthRequestParams {
-        client_id: account.client_id.as_str().into(),
-        scope: BTreeSet::from_iter(account.scopes.iter().map(|s| Cow::from(s.as_str()))),
-    };
-
-    let client_secret = account.client_secret.clone().map(Secret::get).transpose()?;
-    let mut device_client = Oauth20ClientStd::connect(
-        device_endpoint.clone(),
-        &account.tls,
-        account.client_id.clone(),
-    )?;
-    device_client.client_secret = client_secret;
-
-    let device = match device_client.request_device_auth(&device_endpoint, params)? {
-        Ok(device) => device,
-        Err(res) => {
-            debug!("execute issue access token error hook");
-            account.execute_on_issue_error_hook(&res);
-            let err = anyhow!("Device authorization error (code {:?})", res.error);
-            return Err(match (res.error_description, res.error_uri) {
-                (None, None) => err,
-                (Some(desc), None) => anyhow!("{desc}").context(err),
-                (None, Some(uri)) => anyhow!("{uri}").context(err),
-                (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
-            });
-        }
-    };
+    let (token_endpoint, device) = request_device_authorization(account)?;
 
     let view = DeviceAuthorization {
         device_code: device.device_code.expose_secret().to_owned(),
@@ -417,6 +411,52 @@ fn execute_device(printer: &mut impl Printer, account: &mut Account, resume: &st
     println!("Waiting for authorization…");
     let issued = complete_device_token_poll(account, &token_endpoint, &device)?;
     printer.out(AuthGetOutput::Issued(issued))
+}
+
+/// Requests a device and user code from the account's device
+/// authorization endpoint, returning them with the token endpoint they
+/// are later exchanged at.
+///
+/// A rejected request fires the on-issue error hook.
+pub(crate) fn request_device_authorization(
+    account: &mut Account,
+) -> Result<(Url, Oauth20DeviceAuthSuccessParams)> {
+    let Some(device_endpoint) = account.device_authorization_endpoint.clone() else {
+        bail!("Missing endpoints.device-authorization in the account config");
+    };
+    let Some(token_endpoint) = account.token_endpoint.clone() else {
+        bail!("Missing endpoints.token in the account config");
+    };
+
+    let params = Oauth20DeviceAuthRequestParams {
+        client_id: account.client_id.as_str().into(),
+        scope: BTreeSet::from_iter(account.scopes.iter().map(|s| Cow::from(s.as_str()))),
+    };
+
+    let client_secret = account.client_secret.clone().map(Secret::get).transpose()?;
+    let mut device_client = Oauth20ClientStd::connect(
+        device_endpoint.clone(),
+        &account.tls,
+        account.client_id.clone(),
+    )?;
+    device_client.client_secret = client_secret;
+
+    let device = match device_client.request_device_auth(&device_endpoint, params)? {
+        Ok(device) => device,
+        Err(res) => {
+            debug!("execute issue access token error hook");
+            account.execute_on_issue_error_hook(&res);
+            let err = anyhow!("Device authorization error (code {:?})", res.error);
+            return Err(match (res.error_description, res.error_uri) {
+                (None, None) => err,
+                (Some(desc), None) => anyhow!("{desc}").context(err),
+                (None, Some(uri)) => anyhow!("{uri}").context(err),
+                (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
+            });
+        }
+    };
+
+    Ok((token_endpoint, device))
 }
 
 /// Polls the token endpoint until the device grant completes, then
@@ -463,7 +503,7 @@ pub(crate) fn complete_device_token_poll(
 ///
 /// The local poll deadline is the client twin of the server's
 /// `expired_token`, so it fires the same on-issue error hook.
-fn device_poll_client_error_hook_params(
+pub(crate) fn device_poll_client_error_hook_params(
     err: &Oauth20ClientStdError,
 ) -> Option<Oauth20AccessTokenErrorParams> {
     match err {

@@ -30,6 +30,7 @@ use crate::{
     auth::{AuthCommand, get::resume_invocation},
     config::{Config, NO_CONFIG_HINT},
     json_schema,
+    mcp::McpCommand,
     repl::ReplCommand,
     token::TokenCommand,
 };
@@ -70,6 +71,7 @@ pub enum Command {
     #[command(subcommand)]
     Token(TokenCommand),
     Repl(ReplCommand),
+    Mcp(McpCommand),
     #[command(aliases = ["manuals", "mans"])]
     Manual(ManualCommand),
     #[command(alias = "completions")]
@@ -99,6 +101,10 @@ impl Command {
                 let account = take_account(printer, config_paths, account_name)?;
                 let resume = resume_invocation(config_paths, account_name);
                 cmd.execute(printer, account, &resume)
+            }
+            Self::Mcp(cmd) => {
+                let account = take_account(printer, config_paths, account_name)?;
+                cmd.execute(account)
             }
             Self::Manual(cmd) => cmd.execute(printer, Cli::command()),
             Self::Completion(cmd) => cmd.execute(printer, Cli::command()),
