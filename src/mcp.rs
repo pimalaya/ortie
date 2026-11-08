@@ -20,13 +20,13 @@ use std::{
     fmt,
     io::{self, BufRead, Write},
     mem,
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpStream},
     sync::mpsc::{self, RecvTimeoutError, Sender},
     thread,
     time::{Duration, Instant},
 };
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Result, anyhow, bail};
 use clap::Parser;
 use io_oauth::{
     client::{Oauth20ClientStd, Oauth20ClientStdError, await_redirect_on},
@@ -46,7 +46,7 @@ use serde_json::{Map, Value, json};
 use url::Url;
 
 use crate::{
-    account::Account,
+    account::{Account, DEFAULT_REDIRECTION, bind_loopback},
     auth::{
         get::{
             AuthGetCommand, AuthorizationRequest, authorization_request,
@@ -512,17 +512,13 @@ impl McpServer {
     fn auth_get_code(&mut self) -> Result<Value, McpRunError> {
         let (redirect_uri, listener) = match self.account.redirection_endpoint.clone() {
             Some(uri) if is_loopback_redirect(&uri) => {
-                let listener = bind(&uri)?;
+                let (uri, listener) = bind_loopback(&uri)?;
                 (uri, Some(listener))
             }
             Some(uri) => (uri, None),
             None => {
-                let listener = TcpListener::bind("127.0.0.1:0")
-                    .context("Bind the loopback redirection listener")?;
-                let port = listener.local_addr().map_err(anyhow::Error::from)?.port();
-                let uri = format!("http://127.0.0.1:{port}")
-                    .parse()
-                    .map_err(anyhow::Error::from)?;
+                let uri = DEFAULT_REDIRECTION.parse().map_err(anyhow::Error::from)?;
+                let (uri, listener) = bind_loopback(&uri)?;
                 (uri, Some(listener))
             }
         };
@@ -968,18 +964,6 @@ fn request_device_token(
     })?;
 
     Ok(res)
-}
-
-/// Binds the listener of a configured loopback redirection.
-fn bind(uri: &Url) -> Result<TcpListener> {
-    let host = uri
-        .host_str()
-        .ok_or_else(|| anyhow!("Missing host in redirection {uri}"))?;
-    let port = uri
-        .port_or_known_default()
-        .ok_or_else(|| anyhow!("Missing port in redirection {uri}"))?;
-
-    TcpListener::bind((host, port)).with_context(|| format!("Bind the redirection listener {uri}"))
 }
 
 /// Wakes the listener at `addr` so its thread ends: the empty request it

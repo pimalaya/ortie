@@ -11,12 +11,12 @@ Per-provider OAuth 2.0 quirks learned while testing the wizard. The wizard alrea
 ## Google
 
 ### Requirement: Current Google endpoints
-Configs SHALL use `https://accounts.google.com/o/oauth2/v2/auth` and `https://oauth2.googleapis.com/token`; the legacy pair can be rejected at consent with "This app is blocked". Google publishes no `registration_endpoint`, so the wizard offers the Thunderbird public application or a custom entry. Google refresh tokens require `extras.access_type = "offline"`, not an `offline_access` scope.
+Configs SHALL use `https://accounts.google.com/o/oauth2/v2/auth` and `https://oauth2.googleapis.com/token`; the legacy pair can be rejected at consent with "This app is blocked". Google publishes no `registration_endpoint`, so the wizard offers Pimalaya's application, Thunderbird's for IMAP, SMTP, CalDAV and CardDAV, or a custom entry. Google refresh tokens require `extras.access_type = "offline"`, not an `offline_access` scope.
 
 ## Microsoft
 
 ### Requirement: Outlook scope resource
-IMAP/POP/SMTP scopes SHALL use the `https://outlook.office.com/` resource (`IMAP.AccessAsUser.All`, `POP.AccessAsUser.All`, `SMTP.Send`), never `outlook.office365.com` (a mail host, not a scope resource, rejected with `invalid_scope`). The wizard groups the IMAP, POP and SMTP grants into one choice whose scope is their union. Microsoft publishes no `registration_endpoint`. The Thunderbird application is registered with `https://localhost` (port 443), which the unprivileged listener cannot bind, so `auth get` falls back to manual `auth resume`. Graph needs a Graph-registered client and `https://graph.microsoft.com/*` scopes. The device grant uses `.../oauth2/v2.0/devicecode` with the matching `.../token`.
+IMAP/POP/SMTP scopes SHALL use the `https://outlook.office.com/` resource (`IMAP.AccessAsUser.All`, `POP.AccessAsUser.All`, `SMTP.Send`), never `outlook.office365.com` (a mail host, not a scope resource, rejected with `invalid_scope`). The wizard groups the IMAP, POP and SMTP grants into one choice whose scope is their union. Microsoft publishes no `registration_endpoint`. Pimalaya's application is registered with `http://localhost`, any port, and refuses `127.0.0.1`. The Thunderbird application is registered with `https://localhost` (port 443), which the unprivileged listener cannot bind, so `auth get` falls back to manual `auth resume`; it serves IMAP, POP and SMTP only. Graph needs a Graph-registered client, such as Pimalaya's, and Graph scopes, in a grant of its own since Entra issues a token for one resource. The device grant uses `.../oauth2/v2.0/devicecode` with the matching `.../token`.
 
 ## Fastmail
 

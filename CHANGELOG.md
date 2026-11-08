@@ -25,9 +25,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `ortie-error` to `json-schema`, the schema of the JSON failure object.
 - Added the `completion`, `manual` and `json-schema` schemas to `json-schema`.
 - Added the `configure` positional, the email address, domain or issuer URL given instead of prompted.
-- Added `configure --service`, repeatable, keeping only the discovered grants serving one of the named services.
+- Added `configure --service`, repeatable, restricting discovery to the named services, whose grant carries their scopes alone.
 
-  A grant resolved from a typed URL carries no service and is kept.
+  Google's and Microsoft's API services (`gmail`, `gcal`, `gpeople`, `msgraph`, `msgraphCalendar`, `msgraphContacts`) are discovered only when named. A grant resolved from a typed URL carries no service and is kept.
+
+- Added Pimalaya's own Google and Microsoft applications to the wizard, offered ahead of Thunderbird's.
+
+  Google's covers IMAP, SMTP, Gmail, Google Calendar and People, not CalDAV nor CardDAV; Microsoft's covers Outlook IMAP and SMTP and Graph.
 
 - Added `configure --name`, naming the account as written rather than deriving it.
 
@@ -63,8 +67,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed the wizard to resolve a typed URL that is no issuer through its RFC 9728 protected resource metadata.
 - Changed the wizard to offer only the grants a server lists in `grant_types_supported`.
 - Changed the wizard to write `pkce = "plain"` for a server supporting only the plain method.
+- Changed the wizard to offer a well-known application only for a grant serving one of its services: Thunderbird's are offered for the protocols Thunderbird speaks.
 
 ### Fixed
+
+- Fixed a configured `http` loopback redirection naming no port, such as `http://localhost`, binding port 80: it binds an ephemeral port, so `auth get` and the MCP server capture the redirection instead of falling back to `auth resume`.
 
 - Fixed the `auth resume` command printed by `auth get` dropping a generated redirect URI.
 

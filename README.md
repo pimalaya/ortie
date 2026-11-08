@@ -142,9 +142,9 @@ Another tool can hand its OAuth 2.0 setup over: `ortie configure alice@example.o
 
 A configuration is loaded from the first valid path among $XDG_CONFIG_HOME/ortie/config.toml, $HOME/.config/ortie/config.toml and $HOME/.ortierc. Override it with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`, `:`-separated to deep-merge several files on top of the first.
 
-An OAuth 2.0 application is needed too. The wizard offers three, most preferred first: dynamic registration when the provider advertises it, a public application ([Thunderbird credentials](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs) cover most consumer providers), or your own, left as an empty `client-id` to fill in.
+An OAuth 2.0 application is needed too. The wizard offers three, most preferred first: dynamic registration when the provider advertises it, a public application (Pimalaya's own for Google and Microsoft, then [Thunderbird credentials](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs), which cover most consumer providers), or your own, left as an empty `client-id` to fill in.
 
-Ready-made blocks for common providers follow, for manual setups and for Microsoft Graph, which the wizard does not cover. Drop one under your `[accounts.<name>]` table and fill in the client credentials.
+Ready-made blocks for common providers follow, for manual setups and for Microsoft Graph, which the wizard reaches only when named with `--service msgraph`, `msgraphCalendar` or `msgraphContacts`. Drop one under your `[accounts.<name>]` table and fill in the client credentials.
 
 ### Google
 
@@ -157,7 +157,7 @@ extras.access_type = "offline"
 
 Use these endpoints, not the legacy `o/oauth2/auth` and `oauth2/v3/token` pair, which Google can reject at consent with "This app is blocked".
 
-Gmail and CardDAV being sensitive scopes, an unverified application of your own only works for accounts listed as test users. The Thunderbird one below is verified.
+Gmail and CardDAV being sensitive scopes, an unverified application of your own only works for accounts listed as test users. The Thunderbird one below is verified. The wizard also offers Pimalaya's application, registered for Gmail, IMAP and SMTP, Google Calendar (`calendar.events`, `calendar.calendarlist.readonly`), People and Tasks, not for CardDAV nor CalDAV.
 
 Contacts are split across two scopes that are not interchangeable: `auth/carddav` authorizes the CardDAV endpoint, `auth/contacts` the People API. Calendars are not split, CalDAV using the plain `auth/calendar` scope.
 
@@ -180,6 +180,13 @@ endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/
 endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 ```
 
+Pimalaya application, registered for Outlook IMAP and SMTP and for Graph:
+
+```toml
+client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
+endpoints.redirection = "http://localhost"
+```
+
 Public Thunderbird application:
 
 ```toml
@@ -189,7 +196,7 @@ endpoints.redirection = "https://localhost"
 
 ### Microsoft Graph
 
-The Thunderbird application above is registered for Outlook IMAP and SMTP, not for the Graph API. Graph tokens need Graph scopes from a client registered for Graph:
+The Thunderbird application above is registered for Outlook IMAP and SMTP, not for the Graph API. Graph tokens need Graph scopes from a client registered for Graph, such as the Pimalaya application above, in an account of their own (Entra issues a token for one resource):
 
 ```toml
 endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"

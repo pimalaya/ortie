@@ -121,23 +121,29 @@ impl fmt::Display for Discovered {
 /// Searches every OAuth 2.0 grant reachable from `email`, a full
 /// address or the synthesized `@domain` form, one entry per grant.
 ///
+/// Only `services` are composed when any is named, so a grant carries
+/// their scopes alone.
+///
 /// [`DISCOVERY_TIMEOUT`] bounds the fan-out, so an unreachable
 /// mechanism costs a few seconds rather than the whole prompt. An empty
 /// result means the caller stops.
-pub fn search(email: &str) -> Result<Vec<Discovered>> {
+pub fn search(email: &str, services: &[DiscoveryService]) -> Result<Vec<Discovered>> {
     let client = compose_client();
 
-    // NOTE: the OAuth-capable PIM services, POP3, WebDAV and
-    // ManageSieve never advertising an OAuth flow of their own.
-    let services = BTreeSet::from([
-        DiscoveryService::Imap,
-        DiscoveryService::Smtp,
-        DiscoveryService::Jmap,
-        DiscoveryService::Caldav,
-        DiscoveryService::Carddav,
-    ]);
+    // NOTE: unfiltered, the API services stay out: Microsoft's Graph
+    // would merge into the Outlook grant, and Entra issues one resource.
+    let services = match services {
+        [] => BTreeSet::from([
+            DiscoveryService::Imap,
+            DiscoveryService::Smtp,
+            DiscoveryService::Jmap,
+            DiscoveryService::Caldav,
+            DiscoveryService::Carddav,
+        ]),
+        services => services.iter().copied().collect(),
+    };
 
-    debug!("compose OAuth 2.0 services for {email}");
+    debug!("compose OAuth 2.0 services {services:?} for {email}");
     let configs = client.compose_all_within(email, services, DISCOVERY_TIMEOUT)?;
 
     let mut found = collect_oauth(&configs);

@@ -23,12 +23,17 @@ The parallel discovery run SHALL be bounded by a short deadline so a single unre
 ### Requirement: Grant-based service reduction
 Discovery SHALL reduce services to deduplicated OAuth 2.0 grants tagged with the services sharing them, and present the grant as the unit of choice. Two grants SHALL be reduced into one when they are the same flow against the same authorization server, compared by the host of the endpoint that starts the flow rather than by the endpoint URLs: mechanisms disagree on the exact spelling a provider's endpoints are written with, and the pick list must not ask the user to arbitrate between two spellings of one server. The first spelling seen wins the entry's endpoints, which is the highest-priority mechanism's since compose yields its outputs in mechanism-priority order, and the scopes and services of both are merged into it. The entry SHALL be labelled by its flow and the services it authenticates, never by its endpoints.
 
-`--service`, repeatable, SHALL keep only the grants tagged with at least one of the named services, written as the pick list labels them: `imap`, `pop3`, `smtp`, `jmap`, `caldav`, `carddav`, `webdav`, `managesieve`, `gmail`, `gcal`, `gpeople`, `msgraph`, `msgraphCalendar` or `msgraphContacts`. An unknown name SHALL be a usage error listing the valid ones. A grant resolved from a typed URL carries no service, the URL having named what it serves, and SHALL be kept. Without `--service`, every grant is kept.
+`--service`, repeatable, SHALL restrict discovery to the named services, written as the pick list labels them: `imap`, `pop3`, `smtp`, `jmap`, `caldav`, `carddav`, `webdav`, `managesieve`, `gmail`, `gcal`, `gpeople`, `msgraph`, `msgraphCalendar` or `msgraphContacts`. Only the named services are composed, so a grant carries their scopes alone, and the grants tagged with none of them are dropped. An unknown name SHALL be a usage error listing the valid ones. A grant resolved from a typed URL carries no service, the URL having named what it serves, and SHALL be kept. Without `--service`, discovery composes `imap`, `smtp`, `jmap`, `caldav` and `carddav`, and every grant is kept.
 
 #### Scenario: A contacts tool hands its setup over
 - GIVEN an address whose discovery yields a grant for `imap` and `smtp` and another, on a different authorization server, for `carddav`
 - WHEN `ortie configure <address> --service carddav` runs
 - THEN the `carddav` grant is carried through without a pick list
+
+#### Scenario: A mail tool hands Microsoft over
+- GIVEN a Microsoft address, whose IMAP, SMTP and Graph services share one authorization server
+- WHEN `ortie configure <address> --service imap --service smtp` runs
+- THEN the grant carries the Outlook IMAP and SMTP scopes and no Graph scope
 
 ### Requirement: Resource-bound grants
 The wizard SHALL write the chosen grant's discovered resource into `resources`, and, when the grant requests no scope of its own, preselect the scopes its protected resource advertises. A grant merged across services SHALL keep the first resource seen in compose priority order, with that resource's scopes.
@@ -55,7 +60,7 @@ The wizard SHALL NOT prompt for an account name. `--name` gives it, used exactly
 When discovery yields no OAuth 2.0 grant for the given input, or the `--service` filter leaves none, the wizard SHALL stop with a message stating it could not automatically discover a configuration for the input, naming the services when it was filtered, and inviting the user to write the account by hand from the documented sample configuration (linked). It SHALL NOT prompt for any endpoint or emit a partial account.
 
 ### Requirement: Client source preference order
-At the application step the wizard SHALL offer every way to obtain a client, sorted by the io-oauth preference order: dynamic registration (RFC 7591) when the authorization server metadata advertises a `registration_endpoint`, well-known public applications registered against the same authorization server, then a custom entry. The decision reads the metadata probed once for the run rather than probing again. The step SHALL run before the scope step, and hand it the scope options its outcome allows. A pick list holding the custom entry alone SHALL be skipped entirely, that entry asking nothing.
+At the application step the wizard SHALL offer every way to obtain a client, sorted by the io-oauth preference order: dynamic registration (RFC 7591) when the authorization server metadata advertises a `registration_endpoint`, well-known public applications, then a custom entry. A well-known application SHALL be offered only when it is registered against the same authorization server as the grant and, for a grant tagged with services, serves at least one of them; Pimalaya's own lead the others. The decision reads the metadata probed once for the run rather than probing again. The step SHALL run before the scope step, and hand it the scope options its outcome allows. A pick list holding the custom entry alone SHALL be skipped entirely, that entry asking nothing.
 
 ### Requirement: A custom application is not prompted for
 The custom entry SHALL prompt for nothing: not the client id, not its secret, not the redirection endpoint. Registering an application of one's own is the rare path, and whoever took it is already editing the configuration, so typing those fields into a wizard only to check them in a file afterwards helps nobody. The account SHALL be emitted with everything the wizard did resolve (grant, endpoints, discovered scopes, storage) and an empty `client-id`.
@@ -65,7 +70,7 @@ An account left without an application SHALL be explained on stderr immediately 
 ### Requirement: Scopes follow the application
 The scope step SHALL run after the application step, because what a token may request is a property of the application carrying it. The application step decides where the options come from:
 
-- a well-known public application offers exactly the scopes its registration is granted, with the discovered ones selected, so a scope its client id was never verified for cannot reach the authorization request;
+- a well-known public application offers exactly the scopes its registration is granted, with the discovered ones selected, so a scope its client id was never verified for cannot reach the authorization request; a discovered scope the registration is granted under narrower names selects those names instead (Pimalaya's Google application reads `https://www.googleapis.com/auth/calendar` as `calendar.events` and `calendar.calendarlist.readonly`);
 - dynamic registration prompts from the authorization server's advertised scopes, widened by the discovered ones, from inside the registration branch, since the scopes travel in the registration request;
 - a custom application prompts for nothing and leaves the discovered scopes in the fragment, since nothing exposes the scopes tied to a registration the user made by hand.
 
@@ -75,13 +80,35 @@ The scope step SHALL run after the application step, because what a token may re
 - THEN the options are the three scopes Thunderbird is registered for (`https://mail.google.com/`, `https://www.googleapis.com/auth/carddav`, `https://www.googleapis.com/auth/calendar`)
 - AND a People API scope, which that client id is not verified for, is not offered
 
+#### Scenario: Pimalaya on Google Calendar
+- GIVEN a Gmail address configured with `--service gcal` and Pimalaya's application
+- WHEN the wizard reaches the scope step
+- THEN `calendar.events` and `calendar.calendarlist.readonly` are selected
+
+### Requirement: Pimalaya's own applications
+The wizard SHALL know Pimalaya's own registrations, each offered ahead of any other well-known application registered against the same authorization server:
+
+- Google: the Desktop client of the "Pimalaya" project, its client secret shipped with it (an installed application's secret is public by nature), serving `imap`, `smtp`, `gmail`, `gcal` and `gpeople`, and registered for `https://mail.google.com/`, `https://www.googleapis.com/auth/calendar.events`, `https://www.googleapis.com/auth/calendar.calendarlist.readonly`, `https://www.googleapis.com/auth/tasks` and `https://www.googleapis.com/auth/contacts`. It does not serve `caldav` nor `carddav`, whose APIs the project leaves off.
+- Microsoft: the Pimalaya Entra application, redirected to `http://localhost`, serving `imap`, `smtp`, `msgraph`, `msgraphCalendar` and `msgraphContacts`, and registered for `offline_access`, `https://outlook.office.com/IMAP.AccessAsUser.All`, `https://outlook.office.com/SMTP.Send`, `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite`, `Tasks.ReadWrite` and `Contacts.ReadWrite`.
+
+#### Scenario: A contacts tool hands Google over
+- GIVEN a Gmail address
+- WHEN `ortie configure <address> --service gpeople` reaches the application step
+- THEN the pick list leads with Pimalaya's application
+- AND its scope step selects `https://www.googleapis.com/auth/contacts` alone
+
+#### Scenario: Google over CardDAV
+- GIVEN a Gmail address
+- WHEN `ortie configure <address> --service carddav` reaches the application step
+- THEN Pimalaya's application is not offered and Thunderbird's leads
+
 ### Requirement: Registration honours print-only
 Dynamic registration SHALL run at wizard time with `token_endpoint_auth_method` none, grant and response types from the discovered grant, the discovered scopes, and client name `Ortie`. The issued client id (and client secret as the config secret shape) land inside the printed fragment. A failed registration reports through its spinner and falls back to the remaining pick-list entries.
 
 #### Scenario: Provider without registration
 - GIVEN Google or Microsoft, which publish no `registration_endpoint`
 - WHEN the wizard reaches the application step
-- THEN the pick list leads with the pre-registered Thunderbird public application, not dynamic registration
+- THEN the pick list leads with Pimalaya's application, then Thunderbird's, not dynamic registration
 
 ### Requirement: Storage entry named, not assumed
 The storage step SHALL run in two prompts, mirroring the shared credential picker: a strategy (the credential provider CLIs relevant on the running OS, then custom shell commands), then the entry the token lives under, seeded with the account name. The strategies SHALL be ordered by whether their CLI is found on the `PATH`, the installed ones leading, and the ones that are not SHALL say so rather than be hidden: a missing provider is one package install away, and the configuration written for it is correct either way. The order within each group SHALL be the picker's own, most native first. The entry SHALL be used verbatim in both the read and the write command, so a keyring already holding a token for this account is named as it is rather than under a namespace Ortie picked.

@@ -28,16 +28,22 @@ use notify_rust::Notification;
 use pimalaya_config::secret::Secret;
 use pimalaya_stream::tls::Tls;
 use secrecy::ExposeSecret;
-use url::Url;
+use url::{Host, Url};
 
 use io_oauth::rfc6749::issue_access_token::{
     Oauth20AccessTokenErrorParams, Oauth20AccessTokenSuccessParams,
 };
 
-use crate::config::{
-    AccountConfig, EndpointsConfig, GrantConfig, HookConfig, HookStatusConfig, HooksConfig,
-    NotifyConfig, PkceConfig, StorageConfig, StoragesConfig,
+use crate::{
+    auth::get::is_loopback_redirect,
+    config::{
+        AccountConfig, EndpointsConfig, GrantConfig, HookConfig, HookStatusConfig, HooksConfig,
+        NotifyConfig, PkceConfig, StorageConfig, StoragesConfig,
+    },
 };
+
+/// The redirection bound when the account configures none.
+pub const DEFAULT_REDIRECTION: &str = "http://127.0.0.1";
 
 /// Flat, command-ready view of one OAuth 2.0 account.
 #[derive(Debug)]
@@ -210,16 +216,20 @@ impl From<AccountConfig> for Account {
 }
 
 impl Account {
-    /// Resolves the redirection URI, binding `127.0.0.1:0` for its
-    /// `http://127.0.0.1:<port>` URL when none is configured.
+    /// Resolves the redirection URI, binding an ephemeral port for
+    /// `http://127.0.0.1` when none is configured, or for a configured
+    /// http loopback URI naming no port.
     pub fn redirection(&self) -> Result<Cow<'_, Url>> {
-        if let Some(url) = self.redirection_endpoint.as_ref() {
-            return Ok(Cow::Borrowed(url));
-        }
+        let url = match self.redirection_endpoint.as_ref() {
+            Some(url) if url.scheme() != "http" || url.port().is_some() => {
+                return Ok(Cow::Borrowed(url));
+            }
+            Some(url) if !is_loopback_redirect(url) => return Ok(Cow::Borrowed(url)),
+            Some(url) => url.clone(),
+            None => DEFAULT_REDIRECTION.parse()?,
+        };
 
-        let listener = TcpListener::bind("127.0.0.1:0")?;
-        let port = listener.local_addr()?.port();
-        let url: Url = format!("http://127.0.0.1:{port}").parse()?;
+        let (url, _) = bind_loopback(&url)?;
 
         Ok(Cow::Owned(url))
     }
@@ -349,6 +359,38 @@ impl Account {
         let notify = None;
         execute_error_hook(self.on_refresh_error_hook_command.as_mut(), notify, res);
     }
+}
+
+/// Binds a listener for the loopback redirection `uri`, on an ephemeral
+/// port when an http `uri` names none (RFC 8252 section 7.3), and
+/// returns `uri` carrying the bound port.
+pub fn bind_loopback(uri: &Url) -> Result<(Url, TcpListener)> {
+    let port = match uri.port() {
+        Some(port) => port,
+        None if uri.scheme() == "http" => 0,
+        None => uri
+            .port_or_known_default()
+            .ok_or_else(|| anyhow!("Missing port in redirection {uri}"))?,
+    };
+
+    let listener = match uri.host() {
+        Some(Host::Domain(domain)) => TcpListener::bind((domain, port)),
+        Some(Host::Ipv4(ip)) => TcpListener::bind((ip, port)),
+        Some(Host::Ipv6(ip)) => TcpListener::bind((ip, port)),
+        None => bail!("Missing host in redirection {uri}"),
+    }
+    .with_context(|| format!("Bind the redirection listener {uri}"))?;
+
+    let mut uri = uri.clone();
+
+    if port == 0 {
+        let port = listener.local_addr()?.port();
+
+        uri.set_port(Some(port))
+            .map_err(|()| anyhow!("Cannot set port {port} on redirection {uri}"))?;
+    }
+
+    Ok((uri, listener))
 }
 
 /// Current Unix epoch seconds, stamped as the local token issuance time.
@@ -512,5 +554,33 @@ where
 
     if let Err(err) = notif {
         log::debug!("execute notify hook error: {err}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::TcpListener;
+
+    use crate::account::bind_loopback;
+
+    #[test]
+    fn a_port_less_http_loopback_binds_an_ephemeral_port() {
+        let (uri, listener) = bind_loopback(&"http://localhost".parse().unwrap()).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        assert_ne!(port, 80);
+        assert_eq!(uri.as_str(), format!("http://localhost:{port}/"));
+    }
+
+    #[test]
+    fn a_loopback_naming_its_port_keeps_it() {
+        let free = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = free.local_addr().unwrap().port();
+        drop(free);
+
+        let uri = format!("http://127.0.0.1:{port}/cb").parse().unwrap();
+        let (bound, _) = bind_loopback(&uri).unwrap();
+
+        assert_eq!(bound, uri);
     }
 }

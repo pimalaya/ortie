@@ -430,9 +430,9 @@ fn configure_discovery(input: &str, services: &[DiscoveryService]) -> Result<Acc
     let mut found = if input.contains("://") {
         search::search_issuer(input)?
     } else if input.contains('@') {
-        search::search(input)?
+        search::search(input, services)?
     } else {
-        search::search(&format!("@{input}"))?
+        search::search(&format!("@{input}"), services)?
     };
 
     search::retain_services(&mut found, services);
@@ -593,6 +593,9 @@ pub struct AccountDraft {
     pub auto_refresh: bool,
     /// The commands persisting and reading back the token.
     pub storage: Option<Storage>,
+    /// The PIM services the discovered grant authenticates, none for a
+    /// grant resolved from a typed URL. Not part of the fragment.
+    pub services: BTreeSet<DiscoveryService>,
 }
 
 impl AccountDraft {
@@ -611,6 +614,7 @@ impl AccountDraft {
             resources: Vec::new(),
             auto_refresh: true,
             storage: None,
+            services: BTreeSet::new(),
         }
     }
 }
@@ -633,6 +637,7 @@ impl From<Discovered> for AccountDraft {
                 },
                 scopes: default_scopes(scope, resource.is_some(), scopes_supported),
                 resources: resource.into_iter().collect(),
+                services: discovered.services,
                 ..Self::empty()
             },
             DiscoveryAuthMethod::OauthDeviceAuthorizationGrant {
@@ -650,6 +655,7 @@ impl From<Discovered> for AccountDraft {
                 },
                 scopes: default_scopes(scope, resource.is_some(), scopes_supported),
                 resources: resource.into_iter().collect(),
+                services: discovered.services,
                 ..Self::empty()
             },
             // NOTE: search resolves every issuer into one of the grants

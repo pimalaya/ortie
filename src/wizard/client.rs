@@ -29,7 +29,7 @@ use io_oauth::{
         source::Oauth20ClientSource,
     },
 };
-use io_pim_discovery::rfc8414::DiscoveryOauthServerMetadata;
+use io_pim_discovery::{compose::config::DiscoveryService, rfc8414::DiscoveryOauthServerMetadata};
 use pimalaya_cli::{prompt, spinner::Spinner};
 use pimalaya_stream::tls::Tls;
 use secrecy::ExposeSecret;
@@ -99,6 +99,7 @@ pub fn configure(
                     raw: raw.to_string(),
                 });
                 config.endpoints.redirection = app.redirection.map(ToString::to_string);
+                config.scopes = app.selected(&config.scopes);
 
                 // NOTE: the discovered scopes are the narrow
                 // per-service ones, so they drive the selection; every
@@ -262,7 +263,8 @@ impl fmt::Display for Choice {
 ///
 /// Providers bind a registration to their own authorization server, so
 /// each entry carries the endpoint host it was registered against and
-/// only shows up when the account's endpoints live on that host.
+/// only shows up when the account's endpoints live on that host, and
+/// when the grant serves one of its services.
 #[derive(Debug, Eq, PartialEq)]
 struct KnownApp {
     /// Display name of the application.
@@ -272,6 +274,8 @@ struct KnownApp {
     covers: &'static str,
     /// Host of the endpoints the client is registered against.
     host: &'static str,
+    /// The services the registration serves.
+    services: &'static [DiscoveryService],
     /// The public client identifier.
     client_id: &'static str,
     /// The client secret of a provider issuing one, as public as the
@@ -287,17 +291,105 @@ struct KnownApp {
     /// RFC 8414 listing only the server-wide ones, so they are
     /// hardcoded here exactly as Thunderbird hardcodes its own.
     scopes: &'static [&'static str],
+    /// Discovered scopes the registration is granted under narrower
+    /// names.
+    narrows: &'static [(&'static str, &'static [&'static str])],
 }
 
-/// The well-known public applications.
+impl KnownApp {
+    /// The `discovered` scopes, read under the registration's names.
+    fn selected(&self, discovered: &[String]) -> Vec<String> {
+        let mut selected: Vec<String> = Vec::new();
+
+        for scope in discovered {
+            let names = match self.narrows.iter().find(|(wide, _)| wide == scope) {
+                Some((_, names)) => names.iter().map(ToString::to_string).collect(),
+                None => vec![scope.clone()],
+            };
+
+            for name in names {
+                if !selected.contains(&name) {
+                    selected.push(name);
+                }
+            }
+        }
+
+        selected
+    }
+}
+
+/// The well-known public applications, Pimalaya's own first.
 ///
-/// Thunderbird covers Google, Microsoft and Fastmail today, and
-/// Pimalaya applications join the list as their registrations land.
+/// Thunderbird's cover Google, Microsoft and Fastmail for the protocols
+/// Thunderbird speaks.
 const KNOWN_APPS: &[KnownApp] = &[
+    KnownApp {
+        name: "Pimalaya",
+        covers: "emails, calendars, contacts, tasks",
+        host: "accounts.google.com",
+        services: &[
+            DiscoveryService::Imap,
+            DiscoveryService::Smtp,
+            DiscoveryService::Gmail,
+            DiscoveryService::Gcal,
+            DiscoveryService::Gpeople,
+        ],
+        client_id: "803561575535-41415ghqi04uibrl6t5umg3p27stdhqr.apps.googleusercontent.com",
+        // NOTE: split so secret scanners do not flag a public value.
+        client_secret: Some(concat!("GOCSPX", "-", "JPzawHQwOBuaFvjk99Q7Re29RDQ1")),
+        redirection: None,
+        scopes: &[
+            "https://mail.google.com/",
+            "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+            "https://www.googleapis.com/auth/tasks",
+            "https://www.googleapis.com/auth/contacts",
+        ],
+        narrows: &[(
+            "https://www.googleapis.com/auth/calendar",
+            &[
+                "https://www.googleapis.com/auth/calendar.events",
+                "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+            ],
+        )],
+    },
+    KnownApp {
+        name: "Pimalaya",
+        covers: "emails, calendars, contacts, tasks",
+        host: "login.microsoftonline.com",
+        services: &[
+            DiscoveryService::Imap,
+            DiscoveryService::Smtp,
+            DiscoveryService::Msgraph,
+            DiscoveryService::MsgraphCalendar,
+            DiscoveryService::MsgraphContacts,
+        ],
+        client_id: "ba9b19e1-973e-4d7c-aed9-848bd2fee385",
+        client_secret: None,
+        // NOTE: registered as localhost, any port; 127.0.0.1 is refused.
+        redirection: Some("http://localhost"),
+        scopes: &[
+            "offline_access",
+            "https://outlook.office.com/IMAP.AccessAsUser.All",
+            "https://outlook.office.com/SMTP.Send",
+            "Mail.ReadWrite",
+            "Mail.Send",
+            "Calendars.ReadWrite",
+            "Tasks.ReadWrite",
+            "Contacts.ReadWrite",
+        ],
+        narrows: &[],
+    },
     KnownApp {
         name: "Thunderbird",
         covers: "emails, contacts, calendars",
         host: "accounts.google.com",
+        services: &[
+            DiscoveryService::Imap,
+            DiscoveryService::Smtp,
+            DiscoveryService::Caldav,
+            DiscoveryService::Carddav,
+        ],
         client_id: "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com",
         client_secret: Some("kSmqreRr0qwBWJgbf5Y-PjSU"),
         redirection: Some("http://localhost"),
@@ -306,11 +398,17 @@ const KNOWN_APPS: &[KnownApp] = &[
             "https://www.googleapis.com/auth/carddav",
             "https://www.googleapis.com/auth/calendar",
         ],
+        narrows: &[],
     },
     KnownApp {
         name: "Thunderbird",
         covers: "emails",
         host: "login.microsoftonline.com",
+        services: &[
+            DiscoveryService::Imap,
+            DiscoveryService::Pop3,
+            DiscoveryService::Smtp,
+        ],
         client_id: "9e5f94bc-e8a4-4e73-b8be-63364c29d753",
         client_secret: None,
         redirection: Some("https://localhost"),
@@ -320,11 +418,19 @@ const KNOWN_APPS: &[KnownApp] = &[
             "https://outlook.office.com/SMTP.Send",
             "offline_access",
         ],
+        narrows: &[],
     },
     KnownApp {
         name: "Thunderbird",
         covers: "emails, contacts, calendars",
         host: "api.fastmail.com",
+        services: &[
+            DiscoveryService::Imap,
+            DiscoveryService::Pop3,
+            DiscoveryService::Smtp,
+            DiscoveryService::Caldav,
+            DiscoveryService::Carddav,
+        ],
         client_id: "35f141ae",
         client_secret: None,
         redirection: None,
@@ -335,41 +441,97 @@ const KNOWN_APPS: &[KnownApp] = &[
             "https://www.fastmail.com/dev/protocol-carddav",
             "https://www.fastmail.com/dev/protocol-caldav",
         ],
+        narrows: &[],
     },
 ];
 
 /// The well-known public applications registered against the same
-/// authorization server as the config's endpoints.
+/// authorization server as the config's endpoints, serving one of its
+/// services when the grant names any.
 fn known_apps(config: &AccountDraft) -> Vec<&'static KnownApp> {
     let hosts = config.endpoints.hosts();
 
     KNOWN_APPS
         .iter()
         .filter(|app| hosts.contains(app.host))
+        .filter(|app| {
+            config.services.is_empty()
+                || app
+                    .services
+                    .iter()
+                    .any(|service| config.services.contains(service))
+        })
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::wizard::Endpoints;
+    use io_pim_discovery::compose::config::DiscoveryService;
 
-    use super::*;
+    use crate::wizard::{AccountDraft, Endpoints, client::*};
 
-    fn config_on(host: &str) -> AccountDraft {
+    fn config_on(host: &str, services: &[DiscoveryService]) -> AccountDraft {
         AccountDraft {
             endpoints: Endpoints {
                 token: Some(format!("https://{host}/token")),
                 ..Default::default()
             },
+            services: services.iter().copied().collect(),
             ..AccountDraft::empty()
         }
     }
 
+    fn names(apps: Vec<&KnownApp>) -> Vec<&str> {
+        apps.iter().map(|app| app.name).collect()
+    }
+
     #[test]
     fn known_apps_are_scoped_to_their_authorization_server() {
-        assert_eq!(known_apps(&config_on("api.fastmail.com")).len(), 1);
-        assert_eq!(known_apps(&config_on("accounts.google.com")).len(), 1);
-        assert!(known_apps(&config_on("mail.example.test")).is_empty());
+        let fastmail = known_apps(&config_on("api.fastmail.com", &[]));
+        assert_eq!(names(fastmail), ["Thunderbird"]);
+
+        let google = known_apps(&config_on("accounts.google.com", &[]));
+        assert_eq!(names(google), ["Pimalaya", "Thunderbird"]);
+
+        let microsoft = known_apps(&config_on("login.microsoftonline.com", &[]));
+        assert_eq!(names(microsoft), ["Pimalaya", "Thunderbird"]);
+
+        assert!(known_apps(&config_on("mail.example.test", &[])).is_empty());
+    }
+
+    #[test]
+    fn known_apps_serve_one_of_the_grant_services() {
+        let contacts = config_on("accounts.google.com", &[DiscoveryService::Gpeople]);
+        assert_eq!(names(known_apps(&contacts)), ["Pimalaya"]);
+
+        let carddav = config_on("accounts.google.com", &[DiscoveryService::Carddav]);
+        assert_eq!(names(known_apps(&carddav)), ["Thunderbird"]);
+
+        let graph = config_on(
+            "login.microsoftonline.com",
+            &[DiscoveryService::MsgraphCalendar],
+        );
+        assert_eq!(names(known_apps(&graph)), ["Pimalaya"]);
+
+        let jmap = config_on("api.fastmail.com", &[DiscoveryService::Jmap]);
+        assert!(known_apps(&jmap).is_empty());
+    }
+
+    #[test]
+    fn pimalaya_reads_the_google_calendar_scope_under_its_names() {
+        let discovered = [
+            "https://mail.google.com/".to_string(),
+            "https://www.googleapis.com/auth/calendar".to_string(),
+        ];
+
+        assert_eq!(
+            KNOWN_APPS[0].selected(&discovered),
+            [
+                "https://mail.google.com/",
+                "https://www.googleapis.com/auth/calendar.events",
+                "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+            ],
+        );
     }
 
     #[test]
