@@ -20,6 +20,7 @@
 use std::{collections::BTreeSet, fmt, time::Duration};
 
 use anyhow::{Context, Result};
+use clap::builder::{PossibleValuesParser, TypedValueParser};
 use io_pim_discovery::{
     compose::{
         client::DiscoveryComposeClientStd,
@@ -51,6 +52,25 @@ const AUTHORIZATION_CODE_GRANT_TYPE: &str = "authorization_code";
 /// The `grant_type` of the device authorization grant (RFC 8628 section
 /// 3.4).
 const DEVICE_CODE_GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:device_code";
+
+/// Every service a grant can be tagged with, in the order `--service`
+/// lists them.
+const SERVICES: [DiscoveryService; 14] = [
+    DiscoveryService::Imap,
+    DiscoveryService::Pop3,
+    DiscoveryService::Smtp,
+    DiscoveryService::Jmap,
+    DiscoveryService::Caldav,
+    DiscoveryService::Carddav,
+    DiscoveryService::Webdav,
+    DiscoveryService::Managesieve,
+    DiscoveryService::Gmail,
+    DiscoveryService::Gcal,
+    DiscoveryService::Gpeople,
+    DiscoveryService::Msgraph,
+    DiscoveryService::MsgraphCalendar,
+    DiscoveryService::MsgraphContacts,
+];
 
 /// One deduplicated OAuth 2.0 grant and the services sharing it.
 ///
@@ -241,6 +261,55 @@ pub fn wizard_tls() -> Tls {
             ..Default::default()
         },
         ..Default::default()
+    }
+}
+
+/// Parses a `--service` value, one of the wire names the pick list
+/// labels the services with, an unknown one listing the valid ones.
+pub fn service_parser() -> impl TypedValueParser<Value = DiscoveryService> {
+    PossibleValuesParser::new(SERVICES.map(service_name)).map(|name| {
+        SERVICES
+            .into_iter()
+            .find(|service| service_name(*service) == name)
+            .expect("a possible value names a service")
+    })
+}
+
+/// Keeps the grants tagged with at least one of `services`, every grant
+/// when none is named.
+///
+/// A grant resolved from a typed URL carries no service, the URL having
+/// named what it serves, so it is kept.
+pub fn retain_services(found: &mut Vec<Discovered>, services: &[DiscoveryService]) {
+    if services.is_empty() {
+        return;
+    }
+
+    found.retain(|grant| {
+        grant.services.is_empty()
+            || services
+                .iter()
+                .any(|service| grant.services.contains(service))
+    });
+}
+
+/// Wire name of a service, for the pick-list labels and `--service`.
+pub fn service_name(service: DiscoveryService) -> &'static str {
+    match service {
+        DiscoveryService::Imap => "imap",
+        DiscoveryService::Pop3 => "pop3",
+        DiscoveryService::Smtp => "smtp",
+        DiscoveryService::Jmap => "jmap",
+        DiscoveryService::Caldav => "caldav",
+        DiscoveryService::Carddav => "carddav",
+        DiscoveryService::Webdav => "webdav",
+        DiscoveryService::Managesieve => "managesieve",
+        DiscoveryService::Gmail => "gmail",
+        DiscoveryService::Gcal => "gcal",
+        DiscoveryService::Gpeople => "gpeople",
+        DiscoveryService::Msgraph => "msgraph",
+        DiscoveryService::MsgraphCalendar => "msgraphCalendar",
+        DiscoveryService::MsgraphContacts => "msgraphContacts",
     }
 }
 
@@ -523,26 +592,6 @@ fn is_oauth(method: &DiscoveryAuthMethod) -> bool {
             | DiscoveryAuthMethod::OauthDeviceAuthorizationGrant { .. }
             | DiscoveryAuthMethod::OauthIssuer(_)
     )
-}
-
-/// Wire name of a service, for the pick-list labels.
-fn service_name(service: DiscoveryService) -> &'static str {
-    match service {
-        DiscoveryService::Imap => "imap",
-        DiscoveryService::Pop3 => "pop3",
-        DiscoveryService::Smtp => "smtp",
-        DiscoveryService::Jmap => "jmap",
-        DiscoveryService::Caldav => "caldav",
-        DiscoveryService::Carddav => "carddav",
-        DiscoveryService::Webdav => "webdav",
-        DiscoveryService::Managesieve => "managesieve",
-        DiscoveryService::Gmail => "gmail",
-        DiscoveryService::Gcal => "gcal",
-        DiscoveryService::Gpeople => "gpeople",
-        DiscoveryService::Msgraph => "msgraph",
-        DiscoveryService::MsgraphCalendar => "msgraphCalendar",
-        DiscoveryService::MsgraphContacts => "msgraphContacts",
-    }
 }
 
 #[cfg(test)]
@@ -848,6 +897,46 @@ mod tests {
         assert_eq!(resource.as_deref(), Some("https://api.example.test/jmap"));
         assert_eq!(scope.as_deref(), Some("mail"));
         assert_eq!(scopes_supported, ["mail"]);
+    }
+
+    /// A mail grant, a contacts grant on another server, and the untagged
+    /// grant a typed URL resolves to.
+    #[test]
+    fn the_service_filter_keeps_the_grants_serving_a_named_service() {
+        let tagged = |authorization: &str, services: &[DiscoveryService]| Discovered {
+            method: code_grant(authorization, "https://as/token", None),
+            services: services.iter().copied().collect(),
+        };
+
+        let found = || {
+            vec![
+                tagged(
+                    "https://mail/auth",
+                    &[DiscoveryService::Imap, DiscoveryService::Smtp],
+                ),
+                tagged("https://dav/auth", &[DiscoveryService::Carddav]),
+                tagged("https://typed/auth", &[]),
+            ]
+        };
+
+        let mut all = found();
+        retain_services(&mut all, &[]);
+        assert_eq!(all, found());
+
+        let mut contacts = found();
+        retain_services(&mut contacts, &[DiscoveryService::Carddav]);
+        assert_eq!(contacts, [found().remove(1), found().remove(2)]);
+
+        let mut any = found();
+        retain_services(
+            &mut any,
+            &[DiscoveryService::Smtp, DiscoveryService::Caldav],
+        );
+        assert_eq!(any, [found().remove(0), found().remove(2)]);
+
+        let mut none = found();
+        retain_services(&mut none, &[DiscoveryService::Gmail]);
+        assert_eq!(none, [found().remove(2)]);
     }
 
     #[test]

@@ -138,6 +138,8 @@ Run `ortie` with no command and it offers to generate a first account, which `or
 
 What it cannot discover it does not ask for: the annotated [config.sample.toml](./config.sample.toml) is the reference for the rest. Run `ortie auth get` afterwards to authorize the account and store its first token.
 
+Another tool can hand its OAuth 2.0 setup over: `ortie configure alice@example.org --name work --service imap --service smtp` skips the address prompt, names the account `work` as written, and offers only the grants serving IMAP or SMTP. When `work` already exists, it asks whether to keep that account instead.
+
 A configuration is loaded from the first valid path among $XDG_CONFIG_HOME/ortie/config.toml, $HOME/.config/ortie/config.toml and $HOME/.ortierc. Override it with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`, `:`-separated to deep-merge several files on top of the first.
 
 An OAuth 2.0 application is needed too. The wizard offers three, most preferred first: dynamic registration when the provider advertises it, a public application ([Thunderbird credentials](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs) cover most consumer providers), or your own, left as an empty `client-id` to fill in.

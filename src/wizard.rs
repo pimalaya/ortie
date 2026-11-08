@@ -14,6 +14,10 @@
 //! address fans out over io-pim-discovery (see [`search`]); an issuer
 //! resolves through its RFC 8414 metadata alone.
 //!
+//! Another tool hands its OAuth 2.0 setup over by giving `configure`
+//! that input, the account name and the services it needs, so its user
+//! is asked neither twice nor about grants it does not use.
+//!
 //! Every OAuth 2.0 grant that turns up becomes one selectable
 //! configuration, tagged with the services sharing it. Discovering
 //! nothing stops the wizard on the documented sample rather than
@@ -41,14 +45,15 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use clap::Parser;
+use clap::{Parser, builder::NonEmptyStringValueParser};
 use pimalaya_cli::{printer::Printer, prompt, spinner::Spinner};
 use schemars::JsonSchema;
 use serde::Serialize;
 use url::Url;
 
 use io_pim_discovery::{
-    compose::config::DiscoveryAuthMethod, rfc8414::DiscoveryOauthServerMetadata,
+    compose::config::{DiscoveryAuthMethod, DiscoveryService},
+    rfc8414::DiscoveryOauthServerMetadata,
 };
 
 use pimalaya_config::toml::TomlConfig;
@@ -67,8 +72,28 @@ pub const CONFIG_SAMPLE_URL: &str =
 /// configuration already there, or prints it to be placed by hand.
 /// Anything discovery does not cover is written by hand, every field
 /// being documented in the sample configuration.
-#[derive(Debug, Parser)]
-pub struct ConfigureCommand;
+#[derive(Debug, Default, Parser)]
+pub struct ConfigureCommand {
+    /// The email address, bare domain or issuer URL to discover.
+    ///
+    /// Prompted for when omitted.
+    #[arg(value_name = "INPUT")]
+    pub input: Option<String>,
+    /// The account name, used as written.
+    ///
+    /// Derived from the input when omitted, then suffixed until free. An
+    /// account already holding this name is offered to be kept as it is,
+    /// nothing being discovered nor written then.
+    #[arg(long, value_name = "NAME", value_parser = NonEmptyStringValueParser::new())]
+    pub name: Option<String>,
+    /// Keep only the grants serving this service.
+    ///
+    /// Repeatable, a grant serving any of the given services being kept.
+    /// The grants of a typed URL carry no service and are always kept.
+    #[arg(long = "service", value_name = "SERVICE")]
+    #[arg(value_parser = search::service_parser())]
+    pub services: Vec<DiscoveryService>,
+}
 
 impl ConfigureCommand {
     /// Runs the wizard, then saves, appends or prints the account.
@@ -88,35 +113,73 @@ impl ConfigureCommand {
             );
         }
 
-        run(printer, config_paths)
+        run(self, printer, config_paths)
     }
 }
 
 /// Prompts the account out, then saves, appends or prints it.
 ///
-/// The account name is derived from the input rather than prompted,
-/// being only the TOML table key, and the generated account claims the
-/// default only when no other one does.
-fn run(printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
+/// The account name is `--name` as written, else derived from the input
+/// and suffixed until free, being only the TOML table key. A `--name`
+/// the configuration already holds is offered to be kept before anything
+/// else is asked. The generated account claims the default only when no
+/// other one does.
+fn run(
+    command: ConfigureCommand,
+    printer: &mut impl Printer,
+    config_paths: &[PathBuf],
+) -> Result<()> {
+    let ConfigureCommand {
+        input,
+        name,
+        services,
+    } = command;
+
     let path = Config::target_path(config_paths)?;
     let existing = ExistingConfig::read(&path)?;
 
-    let input = prompt::text("Email address:", None)?;
+    if let Some(name) = &name
+        && let Some(kept) = existing.as_ref().and_then(|config| config.keep(name))
+    {
+        let prompt = format!(
+            "Account `{name}` already exists in {}, keep it?",
+            path.display()
+        );
+
+        if !prompt::bool(prompt, true)? {
+            bail!(
+                "Account `{name}` already exists in {}, remove or rename it there first",
+                path.display()
+            );
+        }
+
+        return printer.out(kept);
+    }
+
+    let input = match input {
+        Some(input) => input,
+        None => prompt::text("Email address:", None)?,
+    };
+
     let input = input.trim();
     if input.is_empty() {
         bail!("Empty input: enter an email address, a bare domain, or an issuer URL");
     }
 
-    // NOTE: the account name is only the TOML table key, so it is
-    // derived from the input rather than prompted.
-    let account_name = account_name(&default_account_name(input), existing.as_ref());
-    let mut config = configure_discovery(input)?;
+    let account_name = match name {
+        Some(name) => name,
+        None => account_name(&default_account_name(input), existing.as_ref()),
+    };
+
+    let mut config = configure_discovery(input, &services)?;
     config.name = account_name;
 
     // NOTE: a second `default = true` would make the account every
     // command picks depend on map ordering, so the generated one claims
     // the default only when no other account does.
-    config.default = !existing.as_ref().is_some_and(|config| config.has_default);
+    config.default = existing
+        .as_ref()
+        .is_none_or(|config| config.defaults.is_empty());
 
     // NOTE: the metadata answers two later steps at once, its
     // registration endpoint deciding whether dynamic registration is on
@@ -156,10 +219,10 @@ fn run(printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
 }
 
 /// What a configuration already on disk constrains in the generated
-/// account: the names it takes, and whether it claims the default.
+/// account: the names it takes, and which of them claim the default.
 struct ExistingConfig {
     names: Vec<String>,
-    has_default: bool,
+    defaults: Vec<String>,
 }
 
 impl ExistingConfig {
@@ -177,10 +240,32 @@ impl ExistingConfig {
         let config = Config::from_paths(&[path.to_path_buf()])
             .with_context(|| format!("Read the configuration at {}", path.display()))?;
 
+        let defaults = config
+            .accounts
+            .iter()
+            .filter(|(_, account)| account.default)
+            .map(|(name, _)| name.clone())
+            .collect();
+
         Ok(Some(Self {
             names: config.accounts.keys().cloned().collect(),
-            has_default: config.accounts.values().any(|account| account.default),
+            defaults,
         }))
+    }
+
+    /// The output keeping the account named exactly `name`, `None` when
+    /// the configuration does not hold it.
+    fn keep(&self, name: &str) -> Option<ConfigureOutput> {
+        self.holds(name).then(|| ConfigureOutput {
+            name: name.to_string(),
+            default: self.defaults.iter().any(|default| default == name),
+            document: None,
+        })
+    }
+
+    /// Whether an account is named exactly `name`.
+    fn holds(&self, name: &str) -> bool {
+        self.names.iter().any(|held| held == name)
     }
 }
 
@@ -191,11 +276,9 @@ impl ExistingConfig {
 /// whole document fail to parse, taking down the accounts that used to
 /// work with it.
 fn account_name(base: &str, existing: Option<&ExistingConfig>) -> String {
-    let taken = existing
-        .map(|config| config.names.as_slice())
-        .unwrap_or(&[]);
+    let taken = |name: &str| existing.is_some_and(|config| config.holds(name));
 
-    if !taken.iter().any(|name| name == base) {
+    if !taken(base) {
         return base.to_string();
     }
 
@@ -204,7 +287,7 @@ fn account_name(base: &str, existing: Option<&ExistingConfig>) -> String {
     loop {
         let name = format!("{base}-{suffix}");
 
-        if !taken.contains(&name) {
+        if !taken(&name) {
             return name;
         }
 
@@ -331,12 +414,14 @@ fn print_saved(path: &Path, config: &AccountDraft) {
     }
 }
 
-/// Searches the OAuth 2.0 grants reachable from `input`, then folds the
-/// one the user picks into a fresh account.
+/// Searches the OAuth 2.0 grants reachable from `input`, keeps the ones
+/// serving `services`, then folds the one the user picks into a fresh
+/// account.
 ///
-/// Discovering nothing stops the wizard rather than prompting for
-/// hand-entered endpoints (see [`stop_undiscovered`]).
-fn configure_discovery(input: &str) -> Result<AccountDraft> {
+/// Discovering nothing, or nothing serving `services`, stops the wizard
+/// rather than prompting for hand-entered endpoints (see
+/// [`stop_undiscovered`]).
+fn configure_discovery(input: &str, services: &[DiscoveryService]) -> Result<AccountDraft> {
     let spinner = Spinner::start("Searching for OAuth 2.0 grants");
 
     // NOTE: an issuer URL names an authorization server directly, so
@@ -350,9 +435,11 @@ fn configure_discovery(input: &str) -> Result<AccountDraft> {
         search::search(&format!("@{input}"))?
     };
 
+    search::retain_services(&mut found, services);
+
     if found.is_empty() {
         spinner.failure("No OAuth 2.0 grant found");
-        return stop_undiscovered(input);
+        return stop_undiscovered(input, services);
     }
 
     spinner.success(format!("Found {} OAuth 2.0 grant(s)", found.len()));
@@ -367,13 +454,26 @@ fn configure_discovery(input: &str) -> Result<AccountDraft> {
     Ok(AccountDraft::from(choice))
 }
 
-/// Stops the wizard when discovery found nothing for `input`.
+/// Stops the wizard when discovery found nothing for `input`, or
+/// nothing serving `services`.
 ///
 /// It errors out on the documented sample rather than dropping into a
 /// hand-entry flow, the wizard configuring only what it discovers.
-fn stop_undiscovered(input: &str) -> Result<AccountDraft> {
+fn stop_undiscovered(input: &str, services: &[DiscoveryService]) -> Result<AccountDraft> {
+    let serving = match services {
+        [] => String::new(),
+        services => {
+            let names: Vec<_> = services
+                .iter()
+                .map(|service| search::service_name(*service))
+                .collect();
+
+            format!(" serving {}", names.join(", "))
+        }
+    };
+
     bail!(
-        "Could not automatically discover an OAuth 2.0 grant for `{input}`.\n\n\
+        "Could not automatically discover an OAuth 2.0 grant{serving} for `{input}`.\n\n\
          Write your account configuration by hand instead, starting from the \
          documented sample:\n  {CONFIG_SAMPLE_URL}"
     )
@@ -419,21 +519,24 @@ fn first_label(host: &str) -> String {
     host.split('.').next().unwrap_or(host).to_string()
 }
 
-/// The account the wizard printed instead of placing it.
+/// The account the wizard printed instead of placing it, or the one
+/// `--name` kept.
 ///
 /// Its text form is the bare TOML fragment, the framing living on
 /// stderr, so `ortie configure > <config>` holds a loadable document.
 /// Under `--json`, the fragment travels as `document`, beside the two
-/// facts a script needs without parsing it.
-#[derive(Debug, JsonSchema, Serialize)]
+/// facts a script needs without parsing it. A kept account has no
+/// fragment, and its text form names it instead.
+#[derive(Debug, Eq, PartialEq, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigureOutput {
     /// The account name, which is the `[accounts.<name>]` table key.
     name: String,
     /// Whether the account claims the default.
     default: bool,
-    /// The rendered TOML document.
-    document: String,
+    /// The rendered TOML document, `null` when `--name` kept an account
+    /// the configuration already held.
+    document: Option<String>,
 }
 
 impl From<&AccountDraft> for ConfigureOutput {
@@ -441,14 +544,17 @@ impl From<&AccountDraft> for ConfigureOutput {
         Self {
             name: draft.name.clone(),
             default: draft.default,
-            document: draft.to_string(),
+            document: Some(draft.to_string()),
         }
     }
 }
 
 impl fmt::Display for ConfigureOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.document)
+        match &self.document {
+            Some(document) => f.write_str(document),
+            None => writeln!(f, "Account `{}` kept as it is", self.name),
+        }
     }
 }
 
@@ -776,11 +882,58 @@ fn default_scopes(
 
 #[cfg(test)]
 mod tests {
+    use clap::error::ErrorKind;
     use pimalaya_config::toml::TomlConfig;
 
-    use crate::config::{Config, GrantConfig, PkceConfig};
+    use crate::{
+        cli::{Cli, Command},
+        config::{Config, GrantConfig, PkceConfig},
+    };
 
     use super::*;
+
+    /// The invocation the other Pimalaya CLIs hand their OAuth 2.0 setup
+    /// over with, services spelled as the pick list labels them.
+    #[test]
+    fn the_hand_off_invocation_parses() {
+        let cli = Cli::try_parse_from([
+            "ortie",
+            "configure",
+            "alice@example.org",
+            "--name",
+            "work",
+            "--service",
+            "imap",
+            "--service",
+            "msgraphCalendar",
+        ])
+        .expect("parse the hand-off invocation");
+
+        let Some(Command::Configure(command)) = cli.cmd else {
+            panic!("expected the configure command");
+        };
+
+        assert_eq!(command.input.as_deref(), Some("alice@example.org"));
+        assert_eq!(command.name.as_deref(), Some("work"));
+        assert_eq!(
+            command.services,
+            [DiscoveryService::Imap, DiscoveryService::MsgraphCalendar]
+        );
+    }
+
+    #[test]
+    fn a_bad_service_or_an_empty_name_is_a_usage_error() {
+        let err = Cli::try_parse_from(["ortie", "configure", "--service", "imaps"])
+            .expect_err("refuse an unknown service");
+
+        assert_eq!(err.kind(), ErrorKind::InvalidValue);
+        assert!(err.to_string().contains("msgraphContacts"), "{err}");
+
+        let err = Cli::try_parse_from(["ortie", "configure", "--name", ""])
+            .expect_err("refuse an empty name");
+
+        assert_eq!(err.kind(), ErrorKind::InvalidValue);
+    }
 
     /// An address takes the domain's first label, never the local part.
     ///
@@ -1022,12 +1175,34 @@ mod frame_tests {
     fn a_taken_name_gets_a_suffix() {
         let existing = ExistingConfig {
             names: vec!["posteo".to_string(), "posteo-2".to_string()],
-            has_default: true,
+            defaults: vec!["posteo".to_string()],
         };
 
         assert_eq!(account_name("posteo", None), "posteo");
         assert_eq!(account_name("posteo", Some(&existing)), "posteo-3");
         assert_eq!(account_name("gmail", Some(&existing)), "gmail");
+    }
+
+    /// A given name is never suffixed: it is held, and offered to be kept
+    /// with its own default flag, only when written exactly as it is.
+    #[test]
+    fn a_given_name_is_kept_only_when_held_as_written() {
+        let existing = ExistingConfig {
+            names: vec!["work".to_string(), "posteo".to_string()],
+            defaults: vec!["work".to_string()],
+        };
+
+        let kept = |name: &str, default: bool| ConfigureOutput {
+            name: name.to_string(),
+            default,
+            document: None,
+        };
+
+        assert_eq!(existing.keep("work"), Some(kept("work", true)));
+        assert_eq!(existing.keep("posteo"), Some(kept("posteo", false)));
+        assert_eq!(existing.keep("Work"), None);
+        assert_eq!(existing.keep("posteo-2"), None);
+        assert_eq!(existing.keep("post"), None);
     }
 
     #[test]
@@ -1051,7 +1226,7 @@ mod frame_tests {
             .expect("an existing config");
 
         assert_eq!(existing.names, ["work"]);
-        assert!(existing.has_default);
+        assert_eq!(existing.defaults, ["work"]);
 
         fs::remove_file(&path).expect("remove the config");
     }
@@ -1076,7 +1251,7 @@ mod frame_tests {
 
         let mut config = AccountDraft::empty();
         config.name = account_name("work", Some(&existing));
-        config.default = !existing.has_default;
+        config.default = existing.defaults.is_empty();
         config.client_id = Some("b".to_string());
         config.storage = Some(Storage {
             read: StorageEntry {

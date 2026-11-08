@@ -24,6 +24,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added `ortie-error` to `json-schema`, the schema of the JSON failure object.
 - Added the `completion`, `manual` and `json-schema` schemas to `json-schema`.
+- Added the `configure` positional, the email address, domain or issuer URL given instead of prompted.
+- Added `configure --service`, repeatable, keeping only the discovered grants serving one of the named services.
+
+  A grant resolved from a typed URL carries no service and is kept.
+
+- Added `configure --name`, naming the account as written rather than deriving it.
+
+  A name the configuration already holds is offered to be kept: kept, nothing is written and `document` is `null` under `--json`.
 
 ### Changed
 
