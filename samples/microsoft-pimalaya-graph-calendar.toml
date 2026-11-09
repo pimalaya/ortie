@@ -1,0 +1,21 @@
+# Microsoft calendars with Pimalaya's application, through the Graph API.
+#
+# Append it to your configuration, then run `ortie auth get -a graph-calendar`.
+# Graph scopes share one resource, so this account may merge the other Graph
+# samples' scopes; Outlook IMAP and SMTP need an account of their own. An
+# organisation may want its administrator to approve the application first.
+# Storage and every other field: config.sample.toml.
+
+[accounts.graph-calendar]
+client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
+endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+# Registered as localhost, any port: 127.0.0.1 is refused.
+endpoints.redirection = "http://localhost"
+scopes = [
+  "offline_access",
+  "https://graph.microsoft.com/Calendars.ReadWrite",
+]
+auto-refresh = true
+storage.read.command = ["pass", "show", "ortie/graph-calendar"]
+storage.write.command = "pass insert -m -f ortie/graph-calendar"

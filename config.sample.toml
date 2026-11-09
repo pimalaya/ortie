@@ -7,8 +7,8 @@
 # first entry is the base and whose rest are deep-merged on top of it.
 #
 # Each `[accounts.<name>]` section declares one OAuth 2.0 account, picked at
-# runtime with `-a <NAME>` or by `default = true`. `ortie configure` discovers
-# one and writes it here; this file documents every field.
+# runtime with `-a <NAME>` or by `default = true`. The samples/ folder holds
+# one ready-made account per use case; this file documents every field.
 # ================================================================================
 
 [accounts.example]
@@ -69,7 +69,7 @@ scopes = []
 # RFC 8707 resource indicators the token is meant for, sent as one `resource`
 # parameter each on the authorization request and the code exchange. A server
 # bound to a resource (Fastmail) refuses a request without it with
-# `invalid_target`; the wizard fills it from the service's RFC 9728 metadata.
+# `invalid_target`; the service's RFC 9728 metadata names the value.
 #resources = ["https://api.example.com/jmap/session"]
 
 # Proof Key for Code Exchange (RFC 7636), used by the authorization code grant

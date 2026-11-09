@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added `resources` to the account configuration, the RFC 8707 resource indicators sent on the authorization request and the code exchange.
 - Added `token revoke`, revoking the stored refresh token, or the access token when none is stored (RFC 7009).
-- Added `endpoints.revocation` to the account configuration, prefilled by the wizard from the server metadata.
+- Added `endpoints.revocation` to the account configuration, the endpoint `token revoke` calls.
 - Added `ortie-token-revoke` to `json-schema`.
 - Added `auth listen`, catching the redirection of a flow a non-interactive or `--json` `auth get` handed off, then completing it as `auth resume` does.
 - Added `redirectUri` to the `auth get` handoff object, and `ortie-auth-listen` to `json-schema`.
@@ -18,36 +18,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   Its tools answer receipts and metadata, never a token: the state, the PKCE verifier and the device code stay in the server, which stores the token once the user consents. `token_revoke` is listed only with `--allow-revoke`.
 
-- Added the `wizard` cargo feature, on by default, gating `configure` and the first-run offer.
-
-  A build without it drops the prompts and the dependencies only they use.
-
 - Added `ortie-error` to `json-schema`, the schema of the JSON failure object.
 - Added the `completion`, `manual` and `json-schema` schemas to `json-schema`.
-- Added the `configure` positional, the email address, domain or issuer URL given instead of prompted.
-- Added `configure --service`, repeatable, restricting discovery to the named services, whose grant carries their scopes alone.
+- Added [samples](./samples), one complete account per use case, ready to append to a configuration.
 
-  Google's and Microsoft's API services (`gmail`, `gcal`, `gpeople`, `msgraph`, `msgraphCalendar`, `msgraphContacts`) are discovered only when named. A grant resolved from a typed URL carries no service and is kept.
-
-- Added Pimalaya's own Google and Microsoft applications to the wizard, offered ahead of Thunderbird's.
-
-  Google's covers IMAP, SMTP, Gmail, Google Calendar and People, not CalDAV nor CardDAV; Microsoft's covers Outlook IMAP and SMTP and Graph.
-
-- Added `configure --name`, naming the account as written rather than deriving it.
-
-  A name the configuration already holds is offered to be kept: kept, nothing is written and `document` is `null` under `--json`.
+  Google and Microsoft go through Pimalaya's own applications: Gmail, Google Calendar and People, Outlook IMAP and SMTP, Graph mail, calendars and contacts. Google, Microsoft and Fastmail also have a sample for an application of your own. The test suite parses every sample, so they stay in step with the configuration.
 
 ### Changed
 
 - **BREAKING**: Changed `--json` keys to camelCase.
 
-  The configuration file and the TOML `configure` prints keep their kebab-case keys.
+  The configuration file keeps its kebab-case keys.
 
 - **BREAKING**: Changed `token refresh`, `auth resume` and a token-issuing `auth get` to print the receipt `{expiresIn, withRefreshToken}` under `--json`.
 
   They printed a `{"message": …}` sentence. The text output reads as before.
 
-- **BREAKING**: Changed `configure --json` to print `{name, default, document}`, `document` being the TOML fragment.
 - **BREAKING**: Changed `token inspect --json` to print `issuedAt` as an RFC 3339 instant in UTC.
 - **BREAKING**: Changed a piped `ortie repl` to print its errors on stdout, as `ortie-error` objects under `--json`.
 
@@ -59,15 +45,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed every `json-schema` schema to carry an `$id` naming the contract version.
 - Changed every `json-schema` schema to require the keys a command always prints.
 - Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
-- Changed the io-pim-discovery requirement to 0.10.
-- Changed the wizard to read the resource and its scopes from the RFC 9728 metadata of the service, rather than from a Fastmail host match.
 
-  It writes `resources` in place of `extras.resource`.
+### Removed
 
-- Changed the wizard to resolve a typed URL that is no issuer through its RFC 9728 protected resource metadata.
-- Changed the wizard to offer only the grants a server lists in `grant_types_supported`.
-- Changed the wizard to write `pkce = "plain"` for a server supporting only the plain method.
-- Changed the wizard to offer a well-known application only for a grant serving one of its services: Thunderbird's are offered for the protocols Thunderbird speaks.
+- **BREAKING**: Removed the `configure` command and its `wizard` alias, with the offer a bare `ortie` or a command missing its configuration made to run it.
+
+  An account starts from one of the samples instead. A bare `ortie` shows the help, and a missing configuration fails naming the path it looked for and pointing at the samples. The `ortie-configure` key leaves `json-schema`.
+
+- **BREAKING**: Removed dynamic client registration (RFC 7591), which only the wizard ran.
+
+  The Fastmail sample shows the one registration request to run by hand.
+
+- Removed the io-pim-discovery dependency, and the prompt and spinner ones it came with (inquire, crossterm, ctrlc).
 
 ### Fixed
 

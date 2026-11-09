@@ -19,8 +19,6 @@
 
 use pimalaya_cli::{clap::commands::JsonSchemaRegistry, error::ErrorReport};
 
-#[cfg(feature = "wizard")]
-use crate::wizard::ConfigureOutput;
 use crate::{
     auth::get::AuthGetOutput,
     token::{
@@ -37,8 +35,6 @@ use crate::{
 pub fn registry() -> JsonSchemaRegistry {
     let mut registry = JsonSchemaRegistry::new("ortie", env!("CARGO_PKG_VERSION"));
 
-    #[cfg(feature = "wizard")]
-    registry.insert::<ConfigureOutput>("ortie-configure");
     registry.insert::<AuthGetOutput<'static>>("ortie-auth-get");
     registry.insert::<TokenIssuedOutput>("ortie-auth-listen");
     registry.insert::<TokenIssuedOutput>("ortie-auth-resume");
@@ -60,8 +56,8 @@ mod tests {
     use super::*;
 
     /// The commands printing nothing a schema could describe: a bare `ortie`
-    /// shows the help, or runs the wizard `configure` describes, and the REPL
-    /// prints the payloads of the leaves it dispatches.
+    /// shows the help, and the REPL prints the payloads of the leaves it
+    /// dispatches.
     const SILENT: &[&str] = &["ortie", "ortie-repl", "ortie-mcp"];
 
     /// Every runnable command is described, and every key names one: a

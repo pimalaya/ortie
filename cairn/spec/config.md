@@ -40,34 +40,11 @@ An account MAY define hooks fired on token issuance and refresh, each with succe
 ### Requirement: v1 config compatibility
 Every v1.x config file SHALL parse and run unchanged: `grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, and `pkce = true`/`false` are still accepted. The only behaviour an existing account can notice is PKCE-by-default.
 
-### Requirement: A named command runs the wizard
-A `configure` command (alias `wizard`) SHALL run the wizard by name, without the welcome, since whoever typed it knows what it does. It SHALL take the wizard's input as an optional positional, the account name as `--name`, and the services to keep grants for as `--service`, repeatable, so another tool can hand its setup over with `ortie configure <ADDRESS> --name <NAME> --service <SERVICE>` and then `ortie auth get -a <NAME>`. It refuses to run when stdin is not a terminal, naming the sample configuration to write by hand instead. The offer a missing configuration raises runs it with none of them.
-
-### Requirement: The offer is a hook, not a gate
-A missing configuration SHALL raise an offer to generate one, from a bare invocation and from any command needing an account. The offer never ends the process: a command carries on afterwards either way, so accepting gives it a chance to work and declining leaves it to fail on the configuration it still has not got. A bare invocation has nothing to carry on to, so a declined offer falls back to the help. Nothing is offered when stdin is not a terminal or `--json` is set.
-
-### Requirement: A bare invocation meets the newcomer, not the user
-A bare `ortie` SHALL raise the offer when it finds no configuration, and show the help when it finds one, since someone already set up is asking what the commands are. `--account` with no subcommand is a half-typed command and shows the help too.
-
-### Requirement: The welcome names the missing path
-The welcome SHALL name the configuration path that was looked for, which is the one `-c` or `ORTIE_CONFIG` gave or the default location, so a mistyped path shows up as itself rather than as a generic first run. It frames the product, points at the documented sample, and names the command that runs the wizard again later.
-
-### Requirement: A generated account takes a free name and one default
-A derived account name SHALL be suffixed until the configuration does not already hold it, since a second `[accounts.<name>]` table makes the whole document fail to parse. A name given with `--name` SHALL be taken as written: when the configuration already holds that exact name, the wizard SHALL ask, before any other prompt and defaulting to yes, whether to keep that account. Kept, it writes nothing, prints `{name, default, document}` with `document` `null` and `default` telling whether that account claims the default, and exits 0; declined, it fails naming the account. The generated account claims `default` only when no other account does, since two defaults resolve to whichever the account map yields first.
-
-#### Scenario: A tool hands over an account it already set up
-- GIVEN a configuration holding `[accounts.work]`
-- WHEN `ortie configure alice@example.org --name work --json` runs and the keep prompt is accepted
-- THEN the configuration is unchanged, no discovery runs, and `{"name": "work", "default": true, "document": null}` is printed for a `work` account claiming the default
-
 ### Requirement: Account resolution failures name what is missing
-Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
+Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for and points at the samples, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
 
 ### Requirement: The configuration path is read from the environment
 The configuration path SHALL be read from `ORTIE_CONFIG` as well as `-c`, both accepting a `:`-delimited list merged in order.
-
-### Requirement: The wizard saves where the configuration lives
-The save SHALL NOT prompt for a path: it writes where `-c` or `ORTIE_CONFIG` pointed, or the default location, and that file is the configuration whose names a derived or given account name is checked against. A file already holding accounts is appended to rather than overwritten, and confirmed before it happens in the one prompt the save step asks, since it is a file the user already owns. Declining SHALL print the account on stdout instead of writing it.
 
 ### Requirement: One TLS conversion, taking the ALPN list
 The `tls` account option SHALL name the TLS provider as one of `auto` (the default, the provider the binary was built with), `native-tls`, `rustls-aws` or `rustls-ring`, and SHALL be folded into the runtime TLS handle by a single conversion taking the ALPN list as its argument. No other code path SHALL build that handle from the configuration, so no call site can negotiate an ALPN, or none, by accident.
@@ -80,5 +57,13 @@ The `tls` account option SHALL name the TLS provider as one of `auto` (the defau
 ### Requirement: ALPN is a config key
 An account MAY declare `alpn`, the list of ALPN identifiers offered during the TLS handshake. It SHALL default to empty, sending no ALPN extension, which is what an OAuth 2.0 endpoint over plain HTTPS expects; a non-empty list overrides it, `["http/1.1"]` being the one meaningful value, for a TLS middlebox refusing a handshake without ALPN. Only rustls reads it, native-tls ignoring ALPN.
 
-### Requirement: A defaulted field is absent from the generated account
-The account fragment the wizard prints SHALL omit every field equal to its type's default, through one shared helper rather than a per-field predicate, so an account that does not claim the default carries no `default = false` line in either rendering.
+### Requirement: A bare invocation shows the help
+A bare `ortie` SHALL show the help, whether a configuration exists or not, and so SHALL `--account` with no subcommand, a half-typed command. Nothing prompts: Ortie writes no configuration.
+
+### Requirement: Samples, one per use case
+The repository SHALL ship samples/, one file per use case, each holding one complete `[accounts.<name>]` table ready to append to a configuration, and the test suite SHALL parse each through the loader `-c` uses, so a configuration change that breaks a sample fails the build. config.sample.toml stays the reference of every field.
+
+#### Scenario: A field is renamed
+- GIVEN a sample setting `endpoints.redirection`
+- WHEN the field is renamed in the configuration types and the sample is not updated
+- THEN the test suite fails naming the sample

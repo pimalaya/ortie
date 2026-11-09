@@ -1,0 +1,22 @@
+# Outlook IMAP and SMTP with Pimalaya's application, for personal and work or
+# school Microsoft accounts.
+#
+# Append it to your configuration, then run `ortie auth get -a outlook`. Entra
+# issues a token for one resource, so Graph needs an account of its own. An
+# organisation may want its administrator to approve the application first.
+# Storage and every other field: config.sample.toml.
+
+[accounts.outlook]
+client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
+endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+# Registered as localhost, any port: 127.0.0.1 is refused.
+endpoints.redirection = "http://localhost"
+scopes = [
+  "offline_access",
+  "https://outlook.office.com/IMAP.AccessAsUser.All",
+  "https://outlook.office.com/SMTP.Send",
+]
+auto-refresh = true
+storage.read.command = ["pass", "show", "ortie/outlook"]
+storage.write.command = "pass insert -m -f ortie/outlook"

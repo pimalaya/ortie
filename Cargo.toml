@@ -12,13 +12,12 @@ homepage = "https://pimalaya.org"
 repository = "https://github.com/pimalaya/ortie"
 
 [features]
-default = ["rustls-ring", "wizard"]
+default = ["rustls-ring"]
 notify = ["dep:notify-rust"]
-native-tls = ["pimalaya-stream/native-tls", "io-oauth/native-tls", "io-pim-discovery?/native-tls"]
-rustls-aws = ["pimalaya-stream/rustls-aws", "io-oauth/rustls-aws", "io-pim-discovery?/rustls-aws"]
-rustls-ring = ["pimalaya-stream/rustls-ring", "io-oauth/rustls-ring", "io-pim-discovery?/rustls-ring"]
-vendored = ["pimalaya-stream/vendored", "io-oauth/vendored", "io-pim-discovery?/vendored", "notify-rust?/d_vendored"]
-wizard = ["dep:io-pim-discovery", "pimalaya-cli/prompt", "pimalaya-cli/wizard", "pimalaya-cli/spinner"]
+native-tls = ["pimalaya-stream/native-tls", "io-oauth/native-tls"]
+rustls-aws = ["pimalaya-stream/rustls-aws", "io-oauth/rustls-aws"]
+rustls-ring = ["pimalaya-stream/rustls-ring", "io-oauth/rustls-ring"]
+vendored = ["pimalaya-stream/vendored", "io-oauth/vendored", "notify-rust?/d_vendored"]
 
 [profile.release]
 lto = "fat"
@@ -42,7 +41,6 @@ clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
 dirs = "7"
 humantime = "2.2"
 io-oauth = { version = "0.5", default-features = false, features = ["client", "jwt-bearer"] }
-io-pim-discovery = { version = "0.11", default-features = false, features = ["stream", "autoconfig", "pacc", "rfc6186", "rfc6764", "rfc8620", "rfc8414", "rfc9728"], optional = true }
 log = "0.4"
 notify-rust = { version = "4.18", default-features = false, features = ["d"], optional = true }
 open = "5.3"

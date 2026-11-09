@@ -1,0 +1,21 @@
+# Google calendars with Pimalaya's application, through the Calendar API.
+#
+# Append it to your configuration, then run `ortie auth get -a google-calendar`.
+# The client secret is public by design, as for any installed application
+# (RFC 8252 section 8.5). Storage and every other field: config.sample.toml.
+
+[accounts.google-calendar]
+client-id = "803561575535-41415ghqi04uibrl6t5umg3p27stdhqr.apps.googleusercontent.com"
+client-secret.raw = "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"
+endpoints.authorization = "https://accounts.google.com/o/oauth2/v2/auth"
+endpoints.token = "https://oauth2.googleapis.com/token"
+endpoints.revocation = "https://oauth2.googleapis.com/revoke"
+scopes = [
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+]
+# Google issues a refresh token only to a request for offline access.
+extras.access_type = "offline"
+auto-refresh = true
+storage.read.command = ["pass", "show", "ortie/google-calendar"]
+storage.write.command = "pass insert -m -f ortie/google-calendar"

@@ -18,8 +18,7 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 
 ## Features
 
-- **Configuration wizard**: discovers your provider's grants and writes the account for you.
-- **Dynamic client registration**: registers a public client on the spot, no provider console.
+- **Ready-made accounts**: one sample per use case, Google and Microsoft through Pimalaya's own applications.
 - **Authorization code grant**: browser sign-in, with a built-in server catching the redirection.
 - **Device authorization grant**: a short code typed on another device, for hosts with no browser.
 - **Client credentials grants**: headless machine tokens, by client secret or signed JWT assertion.
@@ -37,8 +36,6 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 
 > [!TIP]
 > Ortie is written in [Rust](https://www.rust-lang.org/) and uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional functionality. The default feature set is declared in [Cargo.toml](./Cargo.toml).
->
-> The default `wizard` feature brings the interactive `configure`; leave it out of a scripted or embedded build that never prompts.
 
 ## Coverage
 
@@ -48,21 +45,15 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 | [7009] | Token revocation: `token revoke` retires the refresh token, or the access token when none is stored |
 | [7523] | JWT client authentication on the client credentials grant: assertion signed with a private key, certificate `x5t` thumbprint (Microsoft certificate credentials) |
 | [7636] | PKCE: the S256 and plain code challenges protecting the authorization code in transit |
-| [7591] | Dynamic client registration: register a public client without any provider console |
-| [8414] | Authorization server metadata: the wizard reads it to discover a provider's endpoints and registration endpoint |
 | [8628] | Device authorization grant: device and user code request, token endpoint polling |
 | [8707] | Resource indicators: the `resource` parameter a server bound to one resource requires |
-| [9728] | Protected resource metadata: the wizard reads a service's resource and the authorization servers it names |
 
 [6749]: https://www.rfc-editor.org/rfc/rfc6749
 [7009]: https://www.rfc-editor.org/rfc/rfc7009
 [7523]: https://www.rfc-editor.org/rfc/rfc7523
 [7636]: https://www.rfc-editor.org/rfc/rfc7636
-[7591]: https://www.rfc-editor.org/rfc/rfc7591
-[8414]: https://www.rfc-editor.org/rfc/rfc8414
 [8628]: https://www.rfc-editor.org/rfc/rfc8628
 [8707]: https://www.rfc-editor.org/rfc/rfc8707
-[9728]: https://www.rfc-editor.org/rfc/rfc9728
 
 ### OAuth 2.1
 
@@ -70,7 +61,7 @@ Ortie follows the OAuth 2.1 draft and the security best current practice (RFC 97
 
 - Grants: authorization code, device, and client credentials authenticated by secret or signed JWT. The implicit and resource owner password grants, removed by OAuth 2.1, are not implemented.
 - PKCE: S256 on every authorization code flow by default, `pkce = "plain"` or `false` being escape hatches for servers that need them.
-- Redirects: a configured redirection URI is sent as written, for the server to match exactly. Without one, Ortie binds `http://127.0.0.1` on a random port, the loopback exception that lets the port vary (RFC 8252 section 7.3).
+- Redirects: a configured redirection URI is sent as written, for the server to match exactly. Without one, Ortie binds `http://127.0.0.1` on a random port, the loopback exception that lets the port vary (RFC 8252 section 7.3); a configured `http` loopback naming no port, such as `http://localhost`, gets a random port the same way.
 - Refresh rotation: a refreshed token is stored as soon as the server answers, keeping the previous refresh token when no rotated one comes back. When storing fails, the error says so, and a REPL session keeps the new tokens.
 
 ## Installation
@@ -134,107 +125,30 @@ nix run
 
 ## Configuration
 
-Run `ortie` with no command and it offers to generate a first account, which `ortie configure` does again later. From an email address, a domain or an issuer URL it discovers the grants your provider offers, then appends the account it walked you through to your configuration.
-
-What it cannot discover it does not ask for: the annotated [config.sample.toml](./config.sample.toml) is the reference for the rest. Run `ortie auth get` afterwards to authorize the account and store its first token.
-
-Another tool can hand its OAuth 2.0 setup over: `ortie configure alice@example.org --name work --service imap --service smtp` skips the address prompt, names the account `work` as written, and offers only the grants serving IMAP or SMTP. When `work` already exists, it asks whether to keep that account instead.
-
 A configuration is loaded from the first valid path among $XDG_CONFIG_HOME/ortie/config.toml, $HOME/.config/ortie/config.toml and $HOME/.ortierc. Override it with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`, `:`-separated to deep-merge several files on top of the first.
 
-An OAuth 2.0 application is needed too. The wizard offers three, most preferred first: dynamic registration when the provider advertises it, a public application (Pimalaya's own for Google and Microsoft, then [Thunderbird credentials](https://github.com/mozilla/releases-comm-central/blob/master/mailnews/base/src/OAuth2Providers.sys.mjs), which cover most consumer providers), or your own, left as an empty `client-id` to fill in.
+Start from a sample: each file of [samples](./samples) is one complete account, ready to append to your configuration. Then run `ortie auth get -a <NAME>` to authorize it and store its first token. The annotated [config.sample.toml](./config.sample.toml) documents every field, storage commands and hooks included.
 
-Ready-made blocks for common providers follow, for manual setups and for Microsoft Graph, which the wizard reaches only when named with `--service msgraph`, `msgraphCalendar` or `msgraphContacts`. Drop one under your `[accounts.<name>]` table and fill in the client credentials.
+| Sample | Application | For |
+|---|---|---|
+| [google-pimalaya-mail.toml](./samples/google-pimalaya-mail.toml) | Pimalaya | Gmail over IMAP, SMTP or the Gmail API |
+| [google-pimalaya-calendar.toml](./samples/google-pimalaya-calendar.toml) | Pimalaya | Google Calendar API |
+| [google-pimalaya-contacts.toml](./samples/google-pimalaya-contacts.toml) | Pimalaya | Google People API |
+| [microsoft-pimalaya-outlook.toml](./samples/microsoft-pimalaya-outlook.toml) | Pimalaya | Outlook IMAP and SMTP |
+| [microsoft-pimalaya-graph-mail.toml](./samples/microsoft-pimalaya-graph-mail.toml) | Pimalaya | Microsoft Graph mail |
+| [microsoft-pimalaya-graph-calendar.toml](./samples/microsoft-pimalaya-graph-calendar.toml) | Pimalaya | Microsoft Graph calendars |
+| [microsoft-pimalaya-graph-contacts.toml](./samples/microsoft-pimalaya-graph-contacts.toml) | Pimalaya | Microsoft Graph contacts |
+| [google-own-application.toml](./samples/google-own-application.toml) | your own | CalDAV, CardDAV, any other Google scope |
+| [microsoft-own-application.toml](./samples/microsoft-own-application.toml) | your own | an organisation refusing Pimalaya's application |
+| [fastmail-own-application.toml](./samples/fastmail-own-application.toml) | your own, registered by hand | Fastmail over JMAP |
 
-### Google
-
-```toml
-endpoints.authorization = "https://accounts.google.com/o/oauth2/v2/auth"
-endpoints.token = "https://oauth2.googleapis.com/token"
-scopes = ["https://www.googleapis.com/auth/carddav", "https://mail.google.com/"]
-extras.access_type = "offline"
-```
-
-Use these endpoints, not the legacy `o/oauth2/auth` and `oauth2/v3/token` pair, which Google can reject at consent with "This app is blocked".
-
-Gmail and CardDAV being sensitive scopes, an unverified application of your own only works for accounts listed as test users. The Thunderbird one below is verified. The wizard also offers Pimalaya's application, registered for Gmail, IMAP and SMTP, Google Calendar (`calendar.events`, `calendar.calendarlist.readonly`), People and Tasks, not for CardDAV nor CalDAV.
-
-Contacts are split across two scopes that are not interchangeable: `auth/carddav` authorizes the CardDAV endpoint, `auth/contacts` the People API. Calendars are not split, CalDAV using the plain `auth/calendar` scope.
-
-A client id is verified for a fixed set of scopes, so asking the Thunderbird application for a People API scope fails at consent.
-
-Public Thunderbird application:
-
-```toml
-client-id = "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com"
-client-secret.raw = "kSmqreRr0qwBWJgbf5Y-PjSU"
-endpoints.redirection = "http://localhost"
-```
-
-For your [own application](https://developers.google.com/identity/protocols/oauth2), set `client-id` and `client-secret.raw` to your registered values.
-
-### Microsoft (Outlook IMAP / SMTP)
-
-```toml
-endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-```
-
-Pimalaya application, registered for Outlook IMAP and SMTP and for Graph:
-
-```toml
-client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
-endpoints.redirection = "http://localhost"
-```
-
-Public Thunderbird application:
-
-```toml
-client-id = "9e5f94bc-e8a4-4e73-b8be-63364c29d753"
-endpoints.redirection = "https://localhost"
-```
-
-### Microsoft Graph
-
-The Thunderbird application above is registered for Outlook IMAP and SMTP, not for the Graph API. Graph tokens need Graph scopes from a client registered for Graph, such as the Pimalaya application above, in an account of their own (Entra issues a token for one resource):
-
-```toml
-endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-scopes = ["https://graph.microsoft.com/User.Read", "https://graph.microsoft.com/Mail.ReadWrite", "https://graph.microsoft.com/Mail.Send", "offline_access"]
-```
-
-Public Microsoft Graph PowerShell application:
-
-```toml
-client-id = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
-endpoints.redirection = "http://localhost"
-```
-
-Work or school (Entra ID) accounts receive a JWT the Graph API accepts. Personal accounts may get an opaque token it rejects with InvalidAuthenticationToken, so prefer a work or school account, or an application of your own.
-
-### Fastmail
-
-Fastmail advertises RFC 7591 dynamic registration, so bare `ortie` registers a client for you. Two specifics it fills in, worth knowing when writing the block by hand:
-
-1. RFC 8707 resource: without a resource indicator, the authorize endpoint bounces the request with `invalid_target`, before any consent screen. Its value is the JMAP session URL, which the wizard reads from the session's RFC 9728 metadata.
-2. Redirect: dynamic registration accepts only a reverse-DNS private-use scheme, `org.pimalaya.ortie://redirect`. No desktop browser routes it back, so `auth get` prints a manual `auth resume` command.
-
-```toml
-endpoints.authorization = "https://api.fastmail.com/oauth/authorize"
-endpoints.token = "https://api.fastmail.com/oauth/refresh"
-scopes = ["urn:ietf:params:oauth:scope:mail", "urn:ietf:params:oauth:scope:contacts", "urn:ietf:params:oauth:scope:calendars", "offline_access"]
-resources = ["https://api.fastmail.com/jmap/session"]
-```
-
-The wizard selects the four scopes the JMAP session advertises by default, and the multi-select is where you trim them. The Thunderbird application it also offers covers Fastmail with a loopback redirect, avoiding the manual resume.
+Google scopes can share one account, a single token serving every API. Microsoft scopes cannot: Entra issues a token for one resource, so Outlook IMAP and SMTP and the Graph API need separate accounts, while the Graph samples can be merged into one.
 
 ## Usage
 
-Configure an account, authorize it, then read its token:
+Append a sample to your configuration, authorize the account, then read its token:
 
 ```sh
-ortie configure                        # discover a provider and write the account
 ortie auth get                         # authorize and store a first token
 ortie auth listen --state=… --pkce=… --redirect-uri=…  # catch a handed-off redirection
 ortie auth resume <URI|DEVICE_CODE>    # finish a flow by hand

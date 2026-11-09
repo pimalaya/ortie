@@ -3,15 +3,10 @@
 //! The root clap parser of the `ortie` binary, its subcommand router,
 //! and the account resolution every account-bound command starts from.
 
-use std::{
-    io::{IsTerminal, stdin},
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
-#[cfg(feature = "wizard")]
-use pimalaya_cli::prompt;
 use pimalaya_cli::{
     clap::{
         args::{AccountFlag, JsonFlag, LogFlags},
@@ -23,12 +18,10 @@ use pimalaya_cli::{
 };
 use pimalaya_config::toml::TomlConfig;
 
-#[cfg(feature = "wizard")]
-use crate::wizard::{self, ConfigureCommand};
 use crate::{
     account::Account,
     auth::{AuthCommand, get::invocation},
-    config::{Config, NO_CONFIG_HINT},
+    config::Config,
     json_schema,
     mcp::McpCommand,
     repl::ReplCommand,
@@ -42,7 +35,7 @@ use crate::{
 #[command(after_help = footer!())]
 #[command(propagate_version = true, infer_subcommands = true)]
 pub struct Cli {
-    /// The subcommand to run, bare `ortie` running the wizard.
+    /// The subcommand to run, bare `ortie` showing the help.
     #[command(subcommand)]
     pub cmd: Option<Command>,
     /// Path(s) to the TOML configuration file(s).
@@ -62,10 +55,6 @@ pub struct Cli {
 /// Top-level subcommand router.
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Configure an account interactively.
-    #[cfg(feature = "wizard")]
-    #[command(visible_alias = "wizard")]
-    Configure(ConfigureCommand),
     #[command(subcommand)]
     Auth(AuthCommand),
     #[command(subcommand)]
@@ -90,20 +79,18 @@ impl Command {
         account_name: Option<&str>,
     ) -> Result<()> {
         match self {
-            #[cfg(feature = "wizard")]
-            Self::Configure(cmd) => cmd.execute(printer, config_paths),
             Self::Auth(cmd) => cmd.execute(printer, config_paths, account_name),
             Self::Token(cmd) => {
-                let mut account = take_account(printer, config_paths, account_name)?;
+                let mut account = take_account(config_paths, account_name)?;
                 cmd.execute(printer, &mut account)
             }
             Self::Repl(cmd) => {
-                let account = take_account(printer, config_paths, account_name)?;
+                let account = take_account(config_paths, account_name)?;
                 let invocation = invocation(config_paths, account_name);
                 cmd.execute(printer, account, &invocation)
             }
             Self::Mcp(cmd) => {
-                let account = take_account(printer, config_paths, account_name)?;
+                let account = take_account(config_paths, account_name)?;
                 cmd.execute(account)
             }
             Self::Manual(cmd) => cmd.execute(printer, Cli::command()),
@@ -113,77 +100,22 @@ impl Command {
     }
 }
 
-/// Welcomes, then offers to generate a first configuration, returning
-/// whether the wizard ran.
-///
-/// It is a hook rather than a gate, so declining decides nothing: what
-/// happens next is the caller's business, and for a command that is
-/// simply carrying on.
-#[cfg(feature = "wizard")]
-pub fn offer_configuration(
-    printer: &mut impl Printer,
-    config_paths: &[PathBuf],
-    path: &Path,
-) -> Result<bool> {
-    wizard::print_welcome(path);
-
-    if !prompt::bool("Create a configuration with a default account?", true)? {
-        return Ok(false);
-    }
-
-    ConfigureCommand::default().execute(printer, config_paths)?;
-
-    Ok(true)
-}
-
-/// Offers nothing in a build without the wizard, so the caller falls back
-/// to what it does when the offer is declined.
-#[cfg(not(feature = "wizard"))]
-pub fn offer_configuration(
-    _printer: &mut impl Printer,
-    _config_paths: &[PathBuf],
-    _path: &Path,
-) -> Result<bool> {
-    Ok(false)
-}
-
 /// Takes the named (or default) account out of the config at
 /// `config_paths`, flattened into its runtime view.
-///
-/// A missing configuration is met with the wizard rather than with an
-/// error, and the command carries on either way: accepting gives it a
-/// chance to work, declining leaves it to fail as it would have.
 pub(crate) fn take_account(
-    printer: &mut impl Printer,
     config_paths: &[PathBuf],
     account_name: Option<&str>,
 ) -> Result<Account> {
-    let mut config = match Config::from_paths_or_default(config_paths)? {
-        Some(config) => config,
-        None => {
-            // NOTE: where `-c` pointed, or the default location when it
-            // named none, so a mistyped path shows up as itself rather
-            // than as a generic first run.
-            let path = Config::target_path(config_paths)?;
+    let Some(mut config) = Config::from_paths_or_default(config_paths)? else {
+        // NOTE: where `-c` pointed, or the default location when it
+        // named none, so a mistyped path shows up as itself.
+        let path = Config::target_path(config_paths)?;
 
-            // NOTE: nobody answers a prompt in a script or a cron job,
-            // and a JSON consumer wants a failure it can read, so both
-            // skip the offer and fail below.
-            if !printer.is_json() && stdin().is_terminal() {
-                offer_configuration(printer, config_paths, &path)?;
-            }
-
-            // NOTE: the wizard may print the account instead of writing
-            // it, so having run it proves nothing: look the
-            // configuration up again and fail the ordinary way.
-            match Config::from_paths_or_default(config_paths)? {
-                Some(config) => config,
-                None => bail!(
-                    "No configuration found at {}, {NO_CONFIG_HINT}",
-                    path.display(),
-                ),
-            }
-        }
+        bail!(
+            "No configuration found at {}, start from a sample: \
+             https://github.com/pimalaya/ortie/tree/master/samples",
+            path.display(),
+        );
     };
 
     // NOTE: an empty name and `default` both mean the default account,

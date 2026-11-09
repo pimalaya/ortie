@@ -282,16 +282,6 @@ fn deserialize_opt_command<'de, D: Deserializer<'de>>(de: D) -> Result<Option<Co
     command::deserialize(de).map(Some)
 }
 
-/// How to get a configuration, for the errors meeting none.
-#[cfg(feature = "wizard")]
-pub const NO_CONFIG_HINT: &str = "run `ortie configure` to generate one, or write it by hand: \
-     https://github.com/pimalaya/ortie/blob/master/config.sample.toml";
-
-/// How to get a configuration, for the errors meeting none.
-#[cfg(not(feature = "wizard"))]
-pub const NO_CONFIG_HINT: &str = "write one by hand: \
-     https://github.com/pimalaya/ortie/blob/master/config.sample.toml";
-
 /// TLS provider selector, folded into the pimalaya-stream config.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
@@ -331,7 +321,7 @@ impl TlsConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Write, path::PathBuf};
+    use std::{fs, io::Write, path::PathBuf, slice};
 
     use super::*;
 
@@ -440,5 +430,29 @@ storage.write.command = ["tee", "token.json"]
     fn interactive_grants_are_not_client_credentials() {
         assert!(!GrantConfig::AuthorizationCode.is_client_credentials());
         assert!(!GrantConfig::Device.is_client_credentials());
+    }
+
+    /// Every sample parses through the loader `-c` uses and holds one
+    /// account, so a configuration change breaking one fails here.
+    #[test]
+    fn every_sample_parses_into_one_account() {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("samples");
+        let mut parsed = 0;
+
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+
+            if path.extension().is_none_or(|ext| ext != "toml") {
+                continue;
+            }
+
+            let config = Config::from_paths(slice::from_ref(&path))
+                .unwrap_or_else(|err| panic!("{}: {err:?}", path.display()));
+
+            assert_eq!(config.accounts.len(), 1, "{}", path.display());
+            parsed += 1;
+        }
+
+        assert_ne!(parsed, 0);
     }
 }

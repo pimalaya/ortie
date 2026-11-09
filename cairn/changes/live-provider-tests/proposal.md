@@ -42,7 +42,8 @@ If the RFC 7523 section 2.1 grant lands later, a `credentialed::` service accoun
 `anonymous::` only, the account is never involved.
 
 - `auth_resume_rejected`: an account on the endpoints from Fastmail's metadata (token `https://api.fastmail.com/oauth/refresh`), bogus code: error exit code, with the `error_description` surfaced, since it is the only way to tell Fastmail failures apart.
-- `wizard_discovers_fastmail` (conditional): first check whether the wizard's argv mode (wizard-append-and-argv) can run discovery and registration without a prompt. If it can: the written config carries the JMAP session URL as `resource`, a reverse-DNS redirect, and a client id that comes back the same on a second run. If it needs a prompt, drop the test and note it in provider-quirks.
+
+The wizard and its registration left Ortie on 2026-11-08 (samples-replace-the-wizard); the files of samples/ can serve as the accounts these tests write, so a provider drifting from a sample fails here.
 
 ### CI
 
@@ -55,4 +56,4 @@ One job per provider in .github/workflows/tests.yml, `cargo test --test <provide
 
 ## Open questions
 
-- The same three as io-oauth's change: Microsoft certificate secrets, Fastmail registration through the wizard, and land the io-oauth suites first so a failure here points at Ortie.
+- Two of io-oauth's change: Microsoft certificate secrets, and land the io-oauth suites first so a failure here points at Ortie. Its third, Fastmail registration through the wizard, no longer applies here.

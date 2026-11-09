@@ -13,13 +13,12 @@ Everything below documents only what differs from the Pimalaya standards.
 
 ## Where changes belong
 
-Ortie is a pure CLI binary: the glue between a user's TOML configuration and two engines it drives. Fixes usually land in one of three places, so triage before patching:
+Ortie is a pure CLI binary: the glue between a user's TOML configuration and the OAuth engine it drives. Fixes usually land in one of two places, so triage before patching:
 
-- OAuth wire semantics (grants, PKCE, token and registration requests) belong in [io-oauth](https://github.com/pimalaya/io-oauth);
-- service discovery consumed by the wizard belongs in [io-pim-discovery](https://github.com/pimalaya/io-pim-discovery);
-- configuration shape, token storage, hooks and command UX live here.
+- OAuth wire semantics (grants, PKCE, token requests) belong in [io-oauth](https://github.com/pimalaya/io-oauth);
+- configuration shape, samples, token storage, hooks and command UX live here.
 
-The shared clap, printer and prompt primitives come from [pimalaya/cli](https://github.com/pimalaya/cli), the TOML loader and secret resolution from [pimalaya/config](https://github.com/pimalaya/config), and the TCP and TLS plumbing from [pimalaya/stream](https://github.com/pimalaya/stream).
+The shared clap and printer primitives come from [pimalaya/cli](https://github.com/pimalaya/cli), the TOML loader and secret resolution from [pimalaya/config](https://github.com/pimalaya/config), and the TCP and TLS plumbing from [pimalaya/stream](https://github.com/pimalaya/stream).
 
 ## Feature matrix
 

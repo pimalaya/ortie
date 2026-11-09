@@ -6,7 +6,7 @@ status: current
 
 # Packaging
 
-Ortie is a thin, config-driven front-end over io-oauth (the OAuth engine) and io-pim-discovery (PIM service discovery). It ships as a binary only, with no library surface, and adopts OAuth 2.1-compatible defaults without modelling a protocol version.
+Ortie is a thin, config-driven front-end over io-oauth, the OAuth engine. It ships as a binary only, with no library surface, and adopts OAuth 2.1-compatible defaults without modelling a protocol version.
 
 ### Requirement: Pure CLI binary
 Ortie SHALL build as a binary with no public library API. The lib target and the `cli`/`client` cargo features do not exist; the README and CHANGELOG redirect the rare library user to io-oauth.
