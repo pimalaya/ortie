@@ -1,183 +1,39 @@
-# ================================================================================
-# `ortie` configuration file.
-#
-# Loaded from the first valid path among $XDG_CONFIG_HOME/ortie/config.toml,
-# $HOME/.config/ortie/config.toml and $HOME/.ortierc. `ortie -c <PATH>` and
-# `ORTIE_CONFIG=<PATH>` override it, both accepting a `:`-delimited list whose
-# first entry is the base and whose rest are deep-merged on top of it.
-#
-# Each `[accounts.<name>]` section declares one OAuth 2.0 account, picked at
-# runtime with `-a <NAME>` or by `default = true`. The samples/ folder holds
-# one ready-made account per use case; this file documents every field.
-# ================================================================================
-
 [accounts.example]
+default = true						# make this account the default one used
 
-# Mark this account as the default one, used when no `-a <NAME>` is passed.
-default = true
+grant = "authorization-code"				# sign in through a browser redirection
+#grant = "device"					# sign in elsewhere with a user code
+#grant = "client-credentials"				# headless, authenticated by the secret
+#grant = "client-credentials-jwt"			# headless, authenticated by a signed JWT
 
-# TLS provider used for the HTTPS connection to the token endpoint.
-#
-# Possible values: "auto" (default, the provider this binary was built with),
-# "native-tls", "rustls-aws", "rustls-ring"
-#tls = "rustls-ring"
+client-id = "example"					# the identifier the provider registered
+#client-secret.raw = "example"				# the client secret, in clear
+#client-secret.command = "exit 127"			# the first line a shell command prints
+#client-secret.command = ["sh", "-c", "exit 127"]	# same, an argv run without a shell
+#client-key = "/path/to/key.pem"			# private key signing the JWT
+#client-cert = "/path/to/cert.pem"			# certificate named in the JWT, for Microsoft
 
-# ALPN identifiers offered during the TLS handshake.
-#
-# Empty by default, so no ALPN extension is sent: an OAuth 2.0 endpoint is plain
-# HTTPS and registers no identifier. Set `["http/1.1"]` when a TLS middlebox
-# refuses a handshake without ALPN. Only rustls reads it, native-tls ignores it.
-#alpn = ["http/1.1"]
+auto-refresh = true					# let token show refresh an expired token
+#scopes = []						# no scope, the provider's default
+#resources = []						# no RFC 8707 resource indicator
+#extras.login_hint = "user@example.com"			# an extra authorization request parameter
+#alpn = ["http/1.1"]					# for a middlebox refusing a handshake without ALPN
 
-# OAuth 2.0 client credentials, as registered with your provider.
-#
-# `client-secret` is optional, PKCE-only public clients skipping it, and takes
-# the same shapes as every pimalaya-config secret: `raw`, `command`, `env`.
-client-id = ""
-#client-secret.raw = "secret"
-#client-secret.command = "pass show ortie/example"
+pkce = "s256"						# PKCE with the SHA-256 challenge
+#pkce = "plain"						# PKCE with the plain challenge
 
-# The OAuth 2.0 grant flow run by the auth commands.
-#
-# Possible values:
-#   "authorization-code"     # browser redirect flow (default)
-#   "device"                 # user-code flow (RFC 8628)
-#   "client-credentials"     # headless machine flow, secret-authenticated (RFC 6749 section 4.4)
-#   "client-credentials-jwt" # headless machine flow, JWT-assertion-authenticated (RFC 7523 section 2.2)
-#grant = "authorization-code"
+tls = "auto"						# the TLS the binary was built with
+#tls = "native-tls"					# the platform's TLS
+#tls = "rustls-aws"					# rustls on aws-lc-rs
+#tls = "rustls-ring"					# rustls on ring
 
-# Credentials of the "client-credentials-jwt" grant: the private key (PKCS#8
-# or PKCS#1 PEM) signing the JWT assertion, and the certificate (PEM or DER)
-# whose SHA-1 thumbprint rides as the `x5t` header. Both are re-read at every
-# mint, so a renewed certificate is picked up without a restart.
-#client-key = "/etc/ortie/example.key.pem"
-#client-certificate = "/etc/ortie/example.crt.pem"
+#endpoints.authorization = "https://example.com/authorize"	# where the browser signs in
+#endpoints.device-authorization = "https://example.com/device"	# where the device grant gets its code
+#endpoints.token = "https://example.com/token"			# where grants and refreshes get tokens
+#endpoints.revocation = "https://example.com/revoke"		# where token revoke revokes
+endpoints.redirection = "http://127.0.0.1"			# loopback on a random port
+#endpoints.redirection = "http://localhost:8080"		# loopback on a fixed port
+#endpoints.redirection = "org.example.app://redirect"		# caught by hand through auth resume
 
-# Endpoints given by your OAuth 2.0 provider. All optional at parse time.
-endpoints.authorization = ""
-#endpoints.device-authorization = ""  # required when grant = "device"
-endpoints.token = ""
-#endpoints.revocation = ""            # used by `ortie token revoke` (RFC 7009)
-
-# Optional redirection endpoint, defaulting to `http://127.0.0.1:0`, whose
-# port the OS picks. Set it to match a redirect URI the provider pins.
-#endpoints.redirection = "http://localhost"
-
-# OAuth 2.0 scopes granted to the access token.
-scopes = []
-
-# RFC 8707 resource indicators the token is meant for, sent as one `resource`
-# parameter each on the authorization request and the code exchange. A server
-# bound to a resource (Fastmail) refuses a request without it with
-# `invalid_target`; the service's RFC 9728 metadata names the value.
-#resources = ["https://api.example.com/jmap/session"]
-
-# Proof Key for Code Exchange (RFC 7636), used by the authorization code grant
-# and enabled with the S256 method by default, aligning with OAuth 2.1.
-#
-# Possible values:
-#   pkce = true    # S256 (same as the default)
-#   pkce = "s256"  # explicit method
-#   pkce = "plain" # escape hatch for servers rejecting S256
-#   pkce = false   # disable, for servers rejecting PKCE parameters
-#pkce = "s256"
-
-# Extra parameters forwarded verbatim to the authorization request query,
-# keyed by wire parameter name with no kebab-case renaming. This is where
-# provider-specific options go. The device grant forwards no extras yet.
-#
-#   extras.access_type = "offline"          # Google: required for a refresh token
-#   extras.prompt = "consent"               # Google: force the consent screen
-#   extras.login_hint = "user@example.com"
-#extras.access_type = "offline"
-
-# Whether `ortie token show` refreshes an expired access token by itself,
-# which is what passing `--auto-refresh` on every call would do.
-auto-refresh = true
-
-# --------------------------------------------------------------------------------
-# Storage
-# --------------------------------------------------------------------------------
-#
-# Ortie persists no token itself: reads and writes go through commands of
-# yours. Any CLI printing on stdout and reading from stdin works, so pick one
-# for your platform:
-#
-#   GNOME / Secret Service .... `secret-tool` (libsecret)
-#   KDE ....................... `kwallet-query`, `kwalletcli`
-#   macOS ..................... `security find/add-generic-password`
-#   Windows ................... `cmdkey`, PowerShell `Get-Credential`
-#   Headless / CI ............. `keyctl` (kernel keyutils)
-#   Terminal-first, portable .. `pass`, `gopass`
-#
-# Every `*.command` field takes either shape. An array runs the program
-# directly, with no shell involved. A string goes through the platform shell
-# (`/bin/sh -c` on Unix, `cmd /C` on Windows), which is what pipes, globs and
-# `$VAR` substitution need.
-
-storage.read.command = ["pass", "show", "ortie/example"]
-storage.write.command = "pass insert -m -f ortie/example"
-
-# --------------------------------------------------------------------------------
-# Hooks
-# --------------------------------------------------------------------------------
-#
-# Each hook fires on token issuance (`on-issue`) or refresh (`on-refresh`),
-# split by outcome (`success` / `error`), and runs a `command`, in the same two
-# shapes as the storage commands above.
-#
-# A success hook receives ACCESS_TOKEN, TOKEN_TYPE, EXPIRES_IN, REFRESH_TOKEN
-# and SCOPE, an error hook ERROR, ERROR_DESCRIPTION and ERROR_URI. The command
-# expands them through the shell, so use the string shape. A desktop
-# notification is such a command: notify-send on Linux, osascript on macOS.
-
-#hooks.on-issue.success.command = 'logger "ortie issued a token (expires in ${EXPIRES_IN}s)"'
-#hooks.on-issue.error.command = 'notify-send Ortie "[$ERROR] Issue access token error"'
-#hooks.on-refresh.error.command = 'notify-send Ortie "[$ERROR] Refresh access token error"'
-
-# --------------------------------------------------------------------------------
-# Headless service accounts
-# --------------------------------------------------------------------------------
-#
-# The client credentials grants run without any user interaction: `auth get`
-# completes in one shot, and an expired token silently re-acquires since none
-# of them issues a refresh token, so `ortie token show --auto-refresh` always
-# prints a valid one.
-#
-# Both examples are Microsoft Entra shaped, with a tenanted token endpoint and
-# a resource `.default` scope.
-
-# Secret-authenticated (RFC 6749 section 4.4):
-#
-#[accounts.graph-daemon]
-#grant = "client-credentials"
-#client-id = "<application-id>"
-#client-secret.command = ["secret-tool", "lookup", "oauth", "graph-daemon"]
-#endpoints.token = "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token"
-#scopes = ["https://graph.microsoft.com/.default"]
-#storage.read.command = ["secret-tool", "lookup", "token", "graph-daemon"]
-#storage.write.command = "secret-tool store --label ortie token graph-daemon"
-
-# Certificate credentials (RFC 7523 section 2.2), authenticated by a JWT
-# assertion signed with the private key. Microsoft requires the certificate
-# thumbprint, so `client-certificate` is set and `client-secret` stays unset,
-# its Basic header conflicting with the assertion:
-#
-#[accounts.graph-cert-daemon]
-#grant = "client-credentials-jwt"
-#client-id = "<application-id>"
-#client-key = "/etc/ortie/graph.key.pem"
-#client-certificate = "/etc/ortie/graph.crt.pem"
-#endpoints.token = "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token"
-#scopes = ["https://graph.microsoft.com/.default"]
-#storage.read.command = ["secret-tool", "lookup", "token", "graph-cert-daemon"]
-#storage.write.command = "secret-tool store --label ortie token graph-cert-daemon"
-
-# --------------------------------------------------------------------------------
-# Provider recipes
-# --------------------------------------------------------------------------------
-#
-# Ready-made per-provider blocks (Google, Microsoft, Microsoft Graph, Fastmail)
-# live in the Configuration section of the README, where they render on the
-# repository page: https://github.com/pimalaya/ortie#configuration
-
+storage.read.command = "exit 127"			# prints the stored token JSON
+storage.write.command = "exit 127"			# receives the token JSON on stdin

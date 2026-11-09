@@ -2,10 +2,10 @@
 //!
 //! The flat runtime account, built from the nested
 //! [`crate::config::AccountConfig`] by flattening every
-//! `storage.*.command` and `hooks.*.*.command` into a field.
+//! `storage.*.command` into a field.
 //!
 //! Commands consume it and call its driver methods rather than walking
-//! the config tree, so token storage and hooks have one entry point.
+//! the config tree, so token storage has one entry point.
 
 use std::{
     borrow::Cow,
@@ -18,21 +18,16 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
-use log::trace;
 use pimalaya_config::secret::Secret;
 use pimalaya_stream::tls::Tls;
-use secrecy::ExposeSecret;
 use url::{Host, Url};
 
-use io_oauth::rfc6749::issue_access_token::{
-    Oauth20AccessTokenErrorParams, Oauth20AccessTokenSuccessParams,
-};
+use io_oauth::rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams;
 
 use crate::{
     auth::get::is_loopback_redirect,
     config::{
-        AccountConfig, EndpointsConfig, GrantConfig, HookConfig, HookStatusConfig, HooksConfig,
-        PkceConfig, StorageConfig, StoragesConfig,
+        AccountConfig, EndpointsConfig, GrantConfig, PkceConfig, StorageConfig, StoragesConfig,
     },
 };
 
@@ -82,14 +77,6 @@ pub struct Account {
     pub write_storage_command: Command,
     /// Token resolved from storage, memoized for the session.
     pub token: Option<Oauth20AccessTokenSuccessParams>,
-    /// Command hook fired when a token is successfully issued.
-    pub on_issue_success_hook_command: Option<Command>,
-    /// Command hook fired when issuing a token fails.
-    pub on_issue_error_hook_command: Option<Command>,
-    /// Command hook fired when the token is successfully refreshed.
-    pub on_refresh_success_hook_command: Option<Command>,
-    /// Command hook fired when refreshing the token fails.
-    pub on_refresh_error_hook_command: Option<Command>,
 }
 
 impl From<AccountConfig> for Account {
@@ -98,7 +85,7 @@ impl From<AccountConfig> for Account {
             client_id,
             client_secret,
             client_key,
-            client_certificate,
+            client_cert: client_certificate,
             grant,
             endpoints,
             tls,
@@ -109,7 +96,6 @@ impl From<AccountConfig> for Account {
             extras,
             auto_refresh,
             storage,
-            hooks,
             ..
         } = cfg;
 
@@ -125,33 +111,6 @@ impl From<AccountConfig> for Account {
             read: StorageConfig { command: read_cmd },
             write: StorageConfig { command: write_cmd },
         } = storage;
-
-        let HooksConfig {
-            on_issue,
-            on_refresh,
-        } = hooks;
-
-        let HookStatusConfig {
-            success: issue_success,
-            error: issue_error,
-        } = on_issue;
-        let HookStatusConfig {
-            success: refresh_success,
-            error: refresh_error,
-        } = on_refresh;
-
-        let HookConfig {
-            command: on_issue_success_hook_command,
-        } = issue_success;
-        let HookConfig {
-            command: on_issue_error_hook_command,
-        } = issue_error;
-        let HookConfig {
-            command: on_refresh_success_hook_command,
-        } = refresh_success;
-        let HookConfig {
-            command: on_refresh_error_hook_command,
-        } = refresh_error;
 
         Self {
             client_id,
@@ -173,10 +132,6 @@ impl From<AccountConfig> for Account {
             read_storage_command: read_cmd,
             write_storage_command: write_cmd,
             token: None,
-            on_issue_success_hook_command,
-            on_issue_error_hook_command,
-            on_refresh_success_hook_command,
-            on_refresh_error_hook_command,
         }
     }
 }
@@ -289,26 +244,6 @@ impl Account {
 
         Ok(res)
     }
-
-    /// Fires the on-issue success hook with the issued token.
-    pub fn execute_on_issue_success_hook(&mut self, res: &Oauth20AccessTokenSuccessParams) {
-        execute_success_hook(self.on_issue_success_hook_command.as_mut(), res);
-    }
-
-    /// Fires the on-issue error hook with the server error.
-    pub fn execute_on_issue_error_hook(&mut self, res: &Oauth20AccessTokenErrorParams) {
-        execute_error_hook(self.on_issue_error_hook_command.as_mut(), res);
-    }
-
-    /// Fires the on-refresh success hook with the refreshed token.
-    pub fn execute_on_refresh_success_hook(&mut self, res: &Oauth20AccessTokenSuccessParams) {
-        execute_success_hook(self.on_refresh_success_hook_command.as_mut(), res);
-    }
-
-    /// Fires the on-refresh error hook with the server error.
-    pub fn execute_on_refresh_error_hook(&mut self, res: &Oauth20AccessTokenErrorParams) {
-        execute_error_hook(self.on_refresh_error_hook_command.as_mut(), res);
-    }
 }
 
 /// Binds a listener for the loopback redirection `uri`, on an ephemeral
@@ -349,81 +284,6 @@ fn now_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
-}
-
-/// Runs a success hook, the command with the token exposed as
-/// environment variables.
-fn execute_success_hook(cmd: Option<&mut Command>, res: &Oauth20AccessTokenSuccessParams) {
-    trace!("execute success hook: {res:?}");
-
-    if let Some(cmd) = cmd {
-        cmd.env("ACCESS_TOKEN", res.access_token.expose_secret());
-        cmd.env("TOKEN_TYPE", &res.token_type);
-
-        if let Some(exp) = res.expires_in {
-            cmd.env("EXPIRES_IN", exp.to_string());
-        }
-
-        if let Some(token) = &res.refresh_token {
-            cmd.env("REFRESH_TOKEN", token.expose_secret());
-        }
-
-        if let Some(scope) = &res.scope {
-            cmd.env("SCOPE", scope);
-        }
-
-        if let Err(err) = execute_command_hook(cmd) {
-            log::debug!("execute command hook error: {err}");
-        }
-    }
-}
-
-/// Runs an error hook, the command with the server error exposed as
-/// environment variables.
-fn execute_error_hook(cmd: Option<&mut Command>, res: &Oauth20AccessTokenErrorParams) {
-    trace!("execute error hook: {res:?}");
-
-    if let Some(cmd) = cmd {
-        cmd.env("ERROR", format!("{:?}", res.error));
-
-        if let Some(desc) = &res.error_description {
-            cmd.env("ERROR_DESCRIPTION", desc);
-        }
-
-        if let Some(uri) = &res.error_uri {
-            cmd.env("ERROR_URI", uri);
-        }
-
-        if let Err(err) = execute_command_hook(cmd) {
-            log::debug!("execute command hook error: {err}");
-        }
-    }
-}
-
-/// Spawns a hook command, logging (never failing on) its outcome.
-fn execute_command_hook(cmd: &mut Command) -> Result<()> {
-    let output = cmd
-        .output()
-        .map_err(|err| anyhow!("Spawn command hook error: {err}"))?;
-
-    log::debug!("successfully executed command hook");
-
-    if log::log_enabled!(log::Level::Trace) {
-        if output.status.success() {
-            let out = String::from_utf8_lossy(&output.stdout);
-            log::trace!("command hook stdout: {out}");
-        } else {
-            let bytes = if output.stdout.is_empty() {
-                &output.stderr
-            } else {
-                &output.stdout
-            };
-            let err = anyhow!("{}", String::from_utf8_lossy(bytes));
-            log::trace!("command hook stderr: {err}");
-        }
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

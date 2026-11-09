@@ -34,11 +34,8 @@ An account MAY carry `resources`, a list of RFC 8707 resource indicator URLs, se
 ### Requirement: Storage commands
 An account SHALL define read and write storage as external shell commands. The read command prints the token response JSON on stdout; the write command receives it on stdin. Ortie never persists tokens itself.
 
-### Requirement: Hooks
-An account MAY define hooks fired on token issuance and refresh, each with success and error variants. A hook MAY run a command, with the token or error exposed as environment variables; a desktop notification is such a command (`notify-send`, `osascript`). Secrets travel as secret strings and are never logged.
-
 ### Requirement: v1 config compatibility
-Every v1.x config file SHALL parse and run unchanged, a hook `notify` table aside, refused like any unknown key: `grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, and `pkce = true`/`false` are still accepted. The only behaviour an existing account can notice is PKCE-by-default.
+Every v1.x config file SHALL parse and run unchanged, the `hooks` table aside, refused like any unknown key: `grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, and `pkce = true`/`false` are still accepted. The only behaviour an existing account can notice is PKCE-by-default.
 
 ### Requirement: Account resolution failures name what is missing
 Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for and points at the samples, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
@@ -60,10 +57,11 @@ An account MAY declare `alpn`, the list of ALPN identifiers offered during the T
 ### Requirement: A bare invocation shows the help
 A bare `ortie` SHALL show the help, whether a configuration exists or not, and so SHALL `--account` with no subcommand, a half-typed command. Nothing prompts: Ortie writes no configuration.
 
-### Requirement: Samples, one per use case
-The repository SHALL ship samples/, one file per use case, each holding one complete `[accounts.<name>]` table ready to append to a configuration, and the test suite SHALL parse each through the loader `-c` uses, so a configuration change that breaks a sample fails the build. config.sample.toml stays the reference of every field.
+### Requirement: Samples, one per provider
+The repository SHALL ship config.samples/<provider>.toml, each holding one complete `[accounts.<provider>]` table with dotted keys and no nested table, ready to append to a configuration. Its active lines SHALL use Pimalaya's application where one exists; an application of one's own and the other scopes SHALL stand as commented code. One comment line SHALL head each scope group and each alternative, naming what it serves, and no other comment SHALL appear. config.sample.toml SHALL be one `[accounts.example]` table listing every field and each of its values, the default active and the others commented as `#key = value`, every line ending in one tab-aligned sentence, and every command a failing `exit 127` placeholder. The test suite SHALL parse each sample and config.sample.toml through the loader `-c` uses, as it stands and once per line of commented code swapped in for the active line of its key, so a configuration change that breaks one fails the build.
 
 #### Scenario: A field is renamed
-- GIVEN a sample setting `endpoints.redirection`
+- GIVEN a sample whose commented code sets `client-id`
 - WHEN the field is renamed in the configuration types and the sample is not updated
 - THEN the test suite fails naming the sample
+

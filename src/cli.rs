@@ -113,7 +113,7 @@ pub(crate) fn take_account(
 
         bail!(
             "No configuration found at {}, start from a sample: \
-             https://github.com/pimalaya/ortie/tree/master/samples",
+             https://github.com/pimalaya/ortie/tree/master/config.samples",
             path.display(),
         );
     };

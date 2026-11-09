@@ -7,7 +7,6 @@ use std::borrow::Cow;
 
 use anyhow::{Result, anyhow, bail};
 use clap::Parser;
-use log::debug;
 use pimalaya_cli::printer::Printer;
 use secrecy::SecretString;
 use serde::{
@@ -146,9 +145,6 @@ impl AuthResumeCommand {
         match res {
             Ok(res) => printer.out(report_token_issued(account, &res)?),
             Err(res) => {
-                debug!("execute issue access token error hook");
-                account.execute_on_issue_error_hook(&res);
-
                 let err = anyhow!("Issue access token error (code {:?})", res.error);
                 Err(match (res.error_description, res.error_uri) {
                     (None, None) => err,

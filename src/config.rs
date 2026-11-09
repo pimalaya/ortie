@@ -1,10 +1,10 @@
 //! # Configuration
 //!
 //! The TOML configuration of the `ortie` CLI. Every type here is a pure
-//! DTO mirroring the nested shape (`storage.read.command`,
-//! `hooks.on-refresh.error.command`, ...), the sole behaviour being
-//! [`TlsConfig::into_tls`], which folds the selector and the ALPN list
-//! into the handle the connect helpers expect.
+//! DTO mirroring the nested shape (`storage.read.command`, ...), the
+//! sole behaviour being [`TlsConfig::into_tls`], which folds the
+//! selector and the ALPN list into the handle the connect helpers
+//! expect.
 //!
 //! The flat runtime view commands consume is
 //! [`crate::account::Account`], which this one is flattened into once
@@ -70,8 +70,9 @@ pub struct AccountConfig {
     pub client_key: Option<PathBuf>,
     /// Client certificate (PEM or DER) whose SHA-1 thumbprint rides as
     /// the assertion `x5t` header, recomputed at every mint.
-    #[serde(default, deserialize_with = "toml::opt_shell_expanded_path")]
-    pub client_certificate: Option<PathBuf>,
+    #[serde(default, alias = "client-certificate")]
+    #[serde(deserialize_with = "toml::opt_shell_expanded_path")]
+    pub client_cert: Option<PathBuf>,
     /// OAuth 2.0 grant flow run by the auth commands.
     #[serde(default)]
     pub grant: GrantConfig,
@@ -108,9 +109,6 @@ pub struct AccountConfig {
     pub auto_refresh: bool,
     /// Shell commands reading and writing the persisted token.
     pub storage: StoragesConfig,
-    /// Shell commands and notifications fired on issue and refresh.
-    #[serde(default)]
-    pub hooks: HooksConfig,
 }
 
 /// OAuth 2.0 grant flow run by the auth commands.
@@ -222,43 +220,6 @@ pub struct StorageConfig {
     pub command: Command,
 }
 
-/// The `hooks` block, split by triggering event.
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct HooksConfig {
-    /// Hooks fired when a new access token is issued.
-    #[serde(default)]
-    pub on_issue: HookStatusConfig,
-    /// Hooks fired when the access token is refreshed.
-    #[serde(default)]
-    pub on_refresh: HookStatusConfig,
-}
-
-/// Hooks of one event, split by outcome.
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct HookStatusConfig {
-    /// Hook fired on success.
-    #[serde(default)]
-    pub success: HookConfig,
-    /// Hook fired on error.
-    #[serde(default)]
-    pub error: HookConfig,
-}
-
-/// One hook: an optional shell command.
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct HookConfig {
-    /// Shell command receiving the outcome as environment variables.
-    #[serde(default, alias = "cmd", deserialize_with = "deserialize_opt_command")]
-    pub command: Option<Command>,
-}
-
-fn deserialize_opt_command<'de, D: Deserializer<'de>>(de: D) -> Result<Option<Command>, D::Error> {
-    command::deserialize(de).map(Some)
-}
-
 /// TLS provider selector, folded into the pimalaya-stream config.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
@@ -298,7 +259,11 @@ impl TlsConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Write, path::PathBuf, slice};
+    use std::{
+        fs,
+        io::Write,
+        path::{Path, PathBuf},
+    };
 
     use anyhow::Result;
 
@@ -365,7 +330,7 @@ storage.write.command = ["tee", "token.json"]
             Some(PathBuf::from("/etc/ortie/key.pem"))
         );
         assert_eq!(
-            account.client_certificate,
+            account.client_cert,
             Some(PathBuf::from("/etc/ortie/cert.pem"))
         );
     }
@@ -430,10 +395,10 @@ storage.write.command = ["tee", "token.json"]
         assert!(try_parse(&account("xn--bcher-kva.example")).is_ok());
     }
 
-    /// A hook runs a command only: a `notify` table is refused like any
-    /// unknown key rather than dropped without a word.
+    /// Hooks are gone: a `hooks` table is refused like any unknown key
+    /// rather than dropped without a word.
     #[test]
-    fn a_hook_notify_table_is_refused() {
+    fn a_hooks_table_is_refused() {
         let err = try_parse(
             r#"
 [accounts.test]
@@ -442,14 +407,13 @@ grant = "client-credentials"
 endpoints.token = "https://login.example.com/token"
 storage.read.command = ["cat", "token.json"]
 storage.write.command = ["tee", "token.json"]
-hooks.on-issue.success.notify.summary = "Ortie"
-hooks.on-issue.success.notify.body = "Issued access token"
+hooks.on-issue.success.command = "true"
 "#,
         )
         .unwrap_err();
 
         assert!(
-            format!("{err:?}").contains("unknown field `notify`"),
+            format!("{err:?}").contains("unknown field `hooks`"),
             "{err:?}"
         );
     }
@@ -460,27 +424,94 @@ hooks.on-issue.success.notify.body = "Issued access token"
         assert!(!GrantConfig::Device.is_client_credentials());
     }
 
-    /// Every sample parses through the loader `-c` uses and holds one
-    /// account, so a configuration change breaking one fails here.
+    /// The variants of a sample, one per line of commented code: that
+    /// line uncommented, in place of the active line of its key.
+    fn variants(text: &str) -> Vec<(&str, String)> {
+        fn code(line: &str) -> Option<&str> {
+            let line = line.trim_start().strip_prefix('#')?.trim_start();
+            let field = key(line).is_some_and(|key| !key.contains(' '));
+            (field || line.starts_with('"')).then_some(line)
+        }
+
+        fn key(line: &str) -> Option<&str> {
+            Some(line.split_once(" = ")?.0)
+        }
+
+        let lines: Vec<_> = text.lines().collect();
+        let mut variants = Vec::new();
+
+        for (i, line) in lines.iter().enumerate() {
+            let Some(code) = code(line) else {
+                continue;
+            };
+
+            let replaced = |other: &str| {
+                !other.trim_start().starts_with('#')
+                    && key(code).is_some()
+                    && key(other) == key(code)
+            };
+
+            let variant: Vec<_> = lines
+                .iter()
+                .enumerate()
+                .filter(|(j, other)| *j == i || !replaced(other))
+                .map(|(j, other)| if j == i { code } else { *other })
+                .collect();
+
+            variants.push((code, variant.join("\n")));
+        }
+
+        variants
+    }
+
+    /// Checks a sample: one `[accounts.<name>]` table and no other,
+    /// parsed through the loader `-c` uses, as it stands and once per
+    /// line of commented code swapped in.
+    fn check_sample(path: &Path, name: &str) {
+        let text = fs::read_to_string(path).unwrap();
+        let headers: Vec<_> = text.lines().filter(|l| l.starts_with('[')).collect();
+        assert_eq!(
+            headers,
+            [format!("[accounts.{name}]")],
+            "{}",
+            path.display()
+        );
+
+        let variants = variants(&text);
+        let all = [("nothing", text.clone())].into_iter().chain(variants);
+
+        for (code, text) in all {
+            let config = try_parse(&text).unwrap_or_else(|err| {
+                panic!("{} with {code} uncommented: {err:?}", path.display())
+            });
+            assert!(
+                config.accounts.contains_key(name),
+                "{} with {code} uncommented",
+                path.display()
+            );
+        }
+    }
+
+    /// Every sample, one per provider and named after it, so a
+    /// configuration change breaking one fails here.
     #[test]
-    fn every_sample_parses_into_one_account() {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("samples");
-        let mut parsed = 0;
+    fn every_sample_holds_its_provider_account() {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config.samples");
+        let mut checked = 0;
 
         for entry in fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
-
-            if path.extension().is_none_or(|ext| ext != "toml") {
-                continue;
-            }
-
-            let config = Config::from_paths(slice::from_ref(&path))
-                .unwrap_or_else(|err| panic!("{}: {err:?}", path.display()));
-
-            assert_eq!(config.accounts.len(), 1, "{}", path.display());
-            parsed += 1;
+            let name = path.file_stem().unwrap().to_str().unwrap().to_owned();
+            check_sample(&path, &name);
+            checked += 1;
         }
 
-        assert_ne!(parsed, 0);
+        assert_ne!(checked, 0);
+    }
+
+    #[test]
+    fn the_sample_configuration_holds_one_example_account() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config.sample.toml");
+        check_sample(&path, "example");
     }
 }

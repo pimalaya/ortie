@@ -23,7 +23,7 @@
 //! flows running in the server so no secret reaches the agent.
 //!
 //! The config is user-owned: Ortie never writes it, and an account
-//! starts from one of the samples/ files, config.sample.toml documenting
+//! starts from one of the config.samples/ files, config.sample.toml showing
 //! every field.
 //!
 //! Configuration is two layers. [`config`] holds the pure TOML DTOs,
@@ -39,9 +39,8 @@
 //! commands, while `auth get` requires its grant's endpoints.
 //!
 //! Ortie never persists tokens itself: reads and writes go through
-//! user-configured shell commands (pass, secret-tool, ...), and hooks
-//! fire on issuance and refresh with the outcome exposed as environment
-//! variables. Secrets travel as SecretString and are never logged.
+//! user-configured shell commands (pass, secret-tool, ...). Secrets
+//! travel as SecretString and are never logged.
 //!
 //! Everything the user asked for goes to stdout, data and errors alike
 //! (JSON with `--json`), distinguished only by the exit code; stderr

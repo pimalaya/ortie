@@ -19,7 +19,6 @@ use std::{
 use anyhow::{Context, Result, anyhow, bail};
 use base64_codec::codec::{Base64Alphabet, Base64Codec};
 use clap::Parser;
-use log::debug;
 use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use secrecy::ExposeSecret;
@@ -32,7 +31,7 @@ use url::{Host, Url};
 use pimalaya_config::secret::Secret;
 
 use io_oauth::{
-    client::{Oauth20ClientStd, Oauth20ClientStdError, await_redirect},
+    client::{Oauth20ClientStd, await_redirect},
     rfc6749::{
         auth_request::Oauth20AuthRequestParams,
         client_credentials::Oauth20ClientCredentialsRequestParams,
@@ -438,8 +437,6 @@ fn execute_device(
 /// Requests a device and user code from the account's device
 /// authorization endpoint, returning them with the token endpoint they
 /// are later exchanged at.
-///
-/// A rejected request fires the on-issue error hook.
 pub(crate) fn request_device_authorization(
     account: &mut Account,
 ) -> Result<(Url, Oauth20DeviceAuthSuccessParams)> {
@@ -466,8 +463,6 @@ pub(crate) fn request_device_authorization(
     let device = match device_client.request_device_auth(&device_endpoint, params)? {
         Ok(device) => device,
         Err(res) => {
-            debug!("execute issue access token error hook");
-            account.execute_on_issue_error_hook(&res);
             let err = anyhow!("Device authorization error (code {:?})", res.error);
             return Err(match (res.error_description, res.error_uri) {
                 (None, None) => err,
@@ -482,7 +477,7 @@ pub(crate) fn request_device_authorization(
 }
 
 /// Polls the token endpoint until the device grant completes, then
-/// stores the token and fires the on-issue hooks.
+/// stores the token.
 pub(crate) fn complete_device_token_poll(
     account: &mut Account,
     token_endpoint: &Url,
@@ -501,8 +496,6 @@ pub(crate) fn complete_device_token_poll(
     match client.await_device_access_token(&account.tls, device) {
         Ok(Ok(res)) => report_token_issued(account, &res),
         Ok(Err(res)) => {
-            debug!("execute issue access token error hook");
-            account.execute_on_issue_error_hook(&res);
             let err = anyhow!("Issue access token error (code {:?})", res.error);
             Err(match (res.error_description, res.error_uri) {
                 (None, None) => err,
@@ -511,32 +504,7 @@ pub(crate) fn complete_device_token_poll(
                 (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
             })
         }
-        Err(err) => {
-            if let Some(params) = device_poll_client_error_hook_params(&err) {
-                debug!("execute issue access token error hook");
-                account.execute_on_issue_error_hook(&params);
-            }
-            Err(err.into())
-        }
-    }
-}
-
-/// Synthesizes the error params of a client-side poll failure.
-///
-/// The local poll deadline is the client twin of the server's
-/// `expired_token`, so it fires the same on-issue error hook.
-pub(crate) fn device_poll_client_error_hook_params(
-    err: &Oauth20ClientStdError,
-) -> Option<Oauth20AccessTokenErrorParams> {
-    match err {
-        Oauth20ClientStdError::DeviceCodeExpired => Some(Oauth20AccessTokenErrorParams {
-            error: Oauth20AccessTokenErrorCode::ExpiredToken,
-            error_description: Some(
-                "device code expired before the user completed authorization".into(),
-            ),
-            error_uri: None,
-        }),
-        _ => None,
+        Err(err) => Err(err.into()),
     }
 }
 
@@ -554,15 +522,11 @@ fn execute_client_credentials(printer: &mut impl Printer, account: &mut Account)
             let issued = report_token_issued(account, &res)?;
             printer.out(AuthGetOutput::Issued(issued))
         }
-        Err(res) => {
-            debug!("execute issue access token error hook");
-            account.execute_on_issue_error_hook(&res);
-            Err(client_credentials_error(
-                account.grant,
-                "Issue access token error",
-                res,
-            ))
-        }
+        Err(res) => Err(client_credentials_error(
+            account.grant,
+            "Issue access token error",
+            res,
+        )),
     }
 }
 
@@ -727,15 +691,13 @@ pub(crate) fn client_credentials_error(
     }
 }
 
-/// Persists the token and fires the on-issue success hooks, shared by every
-/// grant that issues one, answering the receipt its command prints.
+/// Persists the token, shared by every grant that issues one, answering
+/// the receipt its command prints.
 pub(crate) fn report_token_issued(
     account: &mut Account,
     res: &Oauth20AccessTokenSuccessParams,
 ) -> Result<TokenIssuedOutput> {
     account.write_to_storage(res.clone())?;
-    debug!("execute issue access token success hook");
-    account.execute_on_issue_success_hook(res);
     Ok(TokenIssuedOutput::issued(res))
 }
 
@@ -832,20 +794,6 @@ impl fmt::Display for DeviceAuthorization {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn device_code_expired_maps_to_expired_token_hook_params() {
-        let params =
-            device_poll_client_error_hook_params(&Oauth20ClientStdError::DeviceCodeExpired)
-                .expect("DeviceCodeExpired must fire on-issue error hook");
-        assert_eq!(params.error, Oauth20AccessTokenErrorCode::ExpiredToken);
-    }
-
-    #[test]
-    fn network_client_errors_do_not_synthesize_hook_params() {
-        let io_err = Oauth20ClientStdError::Io(std::io::Error::other("connection reset"));
-        assert!(device_poll_client_error_hook_params(&io_err).is_none());
-    }
 
     #[test]
     fn shell_single_quote_escapes_embedded_quotes() {

@@ -1,0 +1,18 @@
+[accounts.fastmail]
+endpoints.authorization = "https://api.fastmail.com/oauth/authorize"
+endpoints.token = "https://api.fastmail.com/oauth/refresh"
+endpoints.revocation = "https://api.fastmail.com/oauth/revoke"
+endpoints.redirection = "org.pimalaya.ortie://redirect"
+
+storage.read.command = ["pass", "show", "ortie/fastmail"]
+storage.write.command = "pass insert -m -f ortie/fastmail"
+
+client-id = ""
+resources = ["https://api.fastmail.com/jmap/session"]
+auto-refresh = true
+scopes = [
+  "offline_access",
+  "urn:ietf:params:oauth:scope:mail",
+  "urn:ietf:params:oauth:scope:contacts",
+  "urn:ietf:params:oauth:scope:calendars",
+]

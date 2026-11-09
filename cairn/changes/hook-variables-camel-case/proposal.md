@@ -1,7 +1,7 @@
 ---
 cairn: change
 id: hook-variables-camel-case
-status: active
+status: abandoned
 created: 2026-11-05
 ---
 
@@ -20,3 +20,7 @@ Pimalaya guideline cli-008 gives hooks one shape across products: camelCase vari
 ## Not done
 
 - Dropping the former command variables: at 4.0, listed in the CHANGELOG then.
+
+## Abandoned
+
+hooks-removed (2026-11-09) took the hooks out of Ortie, so no variable is left to rename.

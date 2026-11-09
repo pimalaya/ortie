@@ -28,7 +28,6 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 - **PKCE**: S256 by default, following the OAuth 2.1 posture.
 - **Extra parameters**: provider-specific authorization parameters forwarded verbatim.
 - **Token storage**: read and write tokens through your own shell commands.
-- **Hooks**: a shell command on issuance and refresh, a desktop notification included.
 - **Persistent session**: unlock the secret store once, then answer token commands over stdin.
 - **MCP server**: an agent drives the grants through `ortie mcp`, and no tool returns a token.
 - **JSON output**: `--json` on every data command, its payload described by `ortie json-schema`.
@@ -127,22 +126,17 @@ nix run
 
 A configuration is loaded from the first valid path among $XDG_CONFIG_HOME/ortie/config.toml, $HOME/.config/ortie/config.toml and $HOME/.ortierc. Override it with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`, `:`-separated to deep-merge several files on top of the first.
 
-Start from a sample: each file of [samples](./samples) is one complete account, ready to append to your configuration. Then run `ortie auth get -a <NAME>` to authorize it and store its first token. The annotated [config.sample.toml](./config.sample.toml) documents every field, storage commands and hooks included.
+Start from a sample: each file of [config.samples](./config.samples) is one complete account named after its provider, ready to append to your configuration. Run `ortie auth get -a <NAME>` to authorize it and store its first token. [config.sample.toml](./config.sample.toml) lists every field and value, the defaults active. Storage runs commands of yours, such as `pass`, `secret-tool` or `security` on macOS; the write command receives every issued and refreshed token, so a command chained after it can react, a desktop notification included.
 
-| Sample | Application | For |
-|---|---|---|
-| [google-pimalaya-mail.toml](./samples/google-pimalaya-mail.toml) | Pimalaya | Gmail over IMAP, SMTP or the Gmail API |
-| [google-pimalaya-calendar.toml](./samples/google-pimalaya-calendar.toml) | Pimalaya | Google Calendar API |
-| [google-pimalaya-contacts.toml](./samples/google-pimalaya-contacts.toml) | Pimalaya | Google People API |
-| [microsoft-pimalaya-outlook.toml](./samples/microsoft-pimalaya-outlook.toml) | Pimalaya | Outlook IMAP and SMTP |
-| [microsoft-pimalaya-graph-mail.toml](./samples/microsoft-pimalaya-graph-mail.toml) | Pimalaya | Microsoft Graph mail |
-| [microsoft-pimalaya-graph-calendar.toml](./samples/microsoft-pimalaya-graph-calendar.toml) | Pimalaya | Microsoft Graph calendars |
-| [microsoft-pimalaya-graph-contacts.toml](./samples/microsoft-pimalaya-graph-contacts.toml) | Pimalaya | Microsoft Graph contacts |
-| [google-own-application.toml](./samples/google-own-application.toml) | your own | CalDAV, CardDAV, any other Google scope |
-| [microsoft-own-application.toml](./samples/microsoft-own-application.toml) | your own | an organisation refusing Pimalaya's application |
-| [fastmail-own-application.toml](./samples/fastmail-own-application.toml) | your own, registered by hand | Fastmail over JMAP |
+| Sample | For |
+|---|---|
+| [google.toml](./config.samples/google.toml) | Gmail over IMAP, SMTP or the Gmail API, the Calendar and People APIs; CalDAV and CardDAV with your own application |
+| [microsoft.toml](./config.samples/microsoft.toml) | Microsoft Graph mail, calendars and contacts, or Outlook IMAP and SMTP |
+| [fastmail.toml](./config.samples/fastmail.toml) | Fastmail over JMAP, with your own application |
 
-Google scopes can share one account, a single token serving every API. Microsoft scopes cannot: Entra issues a token for one resource, so Outlook IMAP and SMTP and the Graph API need separate accounts, while the Graph samples can be merged into one.
+Google and Microsoft samples use Pimalaya's application, yours standing as commented code. Scopes come in groups, one comment line naming what each serves: keep the groups you need, uncomment the others. Google scopes share one token, every API included. Microsoft issues a token for one resource only, so the Outlook IMAP and SMTP scopes replace the Graph ones, a second account serving both.
+
+An application of your own: at Google, a Desktop client, whose refresh tokens expire after 7 days while the application stays in testing; at Microsoft, the "Mobile and desktop applications" platform redirecting to http://localhost, for an organisation refusing Pimalaya's application; at Fastmail, a client registered once through RFC 7591 at https://api.fastmail.com/oauth/register with the redirect URI org.pimalaya.ortie://redirect and no client authentication, the `client_id` it answers going in the sample.
 
 ## Usage
 

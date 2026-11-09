@@ -16,7 +16,7 @@ Everything below documents only what differs from the Pimalaya standards.
 Ortie is a pure CLI binary: the glue between a user's TOML configuration and the OAuth engine it drives. Fixes usually land in one of two places, so triage before patching:
 
 - OAuth wire semantics (grants, PKCE, token requests) belong in [io-oauth](https://github.com/pimalaya/io-oauth);
-- configuration shape, samples, token storage, hooks and command UX live here.
+- configuration shape, samples, token storage and command UX live here.
 
 The shared clap and printer primitives come from [pimalaya/cli](https://github.com/pimalaya/cli), the TOML loader and secret resolution from [pimalaya/config](https://github.com/pimalaya/config), and the TCP and TLS plumbing from [pimalaya/stream](https://github.com/pimalaya/stream).
 

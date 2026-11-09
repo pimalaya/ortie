@@ -37,7 +37,6 @@ use io_oauth::{
     rfc7636::pkce::Oauth20PkceCodeVerifier,
     rfc8628::{auth::Oauth20DeviceAuthSuccessParams, token::Oauth20DeviceAccessTokenRequestParams},
 };
-use log::debug;
 use pimalaya_cli::{error::ErrorReport, output::Bytes, printer::Printer};
 use pimalaya_config::secret::Secret;
 use schemars::JsonSchema;
@@ -49,9 +48,8 @@ use crate::{
     account::{Account, DEFAULT_REDIRECTION, bind_loopback},
     auth::{
         get::{
-            AuthGetCommand, AuthorizationRequest, authorization_request,
-            device_poll_client_error_hook_params, is_loopback_redirect, report_token_issued,
-            request_device_authorization,
+            AuthGetCommand, AuthorizationRequest, authorization_request, is_loopback_redirect,
+            report_token_issued, request_device_authorization,
         },
         resume::AuthResumeCommand,
     },
@@ -700,12 +698,7 @@ impl McpServer {
         };
 
         let poll = if Instant::now() >= deadline {
-            let err = Oauth20ClientStdError::DeviceCodeExpired;
-            if let Some(params) = device_poll_client_error_hook_params(&err) {
-                debug!("execute issue access token error hook");
-                self.account.execute_on_issue_error_hook(&params);
-            }
-            McpDevicePoll::Done(Err(err.into()))
+            McpDevicePoll::Done(Err(Oauth20ClientStdError::DeviceCodeExpired.into()))
         } else {
             self.poll_device_once(&token_endpoint, &device)
         };
@@ -755,9 +748,6 @@ impl McpServer {
                 McpDevicePoll::SlowDown
             }
             Err(res) => {
-                debug!("execute issue access token error hook");
-                self.account.execute_on_issue_error_hook(&res);
-
                 let err = anyhow!("Issue access token error (code {:?})", res.error);
                 McpDevicePoll::Done(Err(match (res.error_description, res.error_uri) {
                     (None, None) => err,

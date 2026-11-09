@@ -5,7 +5,6 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
-use log::debug;
 use pimalaya_cli::printer::Printer;
 use secrecy::SecretBox;
 
@@ -82,36 +81,23 @@ impl TokenRefreshCommand {
         printer.out(TokenIssuedOutput::refreshed(&token))
     }
 
-    /// Re-runs the client credentials grant, persists what it issues
-    /// and fires the on-refresh hooks.
+    /// Re-runs the client credentials grant and persists what it issues.
     ///
     /// The JWT kind mints a fresh assertion on every run, and nothing
     /// but the token response is ever stored.
     pub fn reacquire(account: &mut Account) -> Result<Oauth20AccessTokenSuccessParams> {
         match request_client_credentials_token(account)? {
-            Ok(res) => {
-                let res = account.write_to_storage(res)?;
-
-                debug!("execute refresh access token success hook");
-                account.execute_on_refresh_success_hook(&res);
-
-                Ok(res)
-            }
-            Err(res) => {
-                debug!("execute refresh access token error hook");
-                account.execute_on_refresh_error_hook(&res);
-
-                Err(client_credentials_error(
-                    account.grant,
-                    "Refresh access token error",
-                    res,
-                ))
-            }
+            Ok(res) => account.write_to_storage(res),
+            Err(res) => Err(client_credentials_error(
+                account.grant,
+                "Refresh access token error",
+                res,
+            )),
         }
     }
 
-    /// Exchanges the refresh token against the token endpoint,
-    /// persists the outcome and fires the on-refresh hooks.
+    /// Exchanges the refresh token against the token endpoint and
+    /// persists the outcome.
     ///
     /// The previous refresh token is kept when the server omits a
     /// rotated one, or the account would lose the only one it has.
@@ -145,19 +131,11 @@ impl TokenRefreshCommand {
                 // NOTE: the server may have rotated the refresh token,
                 // the old one then being dead: a failed write loses the
                 // grant, which the error says.
-                let res = account.write_to_storage(res).context(
+                account.write_to_storage(res).context(
                     "Store refreshed access token error, run `auth get` if the next refresh fails",
-                )?;
-
-                debug!("execute refresh access token success hook");
-                account.execute_on_refresh_success_hook(&res);
-
-                Ok(res)
+                )
             }
             Err(res) => {
-                debug!("execute refresh access token error hook");
-                account.execute_on_refresh_error_hook(&res);
-
                 let err = anyhow!("Refresh access token error (code {:?})", res.error);
 
                 Err(match (res.error_description, res.error_uri) {

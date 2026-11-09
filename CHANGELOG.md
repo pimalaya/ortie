@@ -20,9 +20,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added `ortie-error` to `json-schema`, the schema of the JSON failure object.
 - Added the `completion`, `manual` and `json-schema` schemas to `json-schema`.
-- Added [samples](./samples), one complete account per use case, ready to append to a configuration.
+- Added [config.samples](./config.samples): google.toml, microsoft.toml and fastmail.toml, each one complete account named after its provider, ready to append to a configuration.
 
-  Google and Microsoft go through Pimalaya's own applications: Gmail, Google Calendar and People, Outlook IMAP and SMTP, Graph mail, calendars and contacts. Google, Microsoft and Fastmail also have a sample for an application of your own. The test suite parses every sample, so they stay in step with the configuration.
+  Google and Microsoft go through Pimalaya's own applications: Gmail, Google Calendar and People, Graph mail, calendars and contacts. An application of your own and the other scopes (CalDAV and CardDAV, Outlook IMAP and SMTP) stand as commented code, scopes grouped under one comment line each. Fastmail takes an application of your own. The test suite parses every sample, its commented code swapped in too, and config.sample.toml, so they stay in step with the configuration.
 
 ### Changed
 
@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
 - Changed `auth get` to print the authorization link, or the verification URI and user code, without opening a browser.
 - Changed the help, usage and logs to carry no colour, and the help to print each paragraph on one line, which the terminal folds, rather than wrap it to the terminal's width.
+- Changed config.sample.toml to one flat `[accounts.example]` table listing every field and value, the defaults active and the others commented, one short comment per line instead of long paragraphs.
 
 ### Removed
 
@@ -60,11 +61,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **BREAKING**: Removed dynamic client registration (RFC 7591), which only the wizard ran.
 
-  The Fastmail sample shows the one registration request to run by hand.
+  The README shows the one Fastmail registration request to run by hand.
 
-- **BREAKING**: Removed the `notify` cargo feature and the hooks' `notify` tables, now refused like any unknown key.
+- **BREAKING**: Removed the hooks (`hooks.on-issue` and `hooks.on-refresh`) and the `notify` cargo feature; a `hooks` table is now refused like any unknown key.
 
-  A desktop notification is a hook `command`, such as `notify-send` on Linux or `osascript` on macOS.
+  `storage.write.command` receives the token JSON on every issue and refresh, so a command chained after the store does what a success hook did, a desktop notification included. A failure shows in the exit code and the error Ortie prints, as JSON under `--json`.
 
 - Removed the io-pim-discovery dependency, and the prompt and spinner ones it came with (inquire, crossterm, ctrlc).
 - Removed the open, notify-rust, dirs and shellexpand dependencies.
