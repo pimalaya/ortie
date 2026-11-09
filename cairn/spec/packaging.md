@@ -32,4 +32,4 @@ Ortie SHALL build url's IDNA without a Unicode back end, `idna_adapter` being pi
 Every dependency SHALL be declared with `default-features = false` and the features Ortie uses, so a default turned on upstream never reaches the binary. clap SHALL be built without `color` and `wrap_help`, and pimalaya-cli without env_logger's `auto-color`: help, usage and logs carry no colour, nothing asks the terminal for its size, and help prints each paragraph on one line.
 
 ### Requirement: Dependency checks pass clean
-`cargo deny check` SHALL pass with no warning over the targets deny.toml lists, which are the release targets and the ones people build from source. A duplicate the tree cannot avoid SHALL be skipped by name, with its reason.
+`cargo deny check` SHALL pass over the targets deny.toml lists, which are the release targets and the ones people build from source. A duplicate the tree cannot avoid stays a visible warning rather than a skip: today getrandom 0.2, which ring 0.17 needs until its next release.

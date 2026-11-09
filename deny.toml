@@ -1,6 +1,4 @@
 [graph]
-# The targets Ortie ships or is commonly built for, so crates only another
-# platform pulls (Android's jni and its syn 2) stay out of every check.
 targets = [
   "aarch64-apple-darwin",
   "aarch64-unknown-linux-gnu",
@@ -17,20 +15,9 @@ targets = [
 
 [advisories]
 ignore = [
-  # rsa reaches ortie through io-oauth's jwt-bearer feature, which
-  # backs the client-credentials-jwt grant. It is only ever used to
-  # sign an RS256 assertion with the account's own local key on an
-  # outbound token request, never to decrypt, so no attacker can
-  # submit ciphertexts or time the private-key operation. RustCrypto
-  # has no constant-time release to upgrade to yet.
+  # SAFETY: rsa only signs the JWT assertion of client-credentials-jwt with
+  # the account's local key and never decrypts, so no timing oracle exists.
   { id = "RUSTSEC-2023-0071", reason = "local RS256 signing only, no decryption oracle exposed" },
-]
-
-[bans]
-skip = [
-  # ring 0.17, the default crypto backend, still depends on getrandom 0.2
-  # while io-oauth and tempfile moved to 0.4. Drop it once ring moves.
-  { crate = "getrandom@0.2.17", reason = "ring 0.17 depends on getrandom 0.2" },
 ]
 
 [sources]
