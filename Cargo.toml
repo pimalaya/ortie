@@ -1,6 +1,6 @@
 [package]
 name = "ortie"
-description = "CLI to manage OAuth 2.0 tokens"
+description = "CLI to manage OAuth tokens"
 version = "2.3.0"
 authors = ["Clément DOUIN (soywod) <pimalaya.org@posteo.net>"]
 rust-version = "1.89"
