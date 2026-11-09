@@ -39,12 +39,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   An interactive session keeps its errors on stderr.
 
+- **BREAKING**: Changed every configured URL to take an ASCII host only, an internationalised one written in its Punycode form (`https://xn--bcher-kva.example` for `bücher.example`).
+
+  url resolves host names without its Unicode tables, which weighed 130 KB of the binary.
+
 - Changed `ortie repl` to split its lines as a shell does, quotes and escapes included.
 - Changed `ortie repl` to accept `--json` on a line, for that line only.
 - Changed piped `--json` output to print one value per line.
 - Changed every `json-schema` schema to carry an `$id` naming the contract version.
 - Changed every `json-schema` schema to require the keys a command always prints.
 - Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
+- Changed `auth get` to print the authorization link, or the verification URI and user code, without opening a browser.
+- Changed the help, usage and logs to carry no colour, and the help to print each paragraph on one line, which the terminal folds, rather than wrap it to the terminal's width.
 
 ### Removed
 
@@ -56,7 +62,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   The Fastmail sample shows the one registration request to run by hand.
 
+- **BREAKING**: Removed the `notify` cargo feature and the hooks' `notify` tables, now refused like any unknown key.
+
+  A desktop notification is a hook `command`, such as `notify-send` on Linux or `osascript` on macOS.
+
 - Removed the io-pim-discovery dependency, and the prompt and spinner ones it came with (inquire, crossterm, ctrlc).
+- Removed the open, notify-rust, dirs and shellexpand dependencies.
 
 ### Fixed
 

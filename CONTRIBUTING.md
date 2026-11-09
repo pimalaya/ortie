@@ -22,7 +22,7 @@ The shared clap and printer primitives come from [pimalaya/cli](https://github.c
 
 ## Feature matrix
 
-The binary always ships the full CLI; the only cargo features left are the TLS providers (rustls-ring default, rustls-aws, native-tls), vendored and notify. Build against a non-default provider to check it still compiles:
+The binary always ships the full CLI; the only cargo features left are the TLS providers (rustls-ring default, rustls-aws, native-tls) and vendored. Build against a non-default provider to check it still compiles:
 
 ```sh
 cargo build --no-default-features --features native-tls

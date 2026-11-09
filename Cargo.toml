@@ -13,11 +13,10 @@ repository = "https://github.com/pimalaya/ortie"
 
 [features]
 default = ["rustls-ring"]
-notify = ["dep:notify-rust"]
 native-tls = ["pimalaya-stream/native-tls", "io-oauth/native-tls"]
 rustls-aws = ["pimalaya-stream/rustls-aws", "io-oauth/rustls-aws"]
 rustls-ring = ["pimalaya-stream/rustls-ring", "io-oauth/rustls-ring"]
-vendored = ["pimalaya-stream/vendored", "io-oauth/vendored", "notify-rust?/d_vendored"]
+vendored = ["pimalaya-stream/vendored", "io-oauth/vendored"]
 
 [profile.release]
 lto = "fat"
@@ -29,29 +28,26 @@ panic = "abort"
 pimalaya-cli = { version = "0.3", default-features = false, features = ["build"] }
 
 [dev-dependencies]
-env_logger = "0.11"
-rustls = "0.23"
-rustls-platform-verifier = "0.7"
-tempfile = "3"
+tempfile = { version = "3", default-features = false }
 
 [dependencies]
-anyhow = "1"
+anyhow = { version = "1", default-features = false, features = ["std"] }
 base64-codec = { version = "0.1", default-features = false, features = ["alloc"] }
-clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
-dirs = "7"
-humantime = "2.2"
+clap = { version = "4.4", default-features = false, features = ["derive", "env", "error-context", "help", "std", "suggestions", "usage"] }
+humantime = { version = "2.2", default-features = false }
+idna_adapter = { version = "=1.0.0", default-features = false }
 io-oauth = { version = "0.5", default-features = false, features = ["client", "jwt-bearer"] }
-log = "0.4"
-notify-rust = { version = "4.18", default-features = false, features = ["d"], optional = true }
-open = "5.3"
+log = { version = "0.4", default-features = false }
 pimalaya-cli = { version = "0.3", default-features = false, features = ["terminal"] }
 pimalaya-config = { version = "0.3", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.3", default-features = false, features = ["std"] }
-schemars = "1"
+schemars = { version = "1", default-features = false, features = ["derive", "std"] }
 secrecy = { version = "0.10", default-features = false, features = ["serde"] }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
-serde_json = "1"
-shellexpand = "3.1"
-shlex = "2"
+serde_json = { version = "1", default-features = false, features = ["std"] }
+shlex = { version = "2", default-features = false }
 simd-cpu = { version = "0.1", default-features = false, features = ["std"] }
 url = { version = "2.5", default-features = false, features = ["serde"] }
+
+[patch.crates-io]
+pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "65d6d3054978fc7fa6895069c0af2fbcaa160c3c" }

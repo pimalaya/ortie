@@ -2,13 +2,11 @@
 //!
 //! The flat runtime account, built from the nested
 //! [`crate::config::AccountConfig`] by flattening every
-//! `storage.*.command` and `hooks.*.*.{command,notify}` into a field.
+//! `storage.*.command` and `hooks.*.*.command` into a field.
 //!
 //! Commands consume it and call its driver methods rather than walking
 //! the config tree, so token storage and hooks have one entry point.
 
-#[cfg(feature = "notify")]
-use std::time::Duration;
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -20,11 +18,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
-#[cfg(feature = "notify")]
-use humantime::format_duration;
 use log::trace;
-#[cfg(feature = "notify")]
-use notify_rust::Notification;
 use pimalaya_config::secret::Secret;
 use pimalaya_stream::tls::Tls;
 use secrecy::ExposeSecret;
@@ -38,7 +32,7 @@ use crate::{
     auth::get::is_loopback_redirect,
     config::{
         AccountConfig, EndpointsConfig, GrantConfig, HookConfig, HookStatusConfig, HooksConfig,
-        NotifyConfig, PkceConfig, StorageConfig, StoragesConfig,
+        PkceConfig, StorageConfig, StoragesConfig,
     },
 };
 
@@ -96,18 +90,6 @@ pub struct Account {
     pub on_refresh_success_hook_command: Option<Command>,
     /// Command hook fired when refreshing the token fails.
     pub on_refresh_error_hook_command: Option<Command>,
-    /// Notification fired when a token is successfully issued.
-    #[cfg(feature = "notify")]
-    pub on_issue_success_hook_notify: Option<NotifyConfig>,
-    /// Notification fired when issuing a token fails.
-    #[cfg(feature = "notify")]
-    pub on_issue_error_hook_notify: Option<NotifyConfig>,
-    /// Notification fired when the token is successfully refreshed.
-    #[cfg(feature = "notify")]
-    pub on_refresh_success_hook_notify: Option<NotifyConfig>,
-    /// Notification fired when refreshing the token fails.
-    #[cfg(feature = "notify")]
-    pub on_refresh_error_hook_notify: Option<NotifyConfig>,
 }
 
 impl From<AccountConfig> for Account {
@@ -160,23 +142,15 @@ impl From<AccountConfig> for Account {
 
         let HookConfig {
             command: on_issue_success_hook_command,
-            #[cfg(feature = "notify")]
-                notify: on_issue_success_hook_notify,
         } = issue_success;
         let HookConfig {
             command: on_issue_error_hook_command,
-            #[cfg(feature = "notify")]
-                notify: on_issue_error_hook_notify,
         } = issue_error;
         let HookConfig {
             command: on_refresh_success_hook_command,
-            #[cfg(feature = "notify")]
-                notify: on_refresh_success_hook_notify,
         } = refresh_success;
         let HookConfig {
             command: on_refresh_error_hook_command,
-            #[cfg(feature = "notify")]
-                notify: on_refresh_error_hook_notify,
         } = refresh_error;
 
         Self {
@@ -203,14 +177,6 @@ impl From<AccountConfig> for Account {
             on_issue_error_hook_command,
             on_refresh_success_hook_command,
             on_refresh_error_hook_command,
-            #[cfg(feature = "notify")]
-            on_issue_success_hook_notify,
-            #[cfg(feature = "notify")]
-            on_issue_error_hook_notify,
-            #[cfg(feature = "notify")]
-            on_refresh_success_hook_notify,
-            #[cfg(feature = "notify")]
-            on_refresh_error_hook_notify,
         }
     }
 }
@@ -326,38 +292,22 @@ impl Account {
 
     /// Fires the on-issue success hook with the issued token.
     pub fn execute_on_issue_success_hook(&mut self, res: &Oauth20AccessTokenSuccessParams) {
-        #[cfg(feature = "notify")]
-        let notify = self.on_issue_success_hook_notify.as_ref();
-        #[cfg(not(feature = "notify"))]
-        let notify = None;
-        execute_success_hook(self.on_issue_success_hook_command.as_mut(), notify, res);
+        execute_success_hook(self.on_issue_success_hook_command.as_mut(), res);
     }
 
     /// Fires the on-issue error hook with the server error.
     pub fn execute_on_issue_error_hook(&mut self, res: &Oauth20AccessTokenErrorParams) {
-        #[cfg(feature = "notify")]
-        let notify = self.on_issue_error_hook_notify.as_ref();
-        #[cfg(not(feature = "notify"))]
-        let notify = None;
-        execute_error_hook(self.on_issue_error_hook_command.as_mut(), notify, res);
+        execute_error_hook(self.on_issue_error_hook_command.as_mut(), res);
     }
 
     /// Fires the on-refresh success hook with the refreshed token.
     pub fn execute_on_refresh_success_hook(&mut self, res: &Oauth20AccessTokenSuccessParams) {
-        #[cfg(feature = "notify")]
-        let notify = self.on_refresh_success_hook_notify.as_ref();
-        #[cfg(not(feature = "notify"))]
-        let notify = None;
-        execute_success_hook(self.on_refresh_success_hook_command.as_mut(), notify, res);
+        execute_success_hook(self.on_refresh_success_hook_command.as_mut(), res);
     }
 
     /// Fires the on-refresh error hook with the server error.
     pub fn execute_on_refresh_error_hook(&mut self, res: &Oauth20AccessTokenErrorParams) {
-        #[cfg(feature = "notify")]
-        let notify = self.on_refresh_error_hook_notify.as_ref();
-        #[cfg(not(feature = "notify"))]
-        let notify = None;
-        execute_error_hook(self.on_refresh_error_hook_command.as_mut(), notify, res);
+        execute_error_hook(self.on_refresh_error_hook_command.as_mut(), res);
     }
 }
 
@@ -402,12 +352,8 @@ fn now_secs() -> u64 {
 }
 
 /// Runs a success hook, the command with the token exposed as
-/// environment variables, then the notification.
-fn execute_success_hook(
-    cmd: Option<&mut Command>,
-    #[cfg_attr(not(feature = "notify"), allow(unused))] notify: Option<&NotifyConfig>,
-    res: &Oauth20AccessTokenSuccessParams,
-) {
+/// environment variables.
+fn execute_success_hook(cmd: Option<&mut Command>, res: &Oauth20AccessTokenSuccessParams) {
     trace!("execute success hook: {res:?}");
 
     if let Some(cmd) = cmd {
@@ -430,42 +376,11 @@ fn execute_success_hook(
             log::debug!("execute command hook error: {err}");
         }
     }
-
-    #[cfg(feature = "notify")]
-    if let Some(config) = notify {
-        let get_env = |key: &str| -> Result<Option<Cow<str>>, ()> {
-            if key == "EXPIRES_IN" {
-                return match res.expires_in {
-                    None => Ok(Some("unknown".into())),
-                    Some(exp) => {
-                        let exp = Duration::from_secs(exp as u64 + 1);
-                        Ok(Some(format_duration(exp).to_string().into()))
-                    }
-                };
-            }
-
-            if key == "TOKEN_TYPE" {
-                let t = (&res.token_type).into();
-                return Ok(Some(t));
-            }
-
-            match std::env::var(key) {
-                Ok(val) => Ok(Some(val.into())),
-                Err(_) => Ok(None),
-            }
-        };
-
-        notify_with(config, get_env);
-    }
 }
 
 /// Runs an error hook, the command with the server error exposed as
-/// environment variables, then the notification.
-fn execute_error_hook(
-    cmd: Option<&mut Command>,
-    #[cfg_attr(not(feature = "notify"), allow(unused))] notify: Option<&NotifyConfig>,
-    res: &Oauth20AccessTokenErrorParams,
-) {
+/// environment variables.
+fn execute_error_hook(cmd: Option<&mut Command>, res: &Oauth20AccessTokenErrorParams) {
     trace!("execute error hook: {res:?}");
 
     if let Some(cmd) = cmd {
@@ -482,30 +397,6 @@ fn execute_error_hook(
         if let Err(err) = execute_command_hook(cmd) {
             log::debug!("execute command hook error: {err}");
         }
-    }
-
-    #[cfg(feature = "notify")]
-    if let Some(config) = notify {
-        let get_env = |key: &str| -> Result<Option<Cow<str>>, ()> {
-            if key == "ERROR" {
-                return Ok(Some(format!("{:?}", res.error).into()));
-            }
-
-            if key == "ERROR_DESCRIPTION" {
-                return Ok(res.error_description.as_ref().map(Into::into));
-            }
-
-            if key == "ERROR_URI" {
-                return Ok(res.error_uri.as_ref().map(Into::into));
-            }
-
-            match std::env::var(key) {
-                Ok(val) => Ok(Some(val.into())),
-                Err(_) => Ok(None),
-            }
-        };
-
-        notify_with(config, get_env);
     }
 }
 
@@ -533,28 +424,6 @@ fn execute_command_hook(cmd: &mut Command) -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Shows a system notification, shell-expanding the `$VAR` references
-/// of the summary and body through `get_env`.
-#[cfg(feature = "notify")]
-fn notify_with<'a, F>(config: &'a NotifyConfig, get_env: F)
-where
-    F: Fn(&str) -> Result<Option<Cow<'a, str>>, ()> + Copy,
-{
-    let home_dir = || dirs::home_dir().map(|p| p.to_string_lossy().to_string());
-
-    let summary = shellexpand::full_with_context(&config.summary, home_dir, get_env)
-        .unwrap_or_else(|_| (&config.summary).into());
-
-    let body = shellexpand::full_with_context(&config.body, home_dir, get_env)
-        .unwrap_or_else(|_| (&config.body).into());
-
-    let notif = Notification::new().summary(&summary).body(&body).show();
-
-    if let Err(err) = notif {
-        log::debug!("execute notify hook error: {err}");
-    }
 }
 
 #[cfg(test)]

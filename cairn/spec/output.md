@@ -38,7 +38,7 @@ A command storing a new access token (`token refresh`, `auth resume`, and `auth 
 A test SHALL run pimalaya-cli's registry check over the command tree: every runnable command described, bare `ortie` and `ortie repl` aside, and every key but `ortie-error` naming a command, so renaming or removing a subcommand cannot leave a schema behind describing an invocation nobody can type, nor a new one print an undescribed value.
 
 ### Requirement: Nothing bypasses the printer under JSON
-Every write to stdout that is not the printer's SHALL be guarded by the JSON mode, so a `--json` run emits the payload and nothing else. The handoff instructions, the browser fallbacks and the wait notices of `auth get` are human text on the human path only.
+Every write to stdout that is not the printer's SHALL be guarded by the JSON mode, so a `--json` run emits the payload and nothing else. The handoff instructions and the wait notices of `auth get` are human text on the human path only.
 
 ### Requirement: The JSON contract is described and versioned
 `json-schema` SHALL describe the failure object under the key `ortie-error`. Every generated schema SHALL carry an `$id` naming the contract version, the major version of Ortie. Every registered payload SHALL be a JSON object, checked by a test. Piped `--json` output SHALL print one value per line.

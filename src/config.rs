@@ -2,7 +2,7 @@
 //!
 //! The TOML configuration of the `ortie` CLI. Every type here is a pure
 //! DTO mirroring the nested shape (`storage.read.command`,
-//! `hooks.on-refresh.error.notify`, ...), the sole behaviour being
+//! `hooks.on-refresh.error.command`, ...), the sole behaviour being
 //! [`TlsConfig::into_tls`], which folds the selector and the ALPN list
 //! into the handle the connect helpers expect.
 //!
@@ -19,8 +19,6 @@ use std::{collections::HashMap, fmt, path::PathBuf, process::Command};
 
 use pimalaya_config::{command, secret::Secret, toml, toml::TomlConfig};
 use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsProvider};
-#[cfg(feature = "notify")]
-use serde::Serialize;
 use serde::{
     Deserialize, Deserializer,
     de::{self, Visitor},
@@ -248,35 +246,14 @@ pub struct HookStatusConfig {
     pub error: HookConfig,
 }
 
-/// One hook: an optional shell command and an optional notification.
+/// One hook: an optional shell command.
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct HookConfig {
     /// Shell command receiving the outcome as environment variables.
     #[serde(default, alias = "cmd", deserialize_with = "deserialize_opt_command")]
     pub command: Option<Command>,
-    /// System notification with shell-expanded summary and body.
-    #[cfg(feature = "notify")]
-    #[serde(default)]
-    pub notify: Option<NotifyConfig>,
 }
-
-/// System notification content, `$VAR` references being expanded from
-/// the hook environment variables.
-#[cfg(feature = "notify")]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct NotifyConfig {
-    /// Notification title.
-    pub summary: String,
-    /// Notification body.
-    pub body: String,
-}
-
-/// Placeholder keeping the hook shape identical when the notify cargo
-/// feature is disabled.
-#[cfg(not(feature = "notify"))]
-pub type NotifyConfig = ();
 
 fn deserialize_opt_command<'de, D: Deserializer<'de>>(de: D) -> Result<Option<Command>, D::Error> {
     command::deserialize(de).map(Some)
@@ -323,13 +300,19 @@ impl TlsConfig {
 mod tests {
     use std::{fs, io::Write, path::PathBuf, slice};
 
+    use anyhow::Result;
+
     use super::*;
 
-    fn parse(toml: &str) -> AccountConfig {
+    fn try_parse(toml: &str) -> Result<Config> {
         let mut file = tempfile::NamedTempFile::new().unwrap();
         file.write_all(toml.as_bytes()).unwrap();
 
-        let mut config = Config::from_paths(&[file.path().to_path_buf()]).unwrap();
+        Config::from_paths(&[file.path().to_path_buf()])
+    }
+
+    fn parse(toml: &str) -> AccountConfig {
+        let mut config = try_parse(toml).unwrap();
         config.take_named_account("test").unwrap().1
     }
 
@@ -424,6 +407,51 @@ storage.write.command = ["tee", "token.json"]
 
         assert!(tls.provider.is_none());
         assert!(tls.rustls.alpn.is_empty());
+    }
+
+    /// url's IDNA runs without a Unicode back end, so a host is ASCII and
+    /// an internationalised one is written in its Punycode form.
+    #[test]
+    fn a_non_ascii_host_is_refused() {
+        let account = |host: &str| {
+            format!(
+                r#"
+[accounts.test]
+client-id = "app-id"
+grant = "client-credentials"
+endpoints.token = "https://{host}/token"
+storage.read.command = ["cat", "token.json"]
+storage.write.command = ["tee", "token.json"]
+"#
+            )
+        };
+
+        assert!(try_parse(&account("bücher.example")).is_err());
+        assert!(try_parse(&account("xn--bcher-kva.example")).is_ok());
+    }
+
+    /// A hook runs a command only: a `notify` table is refused like any
+    /// unknown key rather than dropped without a word.
+    #[test]
+    fn a_hook_notify_table_is_refused() {
+        let err = try_parse(
+            r#"
+[accounts.test]
+client-id = "app-id"
+grant = "client-credentials"
+endpoints.token = "https://login.example.com/token"
+storage.read.command = ["cat", "token.json"]
+storage.write.command = ["tee", "token.json"]
+hooks.on-issue.success.notify.summary = "Ortie"
+hooks.on-issue.success.notify.body = "Issued access token"
+"#,
+        )
+        .unwrap_err();
+
+        assert!(
+            format!("{err:?}").contains("unknown field `notify`"),
+            "{err:?}"
+        );
     }
 
     #[test]

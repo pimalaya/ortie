@@ -132,13 +132,6 @@ impl AuthGetCommand {
 
         println!("{authorization_uri}");
 
-        if interactive && let Err(err) = open::that(auth_uri.as_str()) {
-            println!("Cannot open your browser ({err})");
-
-            let msg = "Click on the link to manually start the authorization process";
-            println!("{msg}: {auth_uri}");
-        }
-
         // NOTE: a redirection the listener cannot bind dead-ends in the
         // browser, so hand off rather than bind a listener that would
         // fail on an unknown scheme with no host and no inferable port.
@@ -393,7 +386,7 @@ impl fmt::Display for AuthorizationUri<'_> {
 
         writeln!(f)?;
         if self.interactive {
-            writeln!(f, "Sending authorization request to your browser:")
+            writeln!(f, "Open the link in your browser to authorize:")
         } else {
             writeln!(f, "Click on the link to start the authorization process:")
         }?;
@@ -437,14 +430,6 @@ fn execute_device(
     }
 
     println!("{view}");
-    let open_uri = device
-        .verification_uri_complete
-        .as_deref()
-        .unwrap_or(device.verification_uri.as_str());
-    if let Err(err) = open::that(open_uri) {
-        println!("Cannot open your browser ({err})");
-        println!("Open {open_uri} and enter the code {}", device.user_code);
-    }
     println!("Waiting for authorization…");
     let issued = complete_device_token_poll(account, &token_endpoint, &device)?;
     printer.out(AuthGetOutput::Issued(issued))
@@ -833,11 +818,14 @@ impl fmt::Display for DeviceAuthorization {
         writeln!(f, " - expires in: {}s", self.expires_in)?;
         writeln!(f, " - interval: {}s", self.interval)?;
         writeln!(f)?;
-        writeln!(
-            f,
-            "Navigate to {} and enter the code {}",
-            self.verification_uri, self.user_code
-        )
+        match &self.verification_uri_complete {
+            Some(uri) => writeln!(f, "Navigate to {uri} and check the code {}", self.user_code),
+            None => writeln!(
+                f,
+                "Navigate to {} and enter the code {}",
+                self.verification_uri, self.user_code
+            ),
+        }
     }
 }
 

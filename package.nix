@@ -5,7 +5,6 @@
   buildFeatures ? [ ],
   buildNoDefaultFeatures ? false,
   buildPackages,
-  dbus,
   fetchFromGitHub,
   installManPages ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
   installShellCompletions ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
@@ -19,20 +18,6 @@
 
 let
   nativeTls = builtins.elem "native-tls" buildFeatures;
-  notify = builtins.elem "notify" buildFeatures;
-
-  # dbus calls libgcc outline atomics that the static aarch64 link cannot
-  # resolve (__aarch64_ldset4_sync & co), so inline them instead.
-  dbus' =
-    if stdenv.hostPlatform.isLinux && stdenv.hostPlatform.isAarch64 then
-      dbus.overrideAttrs (old: {
-        env = (old.env or { }) // {
-          NIX_CFLAGS_COMPILE = (old.env.NIX_CFLAGS_COMPILE or "") + " -mno-outline-atomics";
-        };
-      })
-    else
-      dbus;
-
 in
 rustPlatform.buildRustPackage (finalAttrs: {
   __structuredAttrs = true;
@@ -51,12 +36,6 @@ rustPlatform.buildRustPackage (finalAttrs: {
   };
 
   env = {
-    # pkg-config hands the linker libdbus but no rpath, leaving a binary that
-    # cannot find it: not in postInstall, which runs it, nor once installed.
-    NIX_LDFLAGS = lib.optionalString (notify && !stdenv.hostPlatform.isWindows) (
-      "-rpath " + lib.getLib dbus' + "/lib"
-    );
-
     # openssl should not be provided by vendors, not even on windows
     OPENSSL_NO_VENDOR = 1;
   };
@@ -66,15 +45,9 @@ rustPlatform.buildRustPackage (finalAttrs: {
     installShellFiles
   ];
 
-  buildInputs =
-    lib.optional nativeTls openssl
-    # dbus is provided by vendors on windows
-    ++ lib.optional (notify && !stdenv.hostPlatform.isWindows) dbus';
+  buildInputs = lib.optional nativeTls openssl;
 
-  buildFeatures =
-    buildFeatures
-    # dbus is provided by vendors on windows
-    ++ lib.optional (notify && stdenv.hostPlatform.isWindows) "vendored";
+  inherit buildFeatures;
 
   postInstall =
     let

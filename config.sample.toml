@@ -123,27 +123,17 @@ storage.write.command = "pass insert -m -f ortie/example"
 # --------------------------------------------------------------------------------
 #
 # Each hook fires on token issuance (`on-issue`) or refresh (`on-refresh`),
-# split by outcome (`success` / `error`). Both accept a `command`, in the same
-# two shapes as the storage commands above, and a `notify` block, which needs
-# the `notify` cargo feature, off by default.
+# split by outcome (`success` / `error`), and runs a `command`, in the same two
+# shapes as the storage commands above.
 #
 # A success hook receives ACCESS_TOKEN, TOKEN_TYPE, EXPIRES_IN, REFRESH_TOKEN
 # and SCOPE, an error hook ERROR, ERROR_DESCRIPTION and ERROR_URI. The command
-# expands them through the shell, so use the string shape, and the `notify`
-# summary and body expand them too.
+# expands them through the shell, so use the string shape. A desktop
+# notification is such a command: notify-send on Linux, osascript on macOS.
 
-#hooks.on-issue.success.command = "logger 'ortie issued a token (expires in $EXPIRES_IN)'"
-#hooks.on-issue.success.notify.summary = "Ortie"
-#hooks.on-issue.success.notify.body = "Issued access token (expires in $EXPIRES_IN)"
-
-#hooks.on-issue.error.notify.summary = "Ortie"
-#hooks.on-issue.error.notify.body = "[$ERROR] Issue access token error\n$ERROR_DESCRIPTION"
-
-#hooks.on-refresh.success.notify.summary = "Ortie"
-#hooks.on-refresh.success.notify.body = "Refreshed access token (expires in $EXPIRES_IN)"
-
-#hooks.on-refresh.error.notify.summary = "Ortie"
-#hooks.on-refresh.error.notify.body = "[$ERROR] Refresh access token error\n$ERROR_DESCRIPTION"
+#hooks.on-issue.success.command = 'logger "ortie issued a token (expires in ${EXPIRES_IN}s)"'
+#hooks.on-issue.error.command = 'notify-send Ortie "[$ERROR] Issue access token error"'
+#hooks.on-refresh.error.command = 'notify-send Ortie "[$ERROR] Refresh access token error"'
 
 # --------------------------------------------------------------------------------
 # Headless service accounts

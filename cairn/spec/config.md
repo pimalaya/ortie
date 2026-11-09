@@ -35,10 +35,10 @@ An account MAY carry `resources`, a list of RFC 8707 resource indicator URLs, se
 An account SHALL define read and write storage as external shell commands. The read command prints the token response JSON on stdout; the write command receives it on stdin. Ortie never persists tokens itself.
 
 ### Requirement: Hooks
-An account MAY define hooks fired on token issuance and refresh, each with success and error variants. A hook MAY run a command (with the token or error exposed as environment variables) and, under the `notify` feature, show a desktop notification. Secrets travel as secret strings and are never logged.
+An account MAY define hooks fired on token issuance and refresh, each with success and error variants. A hook MAY run a command, with the token or error exposed as environment variables; a desktop notification is such a command (`notify-send`, `osascript`). Secrets travel as secret strings and are never logged.
 
 ### Requirement: v1 config compatibility
-Every v1.x config file SHALL parse and run unchanged: `grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, and `pkce = true`/`false` are still accepted. The only behaviour an existing account can notice is PKCE-by-default.
+Every v1.x config file SHALL parse and run unchanged, a hook `notify` table aside, refused like any unknown key: `grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, and `pkce = true`/`false` are still accepted. The only behaviour an existing account can notice is PKCE-by-default.
 
 ### Requirement: Account resolution failures name what is missing
 Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for and points at the samples, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.

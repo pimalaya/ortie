@@ -28,7 +28,7 @@ CLI to manage OAuth 2.0 tokens, written in Rust
 - **PKCE**: S256 by default, following the OAuth 2.1 posture.
 - **Extra parameters**: provider-specific authorization parameters forwarded verbatim.
 - **Token storage**: read and write tokens through your own shell commands.
-- **Hooks**: a shell command or a desktop notification on issuance and refresh.
+- **Hooks**: a shell command on issuance and refresh, a desktop notification included.
 - **Persistent session**: unlock the secret store once, then answer token commands over stdin.
 - **MCP server**: an agent drives the grants through `ortie mcp`, and no tool returns a token.
 - **JSON output**: `--json` on every data command, its payload described by `ortie json-schema`.
