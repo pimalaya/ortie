@@ -1,3 +1,20 @@
+[graph]
+# The targets Ortie ships or is commonly built for, so crates only another
+# platform pulls (Android's jni and its syn 2) stay out of every check.
+targets = [
+  "aarch64-apple-darwin",
+  "aarch64-unknown-linux-gnu",
+  "aarch64-unknown-linux-musl",
+  "arm-unknown-linux-musleabihf",
+  "armv7-unknown-linux-musleabihf",
+  "i686-unknown-linux-musl",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-gnu",
+  "x86_64-pc-windows-msvc",
+  "x86_64-unknown-linux-gnu",
+  "x86_64-unknown-linux-musl",
+]
+
 [advisories]
 ignore = [
   # rsa reaches ortie through io-oauth's jwt-bearer feature, which
@@ -9,6 +26,13 @@ ignore = [
   { id = "RUSTSEC-2023-0071", reason = "local RS256 signing only, no decryption oracle exposed" },
 ]
 
+[bans]
+skip = [
+  # ring 0.17, the default crypto backend, still depends on getrandom 0.2
+  # while io-oauth and tempfile moved to 0.4. Drop it once ring moves.
+  { crate = "getrandom@0.2.17", reason = "ring 0.17 depends on getrandom 0.2" },
+]
+
 [sources]
 allow-org.github = ["pimalaya"]
 unknown-registry = "deny"
@@ -18,7 +42,6 @@ unknown-git = "deny"
 allow = [
   "Apache-2.0",
   "BSD-3-Clause",
-  "CDLA-Permissive-2.0",
   "ISC",
   "MIT",
   "MPL-2.0",

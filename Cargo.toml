@@ -50,4 +50,6 @@ simd-cpu = { version = "0.1", default-features = false, features = ["std"] }
 url = { version = "2.5", default-features = false, features = ["serde"] }
 
 [patch.crates-io]
-pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "65d6d3054978fc7fa6895069c0af2fbcaa160c3c" }
+io-oauth = { git = "https://github.com/pimalaya/io-oauth", rev = "52ef73be28935fc99cd170dfa3b0df91fa5a6afa" }
+pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "ce008cc87573007ac56fd32b85589eeaa6b9c26c" }
+pimalaya-config = { git = "https://github.com/pimalaya/config", rev = "7601a554bd378263d947079e3dc8eb269cd8e43e" }

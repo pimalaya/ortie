@@ -86,6 +86,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   io-oauth 0.4 runs on io-http 0.6, which caps response heads at 64 KiB and bodies at 256 MiB.
 
+- Fixed the state and the PKCE code verifier never repeating a character, which lowered their entropy: io-oauth now draws each character independently.
+
 ## [2.3.0] - 2026-10-02
 
 ### Added
