@@ -40,7 +40,8 @@
 //! Endpoints are optional at parse time: each command checks the ones
 //! it needs and fails naming the missing field. `token show` therefore
 //! works on an account holding only a client id and the storage
-//! commands, while `auth get` requires its grant's endpoints.
+//! commands until its token expires, while `auth get` requires its
+//! grant's endpoints.
 //!
 //! Ortie never persists tokens itself: reads and writes go through
 //! user-configured shell commands (pass, secret-tool, ...). Secrets

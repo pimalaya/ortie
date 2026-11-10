@@ -8,100 +8,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- Added `resources` to the account configuration, the RFC 8707 resource indicators sent on the authorization request and the code exchange.
-- Added `token revoke`, revoking the stored refresh token, or the access token when none is stored (RFC 7009).
-- Added `endpoints.revocation` to the account configuration, the endpoint `token revoke` calls.
-- Added `ortie-token-revoke` to `json-schema`.
+- Added `token revoke`, revoking the stored refresh token, or the access token when none is stored (RFC 7009), at the new `endpoints.revocation`.
 - Added `auth listen`, catching the redirection of a flow a non-interactive or `--json` `auth get` handed off, then completing it as `auth resume` does.
-- Added `redirectUri` to the `auth get` handoff object, and `ortie-auth-listen` to `json-schema`.
+
+  The `auth get` handoff object gains `redirectUri`.
+
 - Added `ortie mcp`, a Model Context Protocol server over stdio running the grants of one account for an agent.
 
   Its tools answer receipts and metadata, never a token: the state, the PKCE verifier and the device code stay in the server, which stores the token once the user consents. `token_revoke` is listed only with `--allow-revoke`.
 
-- Added `ortie-error` to `json-schema`, the schema of the JSON failure object.
-- Added the `completion`, `manual` and `json-schema` schemas to `json-schema`.
-- Added Google, Microsoft, Fastmail and custom sections to the end of config.sample.toml, commented, yours to uncomment: the client and the endpoints moved into them.
-
-  Google, Microsoft and Fastmail go through Pimalaya's own applications: Gmail, Google Calendar and People; Graph mail, calendars and contacts, or Outlook IMAP and SMTP, a section each since Microsoft issues a token for one API; Fastmail JMAP mail, contacts and calendars. The custom section takes an application of your own. The test suite parses config.sample.toml with each commented line and each section uncommented, so it stays in step with the configuration.
-
-- Added config.sample.toml to the release archives and the Nix package, as share/doc/ortie/config.sample.toml, which install.sh copies under its prefix.
-
-  The welcome copies it from there when it sits next to the binary, matching its version, and downloads it otherwise.
+- Added `resources` to the account configuration, the RFC 8707 resource indicators sent on the authorization request and the code exchange.
+- Added the `ortie-token-revoke`, `ortie-auth-listen` and `ortie-error` schemas to `json-schema`, and those of `completion`, `manual` and `json-schema` itself.
+- Added config.sample.toml to the release archives and the Nix package, as share/doc/ortie/config.sample.toml.
 
 ### Changed
 
-- **BREAKING**: Changed `--json` keys to camelCase.
-
-  The configuration file keeps its kebab-case keys.
-
-- **BREAKING**: Changed `token refresh`, `auth resume` and a token-issuing `auth get` to print the receipt `{expiresIn, withRefreshToken}` under `--json`.
-
-  They printed a `{"message": …}` sentence. The text output reads as before.
-
-- **BREAKING**: Changed `auto-refresh` to default to true: `token show` refreshes an expired token unless the account sets `auto-refresh = false`.
-
-  `token show --auto-refresh` still forces it on such an account.
-
+- **BREAKING**: Changed `--json` keys to camelCase; the configuration keeps its kebab-case keys.
+- **BREAKING**: Changed `token refresh`, `auth resume` and a token-issuing `auth get` to print the receipt `{expiresIn, withRefreshToken}` under `--json`, instead of a `{"message": …}` sentence.
 - **BREAKING**: Changed `token inspect --json` to print `issuedAt` as an RFC 3339 instant in UTC.
-- **BREAKING**: Changed a piped `ortie repl` to print its errors on stdout, as `ortie-error` objects under `--json`.
-
-  An interactive session keeps its errors on stderr.
-
+- **BREAKING**: Changed a piped `ortie repl` to print its errors on stdout, as `ortie-error` objects under `--json`; an interactive session keeps them on stderr.
+- **BREAKING**: Changed `auto-refresh` to default to true: `token show` refreshes an expired token unless the account sets `auto-refresh = false`.
 - **BREAKING**: Changed `-c` to take one path per occurrence, repeated to merge several files (`-c public.toml -c private.toml`).
 
-  A `:` is no longer read as a delimiter, which cut Windows paths such as `C:\Users\me\config.toml` at the drive letter. The `auth listen` and `auth resume` commands `auth get` prints repeat `-c` the same way.
+  A `:` is no longer read as a delimiter, which cut Windows paths such as `C:\Users\me\config.toml` at the drive letter.
 
-- **BREAKING**: Changed every configured URL to take an ASCII host only, an internationalised one written in its Punycode form (`https://xn--bcher-kva.example` for `bücher.example`).
-
-  url resolves host names without its Unicode tables, which weighed 130 KB of the binary.
-
-- Changed `ortie repl` to split its lines as a shell does, quotes and escapes included.
-- Changed `ortie repl` to accept `--json` on a line, for that line only.
-- Changed piped `--json` output to print one value per line.
-- Changed every `json-schema` schema to carry an `$id` naming the contract version.
-- Changed every `json-schema` schema to require the keys a command always prints.
-- Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
+- **BREAKING**: Changed every configured URL to take an ASCII host only, an internationalised one written in Punycode (`https://xn--bcher-kva.example` for `bücher.example`), which saves 130 KB of binary.
 - Changed `auth get` to print the authorization link, or the verification URI and user code, without opening a browser.
-- Changed the help, usage and logs to carry no colour, and the help to print each paragraph on one line, which the terminal folds, rather than wrap it to the terminal's width.
-- Changed config.sample.toml to one flat `[accounts.example]` table listing every field and value, the defaults active and the others commented, one short comment per line instead of long paragraphs.
+- Changed `token show` to end the token with a newline, like every text output; `$(ortie token show)` and Pimalaya's secret commands strip it.
+- Changed `ortie repl` to split its lines as a shell does, quotes and escapes included, and to accept `--json` on a line, for that line only.
+- Changed piped `--json` output to print one value per line.
+- Changed every `json-schema` schema to carry an `$id` naming the contract version, and to require the keys a command always prints.
+- Changed the help, usage and logs to carry no colour, and the help to print each paragraph on one line, for the terminal to fold.
+- Changed config.sample.toml to one flat `[accounts.example]` table: every field and its values, the defaults active, then a commented section per provider on Pimalaya's applications (Google, Microsoft Graph, Microsoft IMAP and SMTP, Fastmail) and a custom one for an application of your own.
+- Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
 
 ### Removed
 
-- **BREAKING**: Removed the `configure` command and its `wizard` alias, with the offer a bare `ortie` or a command missing its configuration made to run it.
+- **BREAKING**: Removed the `configure` command and its `wizard` alias, with the offer to run it a missing configuration made.
 
-  An account starts from config.sample.toml instead. A bare `ortie` or a command missing its configuration prints a welcome in a terminal, with the commands copying config.sample.toml to the path it looked for, from the release or the package, or downloading it; a script or `--json` gets an error naming that path and pointing at config.sample.toml. The `ortie-configure` key leaves `json-schema`.
+  An account starts from config.sample.toml instead: without a configuration, a terminal gets a welcome with the commands creating one, copied from the shipped sample or downloaded, and a script or `--json` an error naming the path. The `ortie-configure` key leaves `json-schema`.
 
-- **BREAKING**: Removed dynamic client registration (RFC 7591), which only the wizard ran.
-
-  The README shows the one Fastmail registration request to run by hand.
-
+- **BREAKING**: Removed dynamic client registration (RFC 7591), which only the wizard ran; the Fastmail section of config.sample.toml carries a registered client instead.
 - **BREAKING**: Removed the hooks (`hooks.on-issue` and `hooks.on-refresh`) and the `notify` cargo feature; a `hooks` table is now refused like any unknown key.
 
-  `storage.write.command` receives the token JSON on every issue and refresh, so a command chained after the store does what a success hook did, a desktop notification included. A failure shows in the exit code and the error Ortie prints, as JSON under `--json`.
+  `storage.write.command` receives the token JSON on every issue and refresh, so a command chained after it does what a success hook did.
 
-- **BREAKING**: Removed the `ORTIE_CONFIG` environment variable, with clap's `env` feature. A shell variable reaches the flag as `-c "$ORTIE_CONFIG"`.
-- Removed the io-pim-discovery dependency, and the prompt and spinner ones it came with (inquire, crossterm, ctrlc).
-- Removed the open, notify-rust, dirs and shellexpand dependencies.
+- **BREAKING**: Removed the `ORTIE_CONFIG` environment variable; pass `-c "$ORTIE_CONFIG"` instead.
+- Removed the io-pim-discovery, inquire, crossterm, ctrlc, open, notify-rust, dirs and shellexpand dependencies.
 
 ### Fixed
 
-- Fixed a configured `http` loopback redirection naming no port, such as `http://localhost`, binding port 80: it binds an ephemeral port, so `auth get` and the MCP server capture the redirection instead of falling back to `auth resume`.
+- Fixed a configured `http` loopback redirection naming no port, such as `http://localhost`, binding port 80: it binds an ephemeral port, so `auth get` and the MCP server catch the redirection.
+- Fixed the `auth resume` command printed by `auth get` dropping a generated redirect URI, and its `-a` and `-c` ([#16](https://github.com/pimalaya/ortie/issues/16)).
 
-- Fixed the `auth resume` command printed by `auth get` dropping a generated redirect URI.
+  The code was exchanged without the `redirect_uri` its authorization request carried (RFC 6749 section 4.1.3), or against the default account.
 
-  The code was exchanged without the `redirect_uri` its authorization request carried, which RFC 6749 section 4.1.3 requires. The printed commands now carry `--redirect-uri`.
-
-- Fixed the commands `auth get` prints being single quoted on Windows, which cmd does not read: they are double quoted there, as cmd and PowerShell both read them.
+- Fixed the commands `auth get` prints on Windows, double quoted for cmd and PowerShell instead of single quoted.
+- Fixed `token inspect` output missing its final newline.
+- Fixed the REPL help describing its commands with internal notes.
 - Fixed a failed storage write after a refresh leaving the session on the old refresh token, which a rotating server had already invalidated.
-- Fixed the `auth resume` command printed by `auth get` dropping its `-a` and `-c` ([#16](https://github.com/pimalaya/ortie/issues/16)).
-
-  Pasting it resumed the default account, so the code was refused or the token stored under the wrong account.
-
 - Fixed an OAuth 2.0 endpoint able to make Ortie buffer an endless response, spin on a connection closed mid-body, or panic.
 
-  io-oauth 0.4 runs on io-http 0.6, which caps response heads at 64 KiB and bodies at 256 MiB.
+  io-oauth 0.5 runs on io-http 0.6, which caps response heads at 64 KiB and bodies at 256 MiB.
 
-- Fixed the state and the PKCE code verifier never repeating a character, which lowered their entropy: io-oauth now draws each character independently.
+- Fixed the state and the PKCE code verifier never repeating a character, which lowered their entropy.
 
 ## [2.3.0] - 2026-10-02
 

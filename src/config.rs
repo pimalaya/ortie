@@ -147,7 +147,7 @@ impl GrantConfig {
 ///
 /// All optional at parse time: each command checks the ones it needs,
 /// `auth get` the configured grant's, `token refresh` the token one,
-/// `token show` none at all.
+/// `token show` none until it refreshes.
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct EndpointsConfig {
@@ -417,8 +417,8 @@ storage.write.command = ["tee", "token.json"]
         assert!(try_parse(&account("xn--bcher-kva.example")).is_ok());
     }
 
-    /// Hooks are gone: a `hooks` table is refused like any unknown key
-    /// rather than dropped without a word.
+    /// A `hooks` table, which older versions read, is refused like any
+    /// unknown key rather than dropped without a word.
     #[test]
     fn a_hooks_table_is_refused() {
         let err = try_parse(

@@ -124,7 +124,7 @@ A configuration is loaded from the first valid path among:
 - `$HOME/.config/ortie/config.toml`
 - `$HOME/.ortierc`
 
-Override the path with `-c <PATH>`. Repeat it to merge several files, such as `-c public.toml -c private.toml`: the first one is the base and the next ones are deep-merged on top. [config.sample.toml](./config.sample.toml) lists the fields every provider shares with their values, then one section per provider, yours to uncomment: Google, Microsoft, Fastmail, and a custom one for an application of your own. Releases and packages ship it as share/doc/ortie/config.sample.toml, which the welcome of a first run copies from.
+Override the path with `-c <PATH>`. Repeat it to merge several files, such as `-c public.toml -c private.toml`: the first one is the base and the next ones are deep-merged on top. [config.sample.toml](./config.sample.toml) lists the fields every provider shares with their values, then one section per provider, yours to uncomment: Google, Microsoft Graph, Microsoft IMAP and SMTP, Fastmail, and a custom one for an application of your own. Releases and packages ship it as share/doc/ortie/config.sample.toml, which the welcome of a first run copies from.
 
 ## Usage
 

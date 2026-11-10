@@ -284,9 +284,8 @@ fn print_handoff(
 /// Whether the local listener can service the redirection, which means
 /// an http(s) URL on a loopback host.
 ///
-/// Anything else, a remote host or the reverse-DNS private-use scheme
-/// Fastmail's dynamic registration mandates, dead-ends in the browser,
-/// so the flow finishes by hand through `auth resume`.
+/// Anything else, a remote host or a private-use scheme, dead-ends in
+/// the browser, so the flow finishes by hand through `auth resume`.
 pub(crate) fn is_loopback_redirect(uri: &Url) -> bool {
     let http_scheme = matches!(uri.scheme(), "http" | "https");
     let loopback_host = match uri.host() {
