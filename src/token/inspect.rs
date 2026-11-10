@@ -124,7 +124,7 @@ impl fmt::Display for TokenInspectOutput {
             write!(f, "With scope: {scope}")?;
         }
 
-        Ok(())
+        writeln!(f)
     }
 }
 
