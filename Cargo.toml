@@ -51,5 +51,5 @@ url = { version = "2.5", default-features = false, features = ["serde"] }
 
 [patch.crates-io]
 io-oauth = { git = "https://github.com/pimalaya/io-oauth", rev = "1f88ccb10fef6aa9e0d1206c0ee6d653e232eab1" }
-pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "6e374d713bcedb34d0e76bd499854ce90d654139" }
+pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "5dd94165899d4e02bdd04b8f70a6a8bed9fd1f21" }
 pimalaya-config = { git = "https://github.com/pimalaya/config", rev = "7601a554bd378263d947079e3dc8eb269cd8e43e" }

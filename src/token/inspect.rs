@@ -11,7 +11,7 @@ use std::{
 use anyhow::Result;
 use clap::Parser;
 use humantime::{format_duration, format_rfc3339_seconds};
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{fields::Fields, printer::Printer};
 use schemars::JsonSchema;
 use serde::{Serialize, Serializer};
 
@@ -83,48 +83,45 @@ impl From<Oauth20AccessTokenSuccessParams> for TokenInspectOutput {
 
 impl fmt::Display for TokenInspectOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Token type: {}", self.token_type.to_lowercase())?;
-
         let now_epoch = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
             .ok();
 
+        let mut fields = Fields::default();
+        fields.push("Type", &self.token_type);
+
         if let (Some(issued_at), Some(now)) = (self.issued_at, now_epoch) {
             let elapsed = Duration::from_secs(now.saturating_sub(issued_at));
-            writeln!(f)?;
-            write!(f, "Issued: {} ago", format_duration(elapsed))?;
+            fields.push("Issued", format!("{} ago", format_duration(elapsed)));
         }
 
-        match self.expires_in {
-            None => {
-                writeln!(f)?;
-                write!(f, "Expired: unknown")?;
-            }
+        let expires = match self.expires_in {
+            None => String::from("unknown"),
             Some(exp) => {
                 let remaining = match (self.issued_at, now_epoch) {
                     (Some(issued_at), Some(now)) => (issued_at + exp as u64).saturating_sub(now),
                     _ => exp as u64,
                 };
-                writeln!(f)?;
-                if remaining == 0 {
-                    write!(f, "Expired: true")?;
-                } else {
-                    let duration = format_duration(Duration::from_secs(remaining));
-                    write!(f, "Expires in: {duration}")?;
+
+                match remaining {
+                    0 => String::from("expired"),
+                    secs => format!("in {}", format_duration(Duration::from_secs(secs))),
                 }
             }
-        }
+        };
 
-        writeln!(f)?;
-        write!(f, "With refresh token: {}", self.with_refresh_token)?;
+        fields.push("Expires", expires);
+
+        let refresh_token = if self.with_refresh_token { "yes" } else { "no" };
+        fields.push("Refresh token", refresh_token);
 
         if let Some(scope) = &self.scope {
-            writeln!(f)?;
-            write!(f, "With scope: {scope}")?;
+            let scopes: Vec<&str> = scope.split_whitespace().collect();
+            fields.push("Scopes", scopes.join("\n"));
         }
 
-        writeln!(f)
+        write!(f, "{fields}")
     }
 }
 

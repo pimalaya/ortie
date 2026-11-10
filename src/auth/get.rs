@@ -19,7 +19,8 @@ use std::{
 use anyhow::{Context, Result, anyhow, bail};
 use base64_codec::codec::{Base64Alphabet, Base64Codec};
 use clap::Parser;
-use pimalaya_cli::printer::Printer;
+use humantime::format_duration;
+use pimalaya_cli::{fields::Fields, printer::Printer};
 use schemars::JsonSchema;
 use secrecy::ExposeSecret;
 use serde::{
@@ -270,7 +271,7 @@ fn print_handoff(
     if listen {
         println!("Before authorizing, start the listener catching the redirection:");
         println!();
-        println!("> {invocation} auth listen {flags}");
+        println!("  {invocation} auth listen {flags}");
         println!();
         println!("Or, once authorized, {resume}");
     } else {
@@ -278,7 +279,7 @@ fn print_handoff(
     }
 
     println!();
-    println!("> {invocation} auth resume {flags} <REDIRECTED_URI>");
+    println!("  {invocation} auth resume {flags} <REDIRECTED_URI>");
 }
 
 /// Whether the local listener can service the redirection, which means
@@ -371,25 +372,19 @@ pub fn serialize_pkce_code_verifier<S: Serializer>(
 
 impl fmt::Display for AuthorizationUri<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let state = String::from_utf8_lossy(self.state.expose());
-        writeln!(f, "Created authorization request with:")?;
-        writeln!(f, " - state: {state}")?;
+        let mut fields = Fields::default();
+        fields.push("State", String::from_utf8_lossy(self.state.expose()));
 
         if let Some(verifier) = &self.pkce_code_verifier {
-            let verifier = String::from_utf8_lossy(verifier.expose());
-            writeln!(f, " - pkce: {verifier}")?;
+            fields.push("PKCE verifier", String::from_utf8_lossy(verifier.expose()));
         }
 
-        writeln!(f, " - redirect URI: {}", self.redirect_uri)?;
+        fields.push("Redirect URI", self.redirect_uri);
 
+        writeln!(f, "{fields}")?;
+        writeln!(f, "Open the link in your browser to authorize:")?;
         writeln!(f)?;
-        if self.interactive {
-            writeln!(f, "Open the link in your browser to authorize:")
-        } else {
-            writeln!(f, "Click on the link to start the authorization process:")
-        }?;
-
-        writeln!(f, "{}", self.authorization_uri)
+        writeln!(f, "  {}", self.authorization_uri)
     }
 }
 
@@ -420,7 +415,7 @@ fn execute_device(
             println!("Once authorized, run:");
             println!();
             println!(
-                "> {invocation} auth resume {}",
+                "  {invocation} auth resume {}",
                 shell_quote(&view.device_code)
             );
         }
@@ -770,27 +765,34 @@ pub struct DeviceAuthorization {
 
 impl fmt::Display for DeviceAuthorization {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Created device authorization request with:")?;
-        writeln!(f, " - user code: {}", self.user_code)?;
-        writeln!(f, " - verification URI: {}", self.verification_uri)?;
+        let mut fields = Fields::default();
+        fields.push("User code", &self.user_code);
+        fields.push("Verification URI", &self.verification_uri);
+
         if let Some(uri) = &self.verification_uri_complete {
-            writeln!(f, " - complete URI: {uri}")?;
+            fields.push("Complete URI", uri);
         }
+
         // NOTE: an interactive session polls in-process, so the device
         // code is nobody's to copy and stays hidden.
         if !self.interactive {
-            writeln!(f, " - device code: {}", self.device_code)?;
+            fields.push("Device code", &self.device_code);
         }
-        writeln!(f, " - expires in: {}s", self.expires_in)?;
-        writeln!(f, " - interval: {}s", self.interval)?;
-        writeln!(f)?;
+
+        let expires_in = Duration::from_secs(self.expires_in as u64);
+        fields.push("Expires in", format_duration(expires_in));
+        fields.push("Polling interval", format!("{}s", self.interval));
+
+        writeln!(f, "{fields}")?;
+
+        let code = &self.user_code;
+
         match &self.verification_uri_complete {
-            Some(uri) => writeln!(f, "Navigate to {uri} and check the code {}", self.user_code),
-            None => writeln!(
-                f,
-                "Navigate to {} and enter the code {}",
-                self.verification_uri, self.user_code
-            ),
+            Some(uri) => writeln!(f, "Open the link and check the code {code}:\n\n  {uri}"),
+            None => {
+                let uri = &self.verification_uri;
+                writeln!(f, "Open the link and enter the code {code}:\n\n  {uri}")
+            }
         }
     }
 }

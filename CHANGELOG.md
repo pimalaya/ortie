@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **BREAKING**: Changed every configured URL to take an ASCII host only, an internationalised one written in Punycode (`https://xn--bcher-kva.example` for `bücher.example`), which saves 130 KB of binary.
 - Changed `auth get` to print the authorization link, or the verification URI and user code, without opening a browser.
 - Changed `token show` to end the token with a newline, like every text output; `$(ortie token show)` and Pimalaya's secret commands strip it.
+- Changed the text output of `token inspect` and `auth get` to aligned `Label: value` fields, one scope per line, and the links and commands to copy to a two-space indent.
 - Changed `ortie repl` to split its lines as a shell does, quotes and escapes included, and to accept `--json` on a line, for that line only.
 - Changed piped `--json` output to print one value per line.
 - Changed every `json-schema` schema to carry an `$id` naming the contract version, and to require the keys a command always prints.
