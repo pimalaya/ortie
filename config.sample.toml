@@ -1,6 +1,7 @@
 [accounts.example]
 default = true				# make this account the default one used
 auto-refresh = true			# let token show refresh an expired token
+#auto-refresh = false			# let token show print it expired
 #resources = []				# RFC 8707 resource indicators
 #extras.login_hint = "user@example.com"	# an extra authorization request parameter
 #alpn = ["http/1.1"]			# for a middlebox refusing a handshake without ALPN
@@ -23,8 +24,8 @@ storage.write.command = "exit 127"	# receives the token JSON on stdin
 
 # Google
 #
-#client-id = "803561575535-41415ghqi04uibrl6t5umg3p27stdhqr.apps.googleusercontent.com"
-#client-secret.raw = "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"
+#client-id = "991810147220-i3e8i2kph1firll12kv5gtc99tdgjote.apps.googleusercontent.com"
+#client-secret.raw = "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"
 #extras.access_type = "offline"
 #endpoints.authorization = "https://accounts.google.com/o/oauth2/v2/auth"
 #endpoints.token = "https://oauth2.googleapis.com/token"
@@ -38,7 +39,7 @@ storage.write.command = "exit 127"	# receives the token JSON on stdin
 #  "https://www.googleapis.com/auth/carddav",
 #]
 
-# Microsoft
+# Microsoft Graph
 #
 #client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
 #endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
@@ -50,17 +51,27 @@ storage.write.command = "exit 127"	# receives the token JSON on stdin
 #  "https://graph.microsoft.com/Mail.Send",
 #  "https://graph.microsoft.com/Calendars.ReadWrite",
 #  "https://graph.microsoft.com/Contacts.ReadWrite",
+#]
+
+# Microsoft IMAP and SMTP
+#
+#client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
+#endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+#endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+#endpoints.redirection = "http://localhost"
+#scopes = [
+#  "offline_access",
 #  "https://outlook.office.com/IMAP.AccessAsUser.All",
 #  "https://outlook.office.com/SMTP.Send",
 #]
 
 # Fastmail
 #
-#client-id = ""
+#client-id = "df6e41ae"
 #endpoints.authorization = "https://api.fastmail.com/oauth/authorize"
 #endpoints.token = "https://api.fastmail.com/oauth/refresh"
 #endpoints.revocation = "https://api.fastmail.com/oauth/revoke"
-#endpoints.redirection = "org.pimalaya.ortie://redirect"
+#endpoints.redirection = "http://localhost/"
 #resources = ["https://api.fastmail.com/jmap/session"]
 #scopes = [
 #  "offline_access",

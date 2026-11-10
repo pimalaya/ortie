@@ -104,11 +104,18 @@ pub struct AccountConfig {
     /// query, keyed by wire name and never kebab-renamed.
     #[serde(default)]
     pub extras: HashMap<String, String>,
-    /// Whether `token show` refreshes an expired token by itself.
-    #[serde(default)]
+    /// Whether `token show` refreshes an expired token by itself, on
+    /// unless set to false.
+    #[serde(default = "auto_refresh_default")]
     pub auto_refresh: bool,
     /// Shell commands reading and writing the persisted token.
     pub storage: StoragesConfig,
+}
+
+/// The default of [`AccountConfig::auto_refresh`]: on, since a caller of
+/// `token show` wants a token it can use.
+fn auto_refresh_default() -> bool {
+    true
 }
 
 /// OAuth 2.0 grant flow run by the auth commands.
@@ -333,6 +340,24 @@ storage.write.command = ["tee", "token.json"]
     }
 
     #[test]
+    fn auto_refresh_is_on_unless_turned_off() {
+        let account = |line: &str| {
+            parse(&format!(
+                r#"
+[accounts.test]
+client-id = "app-id"
+storage.read.command = ["cat", "token.json"]
+storage.write.command = ["tee", "token.json"]
+{line}
+"#
+            ))
+        };
+
+        assert!(account("").auto_refresh);
+        assert!(!account("auto-refresh = false").auto_refresh);
+    }
+
+    #[test]
     fn tls_and_alpn_fold_into_one_handle() {
         let account = parse(
             r#"
@@ -537,8 +562,8 @@ hooks.on-issue.success.command = "true"
     }
 
     /// Checks config.sample.toml: one `[accounts.example]` table and no
-    /// other, its Google, Microsoft, Fastmail and Custom sections each
-    /// parsed through the loader `-c` uses with every variant on top.
+    /// other, its provider sections each parsed through the loader `-c`
+    /// uses with every variant on top.
     #[test]
     fn the_sample_configuration_parses_with_each_variant() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config.sample.toml");
@@ -548,7 +573,15 @@ hooks.on-issue.success.command = "true"
 
         let variants = variants(&text);
 
-        for section in ["# Google", "# Microsoft", "# Fastmail", "# Custom"] {
+        let sections = [
+            "# Google",
+            "# Microsoft Graph",
+            "# Microsoft IMAP and SMTP",
+            "# Fastmail",
+            "# Custom",
+        ];
+
+        for section in sections {
             let found = variants.iter().any(|(code, _)| code == section);
             assert!(found, "{section}");
         }

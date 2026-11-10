@@ -22,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added the `completion`, `manual` and `json-schema` schemas to `json-schema`.
 - Added Google, Microsoft, Fastmail and custom sections to the end of config.sample.toml, commented, yours to uncomment: the client and the endpoints moved into them.
 
-  Google and Microsoft go through Pimalaya's own applications: Gmail, Google Calendar and People, Graph mail, calendars and contacts. Fastmail and the custom section take an application of your own. The test suite parses config.sample.toml with each commented line and each section uncommented, so it stays in step with the configuration.
+  Google, Microsoft and Fastmail go through Pimalaya's own applications: Gmail, Google Calendar and People; Graph mail, calendars and contacts, or Outlook IMAP and SMTP, a section each since Microsoft issues a token for one API; Fastmail JMAP mail, contacts and calendars. The custom section takes an application of your own. The test suite parses config.sample.toml with each commented line and each section uncommented, so it stays in step with the configuration.
 
 - Added config.sample.toml to the release archives and the Nix package, as share/doc/ortie/config.sample.toml, which install.sh copies under its prefix.
 
@@ -37,6 +37,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **BREAKING**: Changed `token refresh`, `auth resume` and a token-issuing `auth get` to print the receipt `{expiresIn, withRefreshToken}` under `--json`.
 
   They printed a `{"message": …}` sentence. The text output reads as before.
+
+- **BREAKING**: Changed `auto-refresh` to default to true: `token show` refreshes an expired token unless the account sets `auto-refresh = false`.
+
+  `token show --auto-refresh` still forces it on such an account.
 
 - **BREAKING**: Changed `token inspect --json` to print `issuedAt` as an RFC 3339 instant in UTC.
 - **BREAKING**: Changed a piped `ortie repl` to print its errors on stdout, as `ortie-error` objects under `--json`.

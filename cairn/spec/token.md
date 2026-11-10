@@ -21,7 +21,7 @@ The token response persisted to and read from storage SHALL be the OAuth 2.0 suc
 On every successful issuance or refresh, Ortie SHALL stamp `issued_at` with its own wall clock at receipt on the token it persists and caches, overriding any server `Date` header, so expiry is computed against a single clock. On refresh the new token SHALL be persisted to storage before the in-memory token is replaced.
 
 ### Requirement: Auto-refresh on show
-When auto-refresh is enabled (per-command `--auto-refresh` or the account's `auto-refresh` setting) and the stored token is expired and a refresh token is present, `token show` SHALL refresh before printing.
+When auto-refresh is enabled (per-command `--auto-refresh`, or the account's `auto-refresh` setting, on unless set to false) and the stored token is expired and a refresh token is present, `token show` SHALL refresh before printing.
 
 ### Requirement: Refresh rotation ordering
 On refresh, Ortie SHALL persist the new token to storage as soon as the server answers, and SHALL keep the previous refresh token when the server omits a rotated one. The new token SHALL be held in memory before the write, so a failed write leaves the running session on the issued tokens, and the failure SHALL say that the next refresh may need `auth get`. A refresh failure reports the server error code.

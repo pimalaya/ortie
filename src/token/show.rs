@@ -38,7 +38,8 @@ pub struct TokenShowCommand {
     /// Automatically refresh the access token when expired.
     ///
     /// Guarantees a fresh access token. The `auto-refresh` config
-    /// option turns it on for every call.
+    /// option, on unless set to false, does it for every call, so the
+    /// flag only matters for an account turning it off.
     #[arg(long, short = 'r')]
     pub auto_refresh: bool,
 }
