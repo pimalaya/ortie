@@ -39,6 +39,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   An interactive session keeps its errors on stderr.
 
+- **BREAKING**: Changed `-c` to take one path per occurrence, repeated to merge several files (`-c public.toml -c private.toml`).
+
+  A `:` is no longer read as a delimiter, which cut Windows paths such as `C:\Users\me\config.toml` at the drive letter. The `auth listen` and `auth resume` commands `auth get` prints repeat `-c` the same way.
+
 - **BREAKING**: Changed every configured URL to take an ASCII host only, an internationalised one written in its Punycode form (`https://xn--bcher-kva.example` for `bücher.example`).
 
   url resolves host names without its Unicode tables, which weighed 130 KB of the binary.
@@ -67,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   `storage.write.command` receives the token JSON on every issue and refresh, so a command chained after the store does what a success hook did, a desktop notification included. A failure shows in the exit code and the error Ortie prints, as JSON under `--json`.
 
+- **BREAKING**: Removed the `ORTIE_CONFIG` environment variable, with clap's `env` feature. A shell variable reaches the flag as `-c "$ORTIE_CONFIG"`.
 - Removed the io-pim-discovery dependency, and the prompt and spinner ones it came with (inquire, crossterm, ctrlc).
 - Removed the open, notify-rust, dirs and shellexpand dependencies.
 

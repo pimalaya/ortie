@@ -147,10 +147,23 @@ pub struct ConfigPathsArg {
     /// Override the default configuration file path.
     ///
     /// Paths are shell-expanded, then canonicalized when applicable.
-    /// Several can be given at once, delimited by `:` like `$PATH` in a
-    /// POSIX shell: the first one is the base and the rest are merged on
-    /// top, which is how a public config and a private one combine.
-    #[arg(long = "config", short = 'c', global = true, env = "ORTIE_CONFIG")]
-    #[arg(name = "config_paths", value_name = "PATH", value_parser = path_parser, value_delimiter = ':')]
+    /// Repeat the flag to merge several files: the first one is the base
+    /// and the next ones are merged on top, which is how a public config
+    /// and a private one combine.
+    #[arg(long = "config", short = 'c', global = true)]
+    #[arg(name = "config_paths", value_name = "PATH", value_parser = path_parser)]
     pub paths: Vec<PathBuf>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_config_path_is_never_split() {
+        let args = ["ortie", "-c", r"C:\a.toml", "-c", "b:c;d.toml"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        let paths = [PathBuf::from(r"C:\a.toml"), PathBuf::from("b:c;d.toml")];
+        assert_eq!(cli.config.paths, paths);
+    }
 }

@@ -712,10 +712,9 @@ pub(crate) fn report_token_issued(
 pub fn invocation(config_paths: &[PathBuf], account_name: Option<&str>) -> String {
     let mut invocation = String::from("ortie");
 
-    if !config_paths.is_empty() {
-        let paths: Vec<_> = config_paths.iter().map(|p| p.to_string_lossy()).collect();
+    for path in config_paths {
         invocation.push_str(" -c ");
-        invocation.push_str(&shell_single_quote(&paths.join(":")));
+        invocation.push_str(&shell_single_quote(&path.to_string_lossy()));
     }
 
     if let Some(name) = account_name.filter(|name| !name.is_empty()) {
@@ -811,7 +810,7 @@ mod tests {
         let paths = [PathBuf::from("/a.toml"), PathBuf::from("/b c.toml")];
         assert_eq!(
             invocation(&paths, Some("work's")),
-            "ortie -c '/a.toml:/b c.toml' -a 'work'\\''s'"
+            "ortie -c '/a.toml' -c '/b c.toml' -a 'work'\\''s'"
         );
     }
 }

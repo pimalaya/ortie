@@ -40,8 +40,13 @@ Every v1.x config file SHALL parse and run unchanged, the `hooks` table aside, r
 ### Requirement: Account resolution failures name what is missing
 Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for and points at the samples, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
 
-### Requirement: The configuration path is read from the environment
-The configuration path SHALL be read from `ORTIE_CONFIG` as well as `-c`, both accepting a `:`-delimited list merged in order.
+### Requirement: The configuration path comes from `-c` only
+The configuration path SHALL be overridden by `-c` only, repeatable, the first path the base and the next ones merged on top in order. Each occurrence SHALL be one path, never split on a delimiter, and no environment variable SHALL be read for it.
+
+#### Scenario: A Windows path is read whole
+- GIVEN `-c C:\Users\me\config.toml`
+- WHEN the configuration is loaded
+- THEN it is read from that one path, not from `C` and `\Users\me\config.toml`
 
 ### Requirement: One TLS conversion, taking the ALPN list
 The `tls` account option SHALL name the TLS provider as one of `auto` (the default, the provider the binary was built with), `native-tls`, `rustls-aws` or `rustls-ring`, and SHALL be folded into the runtime TLS handle by a single conversion taking the ALPN list as its argument. No other code path SHALL build that handle from the configuration, so no call site can negotiate an ALPN, or none, by accident.

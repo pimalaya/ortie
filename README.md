@@ -124,7 +124,7 @@ A configuration is loaded from the first valid path among:
 - `$HOME/.config/ortie/config.toml`
 - `$HOME/.ortierc`
 
-Override the path with `-c <PATH>` or `ORTIE_CONFIG=<PATH>`. Multiple paths can be passed at once, separated by `:`. The first one is the base and the rest are deep-merged on top. The full field reference lives in [config.sample.toml](./config.sample.toml), and [config.samples](./config.samples) holds one ready-made account per provider.
+Override the path with `-c <PATH>`. Repeat it to merge several files, such as `-c public.toml -c private.toml`: the first one is the base and the next ones are deep-merged on top. The full field reference lives in [config.sample.toml](./config.sample.toml), and [config.samples](./config.samples) holds one ready-made account per provider.
 
 ## Usage
 
