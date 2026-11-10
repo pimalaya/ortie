@@ -142,18 +142,35 @@ When the redirection cannot be caught, `auth get` prints the `auth listen` or `a
 
 ### REPL
 
-`ortie repl` answers token commands from stdin, reading the secret store once instead of on every call:
+`ortie repl` holds one account in memory and answers `auth` and `token` commands, one per line, until `exit` or EOF. The secret store is read once for the whole session.
 
-```sh
-printf 'token show\ntoken inspect\n' | ortie repl -a google
+Interactively, it chains commands without unlocking the store each time:
+
+```
+$ ortie repl -a google
+ortie> auth get
+ortie> token show
+ortie> token inspect
+ortie> exit
 ```
 
-### MCP server
+Non-interactively, a program spawns `ortie repl -a google --json` and talks to it over stdio: it writes one command per line on stdin and reads one JSON value per line on stdout, failures included. A mail client can keep it running and write `token show` whenever it needs a fresh token.
 
-`ortie mcp` serves one account to an agent over stdio ([Model Context Protocol](https://modelcontextprotocol.io)). The agent starts a grant with `auth_get` and follows it with `auth_status`, while the server keeps the state, the PKCE verifier and the device code; no tool returns the token, and `token_revoke` needs `--allow-revoke`.
+### MCP
+
+`ortie mcp` also talks over stdio, but speaks the [Model Context Protocol](https://modelcontextprotocol.io) so an agent can drive the grants. The agent starts one with `auth_get` and follows it with `auth_status`, while Ortie keeps the state, the PKCE verifier and the device code. No tool returns the token, and `token_revoke` needs `--allow-revoke`.
+
+MCP clients start the servers declared in their configuration, most of them under an `mcpServers` object:
 
 ```json
-{ "mcpServers": { "ortie": { "command": "ortie", "args": ["mcp", "--account", "google"] } } }
+{
+  "mcpServers": {
+    "ortie": {
+      "command": "ortie",
+      "args": ["mcp", "--account", "google"]
+    }
+  }
+}
 ```
 
 ## Alternatives
