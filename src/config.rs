@@ -259,11 +259,8 @@ impl TlsConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs,
-        io::Write,
-        path::{Path, PathBuf},
-    };
+    use core::ops::Range;
+    use std::{fs, io::Write, path::PathBuf};
 
     use anyhow::Result;
 
@@ -424,94 +421,143 @@ hooks.on-issue.success.command = "true"
         assert!(!GrantConfig::Device.is_client_credentials());
     }
 
-    /// The variants of a sample, one per line of commented code: that
-    /// line uncommented, in place of the active line of its key.
-    fn variants(text: &str) -> Vec<(&str, String)> {
-        fn code(line: &str) -> Option<&str> {
-            let line = line.trim_start().strip_prefix('#')?.trim_start();
-            let field = key(line).is_some_and(|key| !key.contains(' '));
-            (field || line.starts_with('"')).then_some(line)
+    /// The code a commented line holds, with one `#` stripped: a field
+    /// or an array element.
+    fn code(line: &str) -> Option<&str> {
+        let line = line.trim_start().strip_prefix('#')?.trim_start();
+        let field = key(line).is_some_and(|key| !key.contains(' '));
+        (field || line.starts_with('"')).then_some(line)
+    }
+
+    /// The field a line sets, a secret's `raw` and `command` being one.
+    fn key(line: &str) -> Option<&str> {
+        let key = line.split_once(" = ")?.0;
+        let secret = key.strip_suffix(".raw").or(key.strip_suffix(".command"));
+        Some(secret.unwrap_or(key))
+    }
+
+    /// The sections of a sample: paragraphs of commented lines only,
+    /// opened by a heading and holding code.
+    fn sections(lines: &[&str]) -> Vec<Range<usize>> {
+        let mut sections = Vec::new();
+        let mut start = 0;
+
+        for end in 0..=lines.len() {
+            if lines.get(end).is_some_and(|line| !line.trim().is_empty()) {
+                continue;
+            }
+
+            let paragraph = &lines[start..end];
+            let commented = paragraph.iter().all(|line| line.starts_with('#'));
+            let headed = paragraph.first().is_some_and(|line| code(line).is_none());
+
+            if commented && headed && paragraph.iter().any(|line| code(line).is_some()) {
+                sections.push(start..end);
+            }
+
+            start = end + 1;
         }
 
-        fn key(line: &str) -> Option<&str> {
-            Some(line.split_once(" = ")?.0)
-        }
+        sections
+    }
 
-        let lines: Vec<_> = text.lines().collect();
-        let mut variants = Vec::new();
+    /// `lines` with the `uncommented` ones swapped in, and the active
+    /// lines setting one of their keys commented out, an array value
+    /// up to its closing bracket.
+    fn swap(lines: &[&str], uncommented: &[(usize, String)]) -> Vec<String> {
+        let keys: Vec<_> = uncommented.iter().filter_map(|(_, l)| key(l)).collect();
+        let mut swapped = Vec::with_capacity(lines.len());
+        let mut in_array = false;
 
         for (i, line) in lines.iter().enumerate() {
-            let Some(code) = code(line) else {
+            if let Some((_, code)) = uncommented.iter().find(|(j, _)| *j == i) {
+                swapped.push(code.clone());
                 continue;
-            };
+            }
 
-            let replaced = |other: &str| {
-                !other.trim_start().starts_with('#')
-                    && key(code).is_some()
-                    && key(other) == key(code)
-            };
+            let active = !line.trim_start().starts_with('#');
+            let replaced = active && key(line).is_some_and(|key| keys.contains(&key));
 
-            let variant: Vec<_> = lines
-                .iter()
-                .enumerate()
-                .filter(|(j, other)| *j == i || !replaced(other))
-                .map(|(j, other)| if j == i { code } else { *other })
+            if in_array {
+                in_array = line.trim() != "]";
+                swapped.push(format!("#{line}"));
+            } else if replaced {
+                in_array = line.trim_end().ends_with('[');
+                swapped.push(format!("#{line}"));
+            } else {
+                swapped.push(line.to_string());
+            }
+        }
+
+        swapped
+    }
+
+    /// The variants of a sample holding its account in sections, one of
+    /// which a user uncomments. Each section is uncommented whole, then
+    /// on top of it each commented element inside it and each line of
+    /// commented code outside the sections, in place of the active
+    /// lines of its key.
+    fn variants(text: &str) -> Vec<(String, String)> {
+        let lines: Vec<_> = text.lines().collect();
+        let sections = sections(&lines);
+        let mut variants = Vec::new();
+
+        for section in &sections {
+            let name = lines[section.start];
+
+            // NOTE: one `#` comes off every line but the prose ones,
+            // which stay comments, the heading included.
+            let uncommented: Vec<_> = section
+                .clone()
+                .filter_map(|i| {
+                    let line = lines[i].strip_prefix('#')?;
+                    let rest = line.trim_start();
+                    let code = rest.starts_with('#') || rest == "]" || code(lines[i]).is_some();
+                    code.then(|| (i, line.to_owned()))
+                })
                 .collect();
 
-            variants.push((code, variant.join("\n")));
+            let base = swap(&lines, &uncommented);
+            let base: Vec<_> = base.iter().map(String::as_str).collect();
+            variants.push((name.to_owned(), base.join("\n")));
+
+            for (i, line) in base.iter().enumerate() {
+                let elsewhere = sections.iter().any(|s| s != section && s.contains(&i));
+
+                let Some(code) = code(line).filter(|_| !elsewhere) else {
+                    continue;
+                };
+
+                let variant = swap(&base, &[(i, code.to_owned())]);
+                variants.push((format!("{name}, {code}"), variant.join("\n")));
+            }
         }
 
         variants
     }
 
-    /// Checks a sample: one `[accounts.<name>]` table and no other,
-    /// parsed through the loader `-c` uses, as it stands and once per
-    /// line of commented code swapped in.
-    fn check_sample(path: &Path, name: &str) {
-        let text = fs::read_to_string(path).unwrap();
+    /// Checks config.sample.toml: one `[accounts.example]` table and no
+    /// other, its Google, Microsoft, Fastmail and Custom sections each
+    /// parsed through the loader `-c` uses with every variant on top.
+    #[test]
+    fn the_sample_configuration_parses_with_each_variant() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config.sample.toml");
+        let text = fs::read_to_string(&path).unwrap();
         let headers: Vec<_> = text.lines().filter(|l| l.starts_with('[')).collect();
-        assert_eq!(
-            headers,
-            [format!("[accounts.{name}]")],
-            "{}",
-            path.display()
-        );
+        assert_eq!(headers, ["[accounts.example]"]);
 
         let variants = variants(&text);
-        let all = [("nothing", text.clone())].into_iter().chain(variants);
 
-        for (code, text) in all {
+        for section in ["# Google", "# Microsoft", "# Fastmail", "# Custom"] {
+            let found = variants.iter().any(|(code, _)| code == section);
+            assert!(found, "{section}");
+        }
+
+        for (code, text) in variants {
             let config = try_parse(&text).unwrap_or_else(|err| {
-                panic!("{} with {code} uncommented: {err:?}", path.display())
+                panic!("config.sample.toml with {code} uncommented: {err:?}")
             });
-            assert!(
-                config.accounts.contains_key(name),
-                "{} with {code} uncommented",
-                path.display()
-            );
+            assert!(config.accounts.contains_key("example"), "{code}");
         }
-    }
-
-    /// Every sample, one per provider and named after it, so a
-    /// configuration change breaking one fails here.
-    #[test]
-    fn every_sample_holds_its_provider_account() {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config.samples");
-        let mut checked = 0;
-
-        for entry in fs::read_dir(dir).unwrap() {
-            let path = entry.unwrap().path();
-            let name = path.file_stem().unwrap().to_str().unwrap().to_owned();
-            check_sample(&path, &name);
-            checked += 1;
-        }
-
-        assert_ne!(checked, 0);
-    }
-
-    #[test]
-    fn the_sample_configuration_holds_one_example_account() {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config.sample.toml");
-        check_sample(&path, "example");
     }
 }

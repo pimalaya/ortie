@@ -18,7 +18,7 @@ CLI to manage OAuth tokens
 
 ## Features
 
-- **Ready-made accounts**: Google, Microsoft and Fastmail samples, the first two through Pimalaya's own applications.
+- **Ready-made providers**: Google, Microsoft and Fastmail sections in the sample, the first two on Pimalaya's own applications.
 - **Every common grant**: authorization code, device code, and client credentials by secret or signed JWT.
 - **Token lifecycle**: refresh on demand or when the token is read, inspect, and revoke at the server.
 - **Your own storage**: tokens read and written through your commands, such as `pass` or `secret-tool`.
@@ -124,18 +124,19 @@ A configuration is loaded from the first valid path among:
 - `$HOME/.config/ortie/config.toml`
 - `$HOME/.ortierc`
 
-Override the path with `-c <PATH>`. Repeat it to merge several files, such as `-c public.toml -c private.toml`: the first one is the base and the next ones are deep-merged on top. The full field reference lives in [config.sample.toml](./config.sample.toml), and [config.samples](./config.samples) holds one ready-made account per provider.
+Override the path with `-c <PATH>`. Repeat it to merge several files, such as `-c public.toml -c private.toml`: the first one is the base and the next ones are deep-merged on top. [config.sample.toml](./config.sample.toml) lists the fields every provider shares with their values, then one section per provider, yours to uncomment: Google, Microsoft, Fastmail, and a custom one for an application of your own. Releases and packages ship it as share/doc/ortie/config.sample.toml, which the welcome of a first run copies from.
 
 ## Usage
 
-Every command and flag is documented behind `--help`. A complete flow, from a sample to a token:
+Every command and flag is documented behind `--help`. A complete flow, from the sample to a token:
 
 ```sh
-curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/config.samples/google.toml >> ~/.config/ortie/config.toml
-ortie auth get -a google      # sign in, then store the first token
-ortie token show -a google    # print the access token, refreshed once expired
-ortie token inspect -a google # print its type, scopes and expiry
-ortie token revoke -a google  # revoke it at the server
+curl -sSL --create-dirs -o ~/.config/ortie/config.toml https://raw.githubusercontent.com/pimalaya/ortie/master/config.sample.toml
+$EDITOR ~/.config/ortie/config.toml # uncomment your provider, set the storage commands
+ortie auth get                      # sign in, then store the first token
+ortie token show                    # print the access token, refreshed once expired
+ortie token inspect                 # print its type, scopes and expiry
+ortie token revoke                  # revoke it at the server
 ```
 
 When the redirection cannot be caught, `auth get` prints the `auth listen` or `auth resume` command finishing the flow.
@@ -147,14 +148,14 @@ When the redirection cannot be caught, `auth get` prints the `auth listen` or `a
 Interactively, it chains commands without unlocking the store each time:
 
 ```
-$ ortie repl -a google
+$ ortie repl
 ortie> auth get
 ortie> token show
 ortie> token inspect
 ortie> exit
 ```
 
-Non-interactively, a program spawns `ortie repl -a google --json` and talks to it over stdio: it writes one command per line on stdin and reads one JSON value per line on stdout, failures included. A mail client can keep it running and write `token show` whenever it needs a fresh token.
+Non-interactively, a program spawns `ortie repl --json` and talks to it over stdio: it writes one command per line on stdin and reads one JSON value per line on stdout, failures included. A mail client can keep it running and write `token show` whenever it needs a fresh token.
 
 ### MCP
 
@@ -167,7 +168,7 @@ MCP clients start the servers declared in their configuration, most of them unde
   "mcpServers": {
     "ortie": {
       "command": "ortie",
-      "args": ["mcp", "--account", "google"]
+      "args": ["mcp"]
     }
   }
 }

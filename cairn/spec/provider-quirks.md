@@ -6,7 +6,7 @@ status: current
 
 # Provider quirks
 
-Per-provider OAuth 2.0 quirks learned while testing against the providers. The samples apply them; this is the reference for an account written by hand and for understanding why one might fail. The full field reference lives in config.sample.toml.
+Per-provider OAuth 2.0 quirks learned while testing against the providers. The provider sections of config.sample.toml apply them; this is the reference for an account written by hand and for understanding why one might fail. The full field reference lives in config.sample.toml.
 
 ## Google
 

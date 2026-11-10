@@ -6,7 +6,7 @@ status: current
 
 # Output
 
-Everything the user asked for goes to stdout, data and errors alike, distinguished only by the exit code; stderr carries the logs. `--json` switches the data commands to machine-readable objects, and this capability is what describes those objects.
+Everything the user asked for goes to stdout, data and errors alike, distinguished only by the exit code; stderr carries the logs and the welcome a missing configuration meets a person with. `--json` switches the data commands to machine-readable objects, and this capability is what describes those objects.
 
 ### Requirement: A data command prints a named output type
 Each command printing a value SHALL print one type named after the invocation and suffixed `Output`, deriving `Display`, `Serialize` and `JsonSchema`, so the human rendering, the machine rendering and the schema are three faces of one declaration. A sentence SHALL be the `Display` of such a type, never a value of its own.

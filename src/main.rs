@@ -23,8 +23,12 @@
 //! flows running in the server so no secret reaches the agent.
 //!
 //! The config is user-owned: Ortie never writes it, and an account
-//! starts from one of the config.samples/ files, config.sample.toml showing
-//! every field.
+//! starts from config.sample.toml: the fields every provider shares,
+//! then one section per provider, the client and endpoints included,
+//! one of which to uncomment. A person running Ortie without a config
+//! meets the welcome ([`cli::welcome`]), which copies it from the
+//! release or the package, share/doc/ortie/ beside the binary, or
+//! downloads it.
 //!
 //! Configuration is two layers. [`config`] holds the pure TOML DTOs,
 //! each type ending in `*Config` and mirroring the nested
@@ -44,8 +48,9 @@
 //!
 //! Everything the user asked for goes to stdout, data and errors alike
 //! (JSON with `--json`), distinguished only by the exit code; stderr
-//! carries the logs. Doc comments on the command structs double as the
-//! CLI help: the first paragraph is `-h`, the rest completes `--help`.
+//! carries the logs and the welcome. Doc comments on the command structs
+//! double as the CLI help: the first paragraph is `-h`, the rest
+//! completes `--help`.
 //!
 //! Each command prints one `*Output` type, a confirmation included, and
 //! [`json_schema`] maps its invocation to that type's JSON Schema, which
@@ -72,12 +77,20 @@ mod mcp;
 mod repl;
 mod token;
 
-use anyhow::Error;
-use clap::{CommandFactory, Parser};
-use pimalaya_cli::{error::ErrorReport, log::Logger, printer::StdoutPrinter};
+use std::{
+    io::{self, IsTerminal},
+    process,
+};
+
+use clap::Parser;
+use pimalaya_cli::{
+    error::ErrorReport,
+    log::Logger,
+    printer::{Printer, StdoutPrinter},
+};
 use simd_cpu::SimdCpu;
 
-use crate::cli::Cli;
+use crate::cli::{Cli, ConfigMissingError};
 
 fn main() {
     // NOTE: the base64 codecs below read the installed CPU token, the
@@ -94,8 +107,23 @@ fn main() {
 
     let result = match cli.cmd {
         Some(cmd) => cmd.execute(&mut printer, config_paths, account_name),
-        None => Cli::command().print_help().map_err(Error::from),
+        None => cli::meet_bare_invocation(config_paths),
     };
+
+    // NOTE: a person missing a configuration meets the welcome, a script
+    // or a JSON caller the error.
+    if let Err(err) = &result
+        && let Some(missing) = err.downcast_ref::<ConfigMissingError>()
+        && !printer.is_json()
+        && io::stderr().is_terminal()
+    {
+        let sample = cli::shipped_sample();
+        eprint!(
+            "{}",
+            cli::welcome(&missing.path, config_paths, sample.as_deref())
+        );
+        process::exit(1);
+    }
 
     ErrorReport::eval(&mut printer, result)
 }

@@ -242,7 +242,7 @@ pub(crate) fn authorization_request(
 /// its redirect URI and, under PKCE, its code verifier: `auth listen`
 /// first when `listen` is set, then `auth resume`.
 ///
-/// The values are attached to their flag with `=` and single quoted:
+/// The values are attached to their flag with `=` and quoted:
 /// a verifier or a state can begin with `-` and be read as a flag, and
 /// the quotes keep the shell from expanding a leading `~`. The redirect
 /// URI is printed even when it was generated: the code exchange must
@@ -254,15 +254,15 @@ fn print_handoff(
     redirect_uri: &Url,
     listen: bool,
 ) {
-    let state = shell_single_quote(&String::from_utf8_lossy(state.expose()));
+    let state = shell_quote(&String::from_utf8_lossy(state.expose()));
     let mut flags = format!("--state={state}");
 
     if let Some(verifier) = pkce {
-        let verifier = shell_single_quote(&String::from_utf8_lossy(verifier.expose()));
+        let verifier = shell_quote(&String::from_utf8_lossy(verifier.expose()));
         flags.push_str(&format!(" --pkce={verifier}"));
     }
 
-    let redirect_uri = shell_single_quote(redirect_uri.as_str());
+    let redirect_uri = shell_quote(redirect_uri.as_str());
     flags.push_str(&format!(" --redirect-uri={redirect_uri}"));
 
     let resume = "copy the URL your browser was redirected to, then run the resume subcommand:";
@@ -422,7 +422,7 @@ fn execute_device(
             println!();
             println!(
                 "> {invocation} auth resume {}",
-                shell_single_quote(&view.device_code)
+                shell_quote(&view.device_code)
             );
         }
         return Ok(());
@@ -704,7 +704,7 @@ pub(crate) fn report_token_issued(
 /// Builds the invocation the printed `auth listen` and `auth resume`
 /// commands start with.
 ///
-/// It carries the `-c` and `-a` the grant ran with, single quoted, so the
+/// It carries the `-c` and `-a` the grant ran with, quoted, so the
 /// command reaches the configuration and account that issued the state:
 /// the default one could hold another provider, whose token endpoint
 /// would refuse the code, or the same client, storing the token under
@@ -714,19 +714,25 @@ pub fn invocation(config_paths: &[PathBuf], account_name: Option<&str>) -> Strin
 
     for path in config_paths {
         invocation.push_str(" -c ");
-        invocation.push_str(&shell_single_quote(&path.to_string_lossy()));
+        invocation.push_str(&shell_quote(&path.to_string_lossy()));
     }
 
     if let Some(name) = account_name.filter(|name| !name.is_empty()) {
         invocation.push_str(" -a ");
-        invocation.push_str(&shell_single_quote(name));
+        invocation.push_str(&shell_quote(name));
     }
 
     invocation
 }
 
-/// Single-quote for safe paste into a POSIX shell command line.
-fn shell_single_quote(s: &str) -> String {
+/// Quotes `s` for a paste into a command line: single quotes for a POSIX
+/// shell, double quotes on Windows, which cmd and PowerShell both read,
+/// a Windows path never holding one.
+pub(crate) fn shell_quote(s: &str) -> String {
+    if cfg!(windows) {
+        return format!("\"{s}\"");
+    }
+
     let mut out = String::with_capacity(s.len() + 2);
     out.push('\'');
     for ch in s.chars() {
@@ -795,13 +801,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shell_single_quote_escapes_embedded_quotes() {
-        assert_eq!(shell_single_quote("plain"), "'plain'");
-        assert_eq!(shell_single_quote("a;b"), "'a;b'");
-        assert_eq!(shell_single_quote("it's"), "'it'\\''s'");
+    #[cfg(not(windows))]
+    fn shell_quote_escapes_embedded_quotes() {
+        assert_eq!(shell_quote("plain"), "'plain'");
+        assert_eq!(shell_quote("a;b"), "'a;b'");
+        assert_eq!(shell_quote("it's"), "'it'\\''s'");
     }
 
     #[test]
+    #[cfg(not(windows))]
     fn invocation_carries_the_account_and_config() {
         assert_eq!(invocation(&[], None), "ortie");
         assert_eq!(invocation(&[], Some("")), "ortie");

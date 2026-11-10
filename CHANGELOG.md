@@ -20,9 +20,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added `ortie-error` to `json-schema`, the schema of the JSON failure object.
 - Added the `completion`, `manual` and `json-schema` schemas to `json-schema`.
-- Added [config.samples](./config.samples): google.toml, microsoft.toml and fastmail.toml, each one complete account named after its provider, ready to append to a configuration.
+- Added Google, Microsoft, Fastmail and custom sections to the end of config.sample.toml, commented, yours to uncomment: the client and the endpoints moved into them.
 
-  Google and Microsoft go through Pimalaya's own applications: Gmail, Google Calendar and People, Graph mail, calendars and contacts. An application of your own and the other scopes (CalDAV and CardDAV, Outlook IMAP and SMTP) stand as commented code, scopes grouped under one comment line each. Fastmail takes an application of your own. The test suite parses every sample, its commented code swapped in too, and config.sample.toml, so they stay in step with the configuration.
+  Google and Microsoft go through Pimalaya's own applications: Gmail, Google Calendar and People, Graph mail, calendars and contacts. Fastmail and the custom section take an application of your own. The test suite parses config.sample.toml with each commented line and each section uncommented, so it stays in step with the configuration.
+
+- Added config.sample.toml to the release archives and the Nix package, as share/doc/ortie/config.sample.toml, which install.sh copies under its prefix.
+
+  The welcome copies it from there when it sits next to the binary, matching its version, and downloads it otherwise.
 
 ### Changed
 
@@ -61,7 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **BREAKING**: Removed the `configure` command and its `wizard` alias, with the offer a bare `ortie` or a command missing its configuration made to run it.
 
-  An account starts from one of the samples instead. A bare `ortie` shows the help, and a missing configuration fails naming the path it looked for and pointing at the samples. The `ortie-configure` key leaves `json-schema`.
+  An account starts from config.sample.toml instead. A bare `ortie` or a command missing its configuration prints a welcome in a terminal, with the commands copying config.sample.toml to the path it looked for, from the release or the package, or downloading it; a script or `--json` gets an error naming that path and pointing at config.sample.toml. The `ortie-configure` key leaves `json-schema`.
 
 - **BREAKING**: Removed dynamic client registration (RFC 7591), which only the wizard ran.
 
@@ -83,6 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   The code was exchanged without the `redirect_uri` its authorization request carried, which RFC 6749 section 4.1.3 requires. The printed commands now carry `--redirect-uri`.
 
+- Fixed the commands `auth get` prints being single quoted on Windows, which cmd does not read: they are double quoted there, as cmd and PowerShell both read them.
 - Fixed a failed storage write after a refresh leaving the session on the old refresh token, which a rotating server had already invalidated.
 - Fixed the `auth resume` command printed by `auth get` dropping its `-a` and `-c` ([#16](https://github.com/pimalaya/ortie/issues/16)).
 

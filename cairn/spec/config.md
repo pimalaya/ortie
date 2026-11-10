@@ -38,7 +38,7 @@ An account SHALL define read and write storage as external shell commands. The r
 Every v1.x config file SHALL parse and run unchanged, the `hooks` table aside, refused like any unknown key: `grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, and `pkce = true`/`false` are still accepted. The only behaviour an existing account can notice is PKCE-by-default.
 
 ### Requirement: Account resolution failures name what is missing
-Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for and points at the samples, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
+Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for and points at config.sample.toml, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
 
 ### Requirement: The configuration path comes from `-c` only
 The configuration path SHALL be overridden by `-c` only, repeatable, the first path the base and the next ones merged on top in order. Each occurrence SHALL be one path, never split on a delimiter, and no environment variable SHALL be read for it.
@@ -60,10 +60,23 @@ The `tls` account option SHALL name the TLS provider as one of `auto` (the defau
 An account MAY declare `alpn`, the list of ALPN identifiers offered during the TLS handshake. It SHALL default to empty, sending no ALPN extension, which is what an OAuth 2.0 endpoint over plain HTTPS expects; a non-empty list overrides it, `["http/1.1"]` being the one meaningful value, for a TLS middlebox refusing a handshake without ALPN. Only rustls reads it, native-tls ignoring ALPN.
 
 ### Requirement: A bare invocation shows the help
-A bare `ortie` SHALL show the help, whether a configuration exists or not, and so SHALL `--account` with no subcommand, a half-typed command. Nothing prompts: Ortie writes no configuration.
+A bare `ortie` SHALL show the help when a configuration exists, a broken one included, and so SHALL `--account` with no subcommand, a half-typed command. Without one it SHALL fail as an account-bound command does, the welcome or the error. Nothing prompts: Ortie writes no configuration.
 
-### Requirement: Samples, one per provider
-The repository SHALL ship config.samples/<provider>.toml, each holding one complete `[accounts.<provider>]` table with dotted keys and no nested table, ready to append to a configuration. Its active lines SHALL use Pimalaya's application where one exists, and the scopes it leaves out SHALL stand as commented code. One comment line SHALL head each scope group, naming what it serves, and no other comment SHALL appear. config.sample.toml SHALL be one `[accounts.example]` table listing every field and each of its values, the default active and the others commented as `#key = value`, every line ending in one tab-aligned sentence, and every command a failing `exit 127` placeholder. The test suite SHALL parse each sample and config.sample.toml through the loader `-c` uses, as it stands and once per line of commented code swapped in for the active line of its key, so a configuration change that breaks one fails the build.
+### Requirement: A missing configuration meets a person with the welcome
+When no configuration exists at the path `-c` gave or the default one, and stderr is a terminal with `--json` off, a bare `ortie` and every account-bound command SHALL print the welcome on stderr and exit 1, printing nothing more. The welcome SHALL frame Ortie in one sentence, name the missing path, give the commands creating it from config.sample.toml, invite the reader to edit it and uncomment the options they need, and give the `auth get` command carrying the `-c` paths. When share/doc/ortie/config.sample.toml exists under the prefix holding the binary's directory or under that directory itself, symlinks resolved, the commands SHALL copy it there with a writable mode, after creating the missing directory; otherwise they SHALL download it with `curl --create-dirs`. Every path SHALL be quoted for the platform's shells (single quotes on Unix, double quotes and `curl.exe` on Windows, which cmd and PowerShell both read), so each command runs as printed. Otherwise the missing-configuration error SHALL stand, as JSON under `--json`.
+
+#### Scenario: A first run
+- GIVEN no file at $XDG_CONFIG_HOME/ortie/config.toml, $HOME/.config/ortie/config.toml or $HOME/.ortierc
+- WHEN `ortie` runs in a terminal
+- THEN the welcome names $XDG_CONFIG_HOME/ortie/config.toml, the commands creating it from config.sample.toml and `ortie auth get`, and the exit status is 1
+
+#### Scenario: A packaged binary
+- GIVEN ortie installed as /usr/bin/ortie with /usr/share/doc/ortie/config.sample.toml, and no configuration
+- WHEN `ortie` runs in a terminal
+- THEN the welcome creates the configuration directory and copies /usr/share/doc/ortie/config.sample.toml there with mode 644, downloading nothing
+
+### Requirement: One sample configuration, with a section per provider
+The repository SHALL ship config.sample.toml, and the release archives and the Nix package SHALL install it as share/doc/ortie/config.sample.toml, which install.sh copies under its prefix. It holds one `[accounts.example]` table with dotted keys and no nested table. It SHALL list the fields every provider shares and each of their values, the default active and the others commented as `#key = value`, every line ending in one tab-aligned sentence, and every command a failing `exit 127` placeholder. It SHALL end with one section per provider (Google, Microsoft, Fastmail) and a custom one for an application of one's own at any other provider, each a paragraph of commented code only, headed by its name, holding the client, the endpoints, the redirection, the resources and the scopes the provider needs, Pimalaya's application where one exists and example values in the custom one. The file SHALL hold a working account once one section is uncommented. The test suite SHALL parse config.sample.toml through the loader `-c` uses with each section uncommented whole, then on top of it each commented element inside it and each line of commented code outside the sections, uncommented in place of the active lines of its field, so a configuration change that breaks one fails the build.
 
 #### Scenario: A field is renamed
 - GIVEN config.sample.toml, whose commented code sets `client-secret.raw`

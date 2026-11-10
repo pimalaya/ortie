@@ -1,39 +1,83 @@
 [accounts.example]
-default = true						# make this account the default one used
+default = true				# make this account the default one used
+auto-refresh = true			# let token show refresh an expired token
+#resources = []				# RFC 8707 resource indicators
+#extras.login_hint = "user@example.com"	# an extra authorization request parameter
+#alpn = ["http/1.1"]			# for a middlebox refusing a handshake without ALPN
 
-grant = "authorization-code"				# sign in through a browser redirection
-#grant = "device"					# sign in elsewhere with a user code
-#grant = "client-credentials"				# headless, authenticated by the secret
-#grant = "client-credentials-jwt"			# headless, authenticated by a signed JWT
+grant = "authorization-code"		# sign in through a browser redirection
+#grant = "device"			# sign in elsewhere with a user code
+#grant = "client-credentials"		# headless, authenticated by the secret
+#grant = "client-credentials-jwt"	# headless, authenticated by a signed JWT
 
-client-id = "example"					# the identifier the provider registered
-#client-secret.raw = "example"				# the client secret, in clear
-#client-secret.command = "exit 127"			# the first line a shell command prints
-#client-secret.command = ["sh", "-c", "exit 127"]	# same, an argv run without a shell
-#client-key = "/path/to/key.pem"			# private key signing the JWT
-#client-cert = "/path/to/cert.pem"			# certificate named in the JWT, for Microsoft
+pkce = "s256"				# PKCE with the SHA-256 challenge
+#pkce = "plain"				# PKCE with the plain challenge
 
-auto-refresh = true					# let token show refresh an expired token
-#scopes = []						# no scope, the provider's default
-#resources = []						# no RFC 8707 resource indicator
-#extras.login_hint = "user@example.com"			# an extra authorization request parameter
-#alpn = ["http/1.1"]					# for a middlebox refusing a handshake without ALPN
+tls = "auto"				# the TLS the binary was built with
+#tls = "native-tls"			# the platform's TLS
+#tls = "rustls-aws"			# rustls on aws-lc-rs
+#tls = "rustls-ring"			# rustls on ring
 
-pkce = "s256"						# PKCE with the SHA-256 challenge
-#pkce = "plain"						# PKCE with the plain challenge
+storage.read.command = "exit 127"	# prints the stored token JSON
+storage.write.command = "exit 127"	# receives the token JSON on stdin
 
-tls = "auto"						# the TLS the binary was built with
-#tls = "native-tls"					# the platform's TLS
-#tls = "rustls-aws"					# rustls on aws-lc-rs
-#tls = "rustls-ring"					# rustls on ring
+# Google
+#
+#client-id = "803561575535-41415ghqi04uibrl6t5umg3p27stdhqr.apps.googleusercontent.com"
+#client-secret.raw = "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"
+#extras.access_type = "offline"
+#endpoints.authorization = "https://accounts.google.com/o/oauth2/v2/auth"
+#endpoints.token = "https://oauth2.googleapis.com/token"
+#endpoints.revocation = "https://oauth2.googleapis.com/revoke"
+#scopes = [
+#  "https://mail.google.com/",
+#  "https://www.googleapis.com/auth/calendar",
+#  "https://www.googleapis.com/auth/calendar.events",
+#  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+#  "https://www.googleapis.com/auth/contacts",
+#  "https://www.googleapis.com/auth/carddav",
+#]
 
-#endpoints.authorization = "https://example.com/authorize"	# where the browser signs in
-#endpoints.device-authorization = "https://example.com/device"	# where the device grant gets its code
-#endpoints.token = "https://example.com/token"			# where grants and refreshes get tokens
-#endpoints.revocation = "https://example.com/revoke"		# where token revoke revokes
-endpoints.redirection = "http://127.0.0.1"			# loopback on a random port
-#endpoints.redirection = "http://localhost:8080"		# loopback on a fixed port
-#endpoints.redirection = "org.example.app://redirect"		# caught by hand through auth resume
+# Microsoft
+#
+#client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
+#endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+#endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+#endpoints.redirection = "http://localhost"
+#scopes = [
+#  "offline_access",
+#  "https://graph.microsoft.com/Mail.ReadWrite",
+#  "https://graph.microsoft.com/Mail.Send",
+#  "https://graph.microsoft.com/Calendars.ReadWrite",
+#  "https://graph.microsoft.com/Contacts.ReadWrite",
+#  "https://outlook.office.com/IMAP.AccessAsUser.All",
+#  "https://outlook.office.com/SMTP.Send",
+#]
 
-storage.read.command = "exit 127"			# prints the stored token JSON
-storage.write.command = "exit 127"			# receives the token JSON on stdin
+# Fastmail
+#
+#client-id = ""
+#endpoints.authorization = "https://api.fastmail.com/oauth/authorize"
+#endpoints.token = "https://api.fastmail.com/oauth/refresh"
+#endpoints.revocation = "https://api.fastmail.com/oauth/revoke"
+#endpoints.redirection = "org.pimalaya.ortie://redirect"
+#resources = ["https://api.fastmail.com/jmap/session"]
+#scopes = [
+#  "offline_access",
+#  "urn:ietf:params:oauth:scope:mail",
+#  "urn:ietf:params:oauth:scope:contacts",
+#  "urn:ietf:params:oauth:scope:calendars",
+#]
+
+# Custom
+#
+#client-id = "example"
+#client-secret.command = "exit 127"
+#client-key = "/path/to/key.pem"
+#client-cert = "/path/to/cert.pem"
+#endpoints.authorization = "https://example.com/authorize"
+#endpoints.device-authorization = "https://example.com/device"
+#endpoints.token = "https://example.com/token"
+#endpoints.revocation = "https://example.com/revoke"
+#endpoints.redirection = "http://127.0.0.1"
+#scopes = ["example"]

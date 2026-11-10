@@ -59,6 +59,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
     in
     ''
       mkdir -p $out/share/{completions,man}
+      install -Dm644 config.sample.toml "$out"/share/doc/${finalAttrs.pname}/config.sample.toml
       ${exe} manuals -d "$out"/share/man
       ${exe} completions -d "$out"/share/completions bash elvish fish powershell zsh
     ''

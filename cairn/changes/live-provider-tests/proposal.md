@@ -43,7 +43,7 @@ If the RFC 7523 section 2.1 grant lands later, a `credentialed::` service accoun
 
 - `auth_resume_rejected`: an account on the endpoints from Fastmail's metadata (token `https://api.fastmail.com/oauth/refresh`), bogus code: error exit code, with the `error_description` surfaced, since it is the only way to tell Fastmail failures apart.
 
-The wizard and its registration left Ortie on 2026-11-08 (samples-replace-the-wizard); the files of config.samples/ can serve as the accounts these tests write, so a provider drifting from a sample fails here.
+The wizard and its registration left Ortie on 2026-11-08 (samples-replace-the-wizard); the provider sections of config.sample.toml can serve as the accounts these tests write, so a provider drifting from a sample fails here.
 
 ### CI
 
