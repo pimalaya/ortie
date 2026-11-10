@@ -9,7 +9,7 @@ status: current
 The `token` command tree works on the access token already persisted in storage: `show` prints it, `inspect` displays its metadata, `refresh` exchanges the refresh token for a fresh one. The token side is grant-agnostic: every grant ends in the same token response shape, so multi-grant support costs nothing downstream of issuance.
 
 ### Requirement: Show the raw access token
-`token show` SHALL read the token from storage and print the raw access token on stdout, suitable for piping. Under `--json` it prints the token as a JSON object.
+`token show` SHALL read the token from storage and print the raw access token on stdout, followed by a newline like every text output, suitable for piping: `$(ortie token show)` and secret readers strip it. Under `--json` it prints the token as a JSON object.
 
 ### Requirement: Storage round-trip
 The token response persisted to and read from storage SHALL be the OAuth 2.0 success-params JSON, carrying at least the access token, token type, optional expiry lifetime, optional refresh token, and the issuance timestamp.

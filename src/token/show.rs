@@ -116,6 +116,6 @@ pub struct TokenShowOutput<'a> {
 
 impl fmt::Display for TokenShowOutput<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.access_token)
+        writeln!(f, "{}", self.access_token)
     }
 }

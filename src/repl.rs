@@ -42,8 +42,7 @@ use crate::{
 #[derive(Debug, Parser)]
 pub struct ReplCommand;
 
-/// One parsed REPL input line, the CLI grammar minus the binary name,
-/// scoped to the account-bound commands.
+/// Run a `token` or `auth` command against the session's account.
 #[derive(Debug, Parser)]
 #[command(no_binary_name = true)]
 struct ReplLine {
@@ -57,9 +56,6 @@ struct ReplLine {
 
 /// The `token` and `auth` commands, the subset of the CLI tree running
 /// against the in-memory account.
-///
-/// The configuration wizard has no REPL form, being account-less: bare
-/// `ortie` is what runs it.
 #[derive(Debug, Subcommand)]
 enum ReplCommandTree {
     #[command(subcommand)]
@@ -83,10 +79,10 @@ impl ReplCommandTree {
     }
 }
 
-/// The `auth` leaves usable inside the REPL.
+/// Get a fresh access token by running the account's OAuth grant.
 ///
-/// They dispatch against the session's account, so a token they issue
-/// is immediately visible to the `token` commands that follow.
+/// The token it issues is the one the next `token` commands of the session
+/// read.
 #[derive(Debug, Subcommand)]
 enum ReplAuthCommand {
     Get(AuthGetCommand),
@@ -176,21 +172,12 @@ impl ReplCommand {
     }
 }
 
-/// Prints the outcome of one line: a newline closing a text result, or
-/// the failure, on stderr when interactive and through the printer on
-/// stdout when piped.
+/// Prints the outcome of one line: the result is already out, ending with
+/// its newline, and a failure goes to stderr when interactive and through
+/// the printer on stdout when piped.
 fn answer(printer: &mut impl Printer, interactive: bool, result: Result<()>) -> Result<()> {
     match result {
-        // NOTE: the printer ends each JSON value with a newline, flushed
-        // when piped, while a text result carries no trailing newline so
-        // one-shot output pipes cleanly: the loop terminates and flushes
-        // it, or the line-buffered stdout holds it until the session ends.
-        Ok(()) => {
-            if !printer.is_json() {
-                println!();
-                let _ = io::stdout().flush();
-            }
-        }
+        Ok(()) => io::stdout().flush()?,
         Err(err) if interactive => eprintln!("{err:?}"),
         // NOTE: a piped session is a machine channel, so its errors reach
         // stdout through the printer like any other command's, one per

@@ -48,3 +48,6 @@ Every output type Ortie prints SHALL serialize its keys as camelCase, so each ke
 
 ### Requirement: Shared shapes and spellings
 `token inspect` SHALL print `issuedAt` as an RFC 3339 instant in UTC with `Z`, `null` when unknown, and no output type SHALL print an epoch number.
+
+### Requirement: Text output ends with a newline
+Every command's text rendering SHALL end with a newline, `token show` included, so the shell prompt starts on a line of its own. The REPL SHALL add none of its own: interactive, its prompt opens with a blank line; piped, results follow each other line after line.
