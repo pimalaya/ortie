@@ -13,13 +13,6 @@ targets = [
   "x86_64-unknown-linux-musl",
 ]
 
-[advisories]
-ignore = [
-  # SAFETY: rsa only signs the JWT assertion of client-credentials-jwt with
-  # the account's local key and never decrypts, so no timing oracle exists.
-  { id = "RUSTSEC-2023-0071", reason = "local RS256 signing only, no decryption oracle exposed" },
-]
-
 [sources]
 allow-org.github = ["pimalaya"]
 unknown-registry = "deny"
