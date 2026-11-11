@@ -42,7 +42,7 @@ use pimalaya_cli::{
     clap::commands::json_schema::output_schema,
     error::{ErrorReport, NoErrorCode},
     mcp::{
-        Input, ServerInfo, ToolCall, ToolResult, answer, send, spawn_stdin_reader,
+        Input, ServerInfo, ToolCall, ToolResult, answer, error_object, send, spawn_stdin_reader,
         tool_output_schema,
     },
     printer::CapturePrinter,
@@ -545,7 +545,7 @@ impl McpServer {
                 ToolResult::success(receipt)
             }
             Err(err) => {
-                let report = report(err);
+                let report = error_object::<NoErrorCode>(err);
                 self.flow = McpFlow::Failed(report.clone());
                 ToolResult::failure(report)
             }
@@ -580,7 +580,7 @@ impl McpServer {
 
         self.flow = match outcome {
             Ok(receipt) => McpFlow::Issued(receipt),
-            Err(err) => McpFlow::Failed(report(err)),
+            Err(err) => McpFlow::Failed(error_object::<NoErrorCode>(err)),
         };
     }
 
@@ -651,7 +651,9 @@ impl McpServer {
                 }
             }
             McpDevicePoll::Done(Ok(receipt)) => self.flow = McpFlow::Issued(receipt),
-            McpDevicePoll::Done(Err(err)) => self.flow = McpFlow::Failed(report(err)),
+            McpDevicePoll::Done(Err(err)) => {
+                self.flow = McpFlow::Failed(error_object::<NoErrorCode>(err))
+            }
         }
     }
 
@@ -857,11 +859,4 @@ fn tool_result(outcome: Result<Value>) -> ToolResult {
         Ok(value) => ToolResult::success(value),
         Err(err) => ToolResult::error::<NoErrorCode>(err),
     }
-}
-
-/// The `ortie-error` object of `err`, which a failed flow keeps for
-/// `auth_status`.
-fn report(err: anyhow::Error) -> Value {
-    let report = ErrorReport::<NoErrorCode>::from(err);
-    serde_json::to_value(report).unwrap_or_else(|err| Value::from(err.to_string()))
 }
