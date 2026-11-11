@@ -24,8 +24,8 @@ storage.write.command = "exit 127"	# receives the token JSON on stdin
 
 # Google
 #
-#client-id = "991810147220-i3e8i2kph1firll12kv5gtc99tdgjote.apps.googleusercontent.com"
-#client-secret.raw = "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"
+#client-id = ""
+#client-secret.raw = ""
 #extras.access_type = "offline"
 #endpoints.authorization = "https://accounts.google.com/o/oauth2/v2/auth"
 #endpoints.token = "https://oauth2.googleapis.com/token"

@@ -40,7 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed piped `--json` output to print one value per line.
 - Changed every `json-schema` schema to carry an `$id` naming the contract version, and to require the keys a command always prints.
 - Changed the help, usage and logs to carry no colour, and the help to print each paragraph on one line, for the terminal to fold.
-- Changed config.sample.toml to one flat `[accounts.example]` table: every field and its values, the defaults active, then a commented section per provider on Pimalaya's applications (Google, Microsoft Graph, Microsoft IMAP and SMTP, Fastmail) and a custom one for an application of your own.
+- Changed config.sample.toml to one flat `[accounts.example]` table: every field and its values, the defaults active, then a commented section per provider (Google, Microsoft Graph, Microsoft IMAP and SMTP, Fastmail), on Pimalaya's applications except Google whose client is left blank, and a custom one for an application of your own.
 - Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
 
 ### Removed

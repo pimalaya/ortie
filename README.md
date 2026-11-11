@@ -18,7 +18,7 @@ CLI to manage OAuth tokens
 
 ## Features
 
-- **Ready-made providers**: Google, Microsoft and Fastmail sections in the sample, on Pimalaya's own applications.
+- **Ready-made providers**: Microsoft and Fastmail sections in the sample on Pimalaya's own applications, and a Google one taking your own client.
 - **Every common grant**: authorization code, device code, and client credentials by secret or signed JWT.
 - **Token lifecycle**: refresh on demand or when the token is read, inspect, and revoke at the server.
 - **Your own storage**: tokens read and written through your commands, such as `pass` or `secret-tool`.
