@@ -10,10 +10,11 @@
 //! [`crate::account::Account`], which this one is flattened into once
 //! the selected account is taken.
 //!
-//! Loaded from the first valid path among
+//! Loaded from every existing path among
 //! $XDG_CONFIG_HOME/ortie/config.toml, $HOME/.config/ortie/config.toml
-//! and $HOME/.ortierc. `-c, --config <PATH>` overrides it, repeated
-//! once per file: the first is the base, the rest deep-merge on top.
+//! and $HOME/.ortierc, each deep-merged on top of the ones before.
+//! `-c, --config <PATH>` replaces them, repeated once per file: the first
+//! is the base, the rest deep-merge on top.
 
 use std::{collections::HashMap, fmt, path::PathBuf, process::Command};
 

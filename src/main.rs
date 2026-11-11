@@ -17,9 +17,9 @@
 //! Ortie keeps its commands, its sentences and its flow state only.
 //!
 //! Parsing starts in [`cli`], the root clap parser. Bare `ortie` shows
-//! the help; otherwise it routes into [`auth`], which obtains tokens by
-//! running the account's grant, and [`token`], which works on the stored
-//! one.
+//! the help, or the welcome when no configuration exists; otherwise it
+//! routes into [`auth`], which obtains tokens by running the account's
+//! grant, and [`token`], which works on the stored one.
 //!
 //! [`repl`] holds those same two trees open against one account, so the
 //! secret store is unlocked once instead of per command, on the shared

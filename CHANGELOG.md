@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   A `:` is no longer read as a delimiter, which cut Windows paths such as `C:\Users\me\config.toml` at the drive letter.
 
+- **BREAKING**: Changed the configuration loading to read every existing default path as a layer, each deep-merged on top of the ones before, so $HOME/.ortierc overrides $HOME/.config/ortie/config.toml where only the first file found was read.
 - **BREAKING**: Changed every configured URL to take an ASCII host only, an internationalised one written in Punycode (`https://xn--bcher-kva.example` for `bücher.example`), which saves 130 KB of binary.
 - Changed `auth get` to print the authorization link, or the verification URI and user code, without opening a browser.
 - Changed `token show` to end the token with a newline, like every text output; `$(ortie token show)` and Pimalaya's secret commands strip it.
@@ -61,11 +62,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `storage.write.command` receives the token JSON on every issue and refresh, so a command chained after it does what a success hook did.
 
 - **BREAKING**: Removed the `ORTIE_CONFIG` environment variable; pass `-c "$ORTIE_CONFIG"` instead.
-- Removed the io-pim-discovery, inquire, crossterm, ctrlc, open, notify-rust, dirs and shellexpand dependencies.
+- Removed the io-pim-discovery, inquire, crossterm, ctrlc, open and notify-rust dependencies, and dirs and shellexpand as Ortie's direct ones (pimalaya-cli and pimalaya-config still bring them).
 
 ### Fixed
 
-- Fixed several accounts marked `default = true` taking one at random: they are refused, naming them, with both ways of picking one.
+- **BREAKING**: Fixed several accounts marked `default = true` taking one at random: they are refused, naming them, with both ways of picking one.
 - Fixed a configured `http` loopback redirection naming no port, such as `http://localhost`, binding port 80: it binds an ephemeral port, so `auth get` and the MCP server catch the redirection.
 - Fixed the `auth resume` command printed by `auth get` dropping a generated redirect URI, and its `-a` and `-c` ([#16](https://github.com/pimalaya/ortie/issues/16)).
 

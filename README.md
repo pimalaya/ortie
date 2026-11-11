@@ -118,13 +118,17 @@ nix run
 
 ## Configuration
 
-A configuration is loaded from the first valid path among:
+Ortie reads a TOML configuration you write, and never writes one. [config.sample.toml](./config.sample.toml) lists the fields every provider shares with their values, then one section per provider, yours to uncomment: Google, Microsoft Graph, Microsoft IMAP and SMTP, Fastmail, and a custom one for an application of your own. Releases and packages ship it as share/doc/ortie/config.sample.toml.
 
-- `$XDG_CONFIG_HOME/ortie/config.toml`
-- `$HOME/.config/ortie/config.toml`
-- `$HOME/.ortierc`
+Run without a configuration at a terminal, Ortie welcomes you with the commands copying the shipped sample in place, or downloading it when none ships, then the first command to run. Under `--json` or in a script, it fails naming the path it looked at and the sample.
 
-Override the path with `-c <PATH>`. Repeat it to merge several files, such as `-c public.toml -c private.toml`: the first one is the base and the next ones are deep-merged on top. [config.sample.toml](./config.sample.toml) lists the fields every provider shares with their values, then one section per provider, yours to uncomment: Google, Microsoft Graph, Microsoft IMAP and SMTP, Fastmail, and a custom one for an application of your own. Releases and packages ship it as share/doc/ortie/config.sample.toml, which the welcome of a first run copies from.
+A configuration is loaded from every existing path among the following, each one deep-merged on top of the ones before, so $HOME/.ortierc overrides the others:
+
+- $XDG_CONFIG_HOME/ortie/config.toml
+- $HOME/.config/ortie/config.toml
+- $HOME/.ortierc
+
+Override those paths with `-c <PATH>`. Repeat it to merge several files, such as `-c public.toml -c private.toml`: the first one is the base and the next ones are deep-merged on top. Each `-c` takes one path, never split, and no environment variable is read.
 
 ## Usage
 
