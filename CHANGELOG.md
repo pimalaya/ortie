@@ -28,7 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **BREAKING**: Changed `token inspect --json` to print `issuedAt` as an RFC 3339 instant in UTC.
 - **BREAKING**: Changed `ortie repl` to print its errors on stdout, interactive or piped, as `ortie-error` objects under `--json`.
 
-  On a terminal, a line that does not parse keeps clap's message on stderr. In a `--json` session the help goes to stderr, so stdout carries one JSON value per line. The prompt `ortie> ` no longer opens with a blank line.
+  On a terminal, a line that does not parse keeps clap's message on stderr. In a `--json` session the help goes to stderr, so stdout carries one JSON value per line. The prompt `ortie> ` no longer opens with a blank line. A command's help names the binary (`Usage: ortie token show [OPTIONS]`), and a text error hints to restart the session with `--log-level`, which a line cannot set.
 
 - **BREAKING**: Changed `auto-refresh` to default to true: `token show` refreshes an expired token unless the account sets `auto-refresh = false`.
 - **BREAKING**: Changed `-c` to take one path per occurrence, repeated to merge several files (`-c public.toml -c private.toml`).

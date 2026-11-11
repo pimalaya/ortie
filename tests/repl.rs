@@ -272,7 +272,8 @@ fn a_comment_line_is_skipped_and_prefixes_are_inferred() {
 }
 
 /// The help is no failure: a `--json` session prints it on stderr, so
-/// stdout keeps one JSON value per line, and a text one on stdout.
+/// stdout keeps one JSON value per line, and a text one on stdout. Its
+/// usage line names the binary, as on the command line.
 #[test]
 fn the_help_goes_to_stderr_in_a_json_session() {
     let dir = TempDir::new().unwrap();
@@ -286,10 +287,12 @@ fn the_help_goes_to_stderr_in_a_json_session() {
     assert_eq!(lines.len(), 1, "{lines:?}");
     assert_eq!(lines[0]["accessToken"], "at-test");
 
+    let usage = "\nUsage: ortie token [OPTIONS] <COMMAND>\n";
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("Usage: token"), "stderr: {stderr}");
+    assert!(stderr.contains(usage), "stderr: {stderr}");
 
-    let out = ortie_with_input(&config, &["repl"], b"token --help\n");
+    let out = ortie_with_input(&config, &["repl"], b"help token show\n");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("Usage: token"), "stdout: {stdout}");
+    let usage = "\nUsage: ortie token show [OPTIONS]\n";
+    assert!(stdout.contains(usage), "stdout: {stdout}");
 }
