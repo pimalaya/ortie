@@ -220,3 +220,76 @@ fn a_line_json_flag_applies_to_that_line() {
     assert_eq!(inspect["tokenType"], "Bearer", "stdout: {stdout}");
     assert_eq!(lines.next(), Some("at-test"), "stdout: {stdout}");
 }
+
+/// The JSON values a piped `--json` session printed on stdout.
+fn json_lines(stdout: &[u8]) -> Vec<Value> {
+    let stdout = String::from_utf8_lossy(stdout);
+    stdout
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap_or_else(|err| panic!("{err}: {line}")))
+        .collect()
+}
+
+/// A flag the session fixed when it started is refused by name rather
+/// than as an unexpected argument, and the session goes on.
+#[test]
+fn a_session_flag_on_a_line_is_refused_by_name() {
+    let dir = TempDir::new().unwrap();
+    let (config, _) = write_device_config(dir.path());
+
+    let input = b"token show -a other\ntoken show --config=x.toml\ntoken show --log-level debug\ntoken show\n";
+    let out = ortie_with_input(&config, &["--json", "repl"], input);
+
+    assert!(out.status.success(), "{out:?}");
+
+    let lines = json_lines(&out.stdout);
+    assert_eq!(lines.len(), 4, "{lines:?}");
+
+    for (line, flag) in lines.iter().zip(["-a", "--config", "--log-level"]) {
+        let error =
+            format!("Cannot set `{flag}` inside a session, start a new session with it instead");
+        assert_eq!(line["error"], error, "{lines:?}");
+    }
+
+    assert_eq!(lines[3]["accessToken"], "at-test");
+}
+
+/// A `#` line is a comment, and a subcommand prefix is inferred as on
+/// the command line.
+#[test]
+fn a_comment_line_is_skipped_and_prefixes_are_inferred() {
+    let dir = TempDir::new().unwrap();
+    let (config, _) = write_device_config(dir.path());
+
+    let input = b"# token frobnicate\n  # auth get\ntok sh\n";
+    let out = ortie_with_input(&config, &["--json", "repl"], input);
+
+    assert!(out.status.success(), "{out:?}");
+
+    let lines = json_lines(&out.stdout);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert_eq!(lines[0]["accessToken"], "at-test");
+}
+
+/// The help is no failure: a `--json` session prints it on stderr, so
+/// stdout keeps one JSON value per line, and a text one on stdout.
+#[test]
+fn the_help_goes_to_stderr_in_a_json_session() {
+    let dir = TempDir::new().unwrap();
+    let (config, _) = write_device_config(dir.path());
+
+    let out = ortie_with_input(&config, &["--json", "repl"], b"token --help\ntoken show\n");
+
+    assert!(out.status.success(), "{out:?}");
+
+    let lines = json_lines(&out.stdout);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert_eq!(lines[0]["accessToken"], "at-test");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("Usage: token"), "stderr: {stderr}");
+
+    let out = ortie_with_input(&config, &["repl"], b"token --help\n");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("Usage: token"), "stdout: {stdout}");
+}

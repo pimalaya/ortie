@@ -10,22 +10,17 @@
 //!
 //! The session is bound to the `-a` or default account like any other
 //! command, and each input line is parsed as a `token` or `auth`
-//! subcommand dispatched against the in-memory account. Lines are split as
-//! a shell splits them, so a quoted value keeps its spaces.
+//! subcommand dispatched against the in-memory account. pimalaya-cli's
+//! [`Repl`] runs the loop: lines split as a shell splits them, the
+//! session flags refused, every answer on stdout.
 //!
 //! The stdio pipe is the authorisation boundary, so the token is never
 //! handed to another process the way a shared agent would. On exit the
 //! account drops and its secrets are zeroized.
 
-use std::io::{self, IsTerminal, Write};
-
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use clap::{Parser, Subcommand};
-use pimalaya_cli::{
-    clap::args::JsonFlag,
-    error::ErrorReport,
-    printer::{Printer, StdoutPrinter},
-};
+use pimalaya_cli::{error::NoErrorCode, printer::Printer, repl::Repl};
 
 use crate::{
     account::Account,
@@ -41,18 +36,6 @@ use crate::{
 /// (`token show`, `auth get`); `quit`, or EOF, ends the session.
 #[derive(Debug, Parser)]
 pub struct ReplCommand;
-
-/// Run a `token` or `auth` command against the session's account.
-#[derive(Debug, Parser)]
-#[command(no_binary_name = true)]
-struct ReplLine {
-    #[command(subcommand)]
-    cmd: ReplCommandTree,
-    /// Switch this line's output to JSON, the session's other lines
-    /// keeping theirs.
-    #[command(flatten)]
-    json: JsonFlag,
-}
 
 /// The `token` and `auth` commands, the subset of the CLI tree running
 /// against the in-memory account.
@@ -108,86 +91,21 @@ impl ReplAuthCommand {
 
 impl ReplCommand {
     /// Runs the read-eval-print loop until EOF or a quit command,
-    /// keeping the resolved token in the account across iterations.
+    /// keeping the resolved token in the account across iterations,
+    /// each line printing as `printer` does unless it asks for JSON.
     ///
     /// The `invocation` is handed to `auth get`, for the `auth listen` and
     /// `auth resume` commands it prints when the flow hands off.
     pub fn execute(
         self,
-        printer: &mut impl Printer,
+        printer: &impl Printer,
         mut account: Account,
         invocation: &str,
     ) -> Result<()> {
-        let stdin = io::stdin();
-        let interactive = stdin.is_terminal();
+        let repl = Repl::new("ortie", printer.is_json());
 
-        let mut line = String::new();
-        loop {
-            if interactive {
-                eprint!("\nortie> ");
-                let _ = io::stderr().flush();
-            }
-
-            line.clear();
-            if stdin.read_line(&mut line)? == 0 {
-                break; // EOF
-            }
-
-            let input = line.trim();
-            if input.is_empty() {
-                continue;
-            }
-            if matches!(input, "quit" | "exit") {
-                break;
-            }
-
-            let result = match shlex::split(input).map(ReplLine::try_parse_from) {
-                None => Err(anyhow!("Cannot split the line: a quote is not closed")),
-                // NOTE: a line asking for JSON in a text session prints
-                // through a JSON printer of its own, its failure included.
-                Some(Ok(ReplLine { cmd, json })) if json.enabled && !printer.is_json() => {
-                    let mut printer = StdoutPrinter::new(&json);
-                    let result = cmd.execute(&mut printer, &mut account, invocation);
-                    answer(&mut printer, interactive, result)?;
-                    continue;
-                }
-                Some(Ok(ReplLine { cmd, .. })) => cmd.execute(printer, &mut account, invocation),
-                // NOTE: help and version are not failures, and clap
-                // prints them on stdout already.
-                Some(Err(err)) if !err.use_stderr() => {
-                    let _ = err.print();
-                    continue;
-                }
-                Some(Err(err)) if interactive => {
-                    let _ = err.print();
-                    continue;
-                }
-                Some(Err(err)) => Err(err.into()),
-            };
-
-            answer(printer, interactive, result)?;
-        }
-
-        Ok(())
+        repl.run::<ReplCommandTree, NoErrorCode>(|printer, cmd| {
+            cmd.execute(printer, &mut account, invocation)
+        })
     }
-}
-
-/// Prints the outcome of one line: the result is already out, ending with
-/// its newline, and a failure goes to stderr when interactive and through
-/// the printer on stdout when piped.
-fn answer(printer: &mut impl Printer, interactive: bool, result: Result<()>) -> Result<()> {
-    match result {
-        Ok(()) => io::stdout().flush()?,
-        Err(err) if interactive => eprintln!("{err:?}"),
-        // NOTE: a piped session is a machine channel, so its errors reach
-        // stdout through the printer like any other command's, one per
-        // line, and stderr keeps the logs.
-        Err(err) => {
-            let report: ErrorReport = err.into();
-            printer.out(report)?;
-            io::stdout().flush()?;
-        }
-    }
-
-    Ok(())
 }

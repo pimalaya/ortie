@@ -40,12 +40,13 @@ impl TomlConfig for Config {
         env!("CARGO_PKG_NAME")
     }
 
-    fn take_default_account(&mut self) -> Option<(String, Self::Account)> {
-        let name = self
-            .accounts
-            .iter()
-            .find_map(|(name, account)| account.default.then(|| name.clone()))?;
-        self.accounts.remove_entry(&name)
+    fn sample_url() -> &'static str {
+        "https://github.com/pimalaya/ortie/blob/master/config.sample.toml"
+    }
+
+    fn accounts(&self) -> impl Iterator<Item = (&str, bool)> {
+        let accounts = self.accounts.iter();
+        accounts.map(|(name, account)| (name.as_str(), account.default))
     }
 
     fn take_named_account(&mut self, name: &str) -> Option<(String, Self::Account)> {
@@ -266,12 +267,13 @@ impl TlsConfig {
 
 #[cfg(test)]
 mod tests {
-    use core::ops::Range;
     use std::{fs, io::Write, path::PathBuf};
 
     use anyhow::Result;
+    use pimalaya_config::{sample::variants, toml::TomlConfig};
+    use pimalaya_stream::tls::{RustlsCrypto, TlsProvider};
 
-    use super::*;
+    use crate::config::{AccountConfig, Config, GrantConfig, TlsConfig};
 
     fn try_parse(toml: &str) -> Result<Config> {
         let mut file = tempfile::NamedTempFile::new().unwrap();
@@ -446,120 +448,15 @@ hooks.on-issue.success.command = "true"
         assert!(!GrantConfig::Device.is_client_credentials());
     }
 
-    /// The code a commented line holds, with one `#` stripped: a field
-    /// or an array element.
-    fn code(line: &str) -> Option<&str> {
-        let line = line.trim_start().strip_prefix('#')?.trim_start();
-        let field = key(line).is_some_and(|key| !key.contains(' '));
-        (field || line.starts_with('"')).then_some(line)
-    }
-
-    /// The field a line sets, a secret's `raw` and `command` being one.
-    fn key(line: &str) -> Option<&str> {
-        let key = line.split_once(" = ")?.0;
-        let secret = key.strip_suffix(".raw").or(key.strip_suffix(".command"));
-        Some(secret.unwrap_or(key))
-    }
-
-    /// The sections of a sample: paragraphs of commented lines only,
-    /// opened by a heading and holding code.
-    fn sections(lines: &[&str]) -> Vec<Range<usize>> {
-        let mut sections = Vec::new();
-        let mut start = 0;
-
-        for end in 0..=lines.len() {
-            if lines.get(end).is_some_and(|line| !line.trim().is_empty()) {
-                continue;
-            }
-
-            let paragraph = &lines[start..end];
-            let commented = paragraph.iter().all(|line| line.starts_with('#'));
-            let headed = paragraph.first().is_some_and(|line| code(line).is_none());
-
-            if commented && headed && paragraph.iter().any(|line| code(line).is_some()) {
-                sections.push(start..end);
-            }
-
-            start = end + 1;
-        }
-
-        sections
-    }
-
-    /// `lines` with the `uncommented` ones swapped in, and the active
-    /// lines setting one of their keys commented out, an array value
-    /// up to its closing bracket.
-    fn swap(lines: &[&str], uncommented: &[(usize, String)]) -> Vec<String> {
-        let keys: Vec<_> = uncommented.iter().filter_map(|(_, l)| key(l)).collect();
-        let mut swapped = Vec::with_capacity(lines.len());
-        let mut in_array = false;
-
-        for (i, line) in lines.iter().enumerate() {
-            if let Some((_, code)) = uncommented.iter().find(|(j, _)| *j == i) {
-                swapped.push(code.clone());
-                continue;
-            }
-
-            let active = !line.trim_start().starts_with('#');
-            let replaced = active && key(line).is_some_and(|key| keys.contains(&key));
-
-            if in_array {
-                in_array = line.trim() != "]";
-                swapped.push(format!("#{line}"));
-            } else if replaced {
-                in_array = line.trim_end().ends_with('[');
-                swapped.push(format!("#{line}"));
-            } else {
-                swapped.push(line.to_string());
-            }
-        }
-
-        swapped
-    }
-
-    /// The variants of a sample holding its account in sections, one of
-    /// which a user uncomments. Each section is uncommented whole, then
-    /// on top of it each commented element inside it and each line of
-    /// commented code outside the sections, in place of the active
-    /// lines of its key.
-    fn variants(text: &str) -> Vec<(String, String)> {
-        let lines: Vec<_> = text.lines().collect();
-        let sections = sections(&lines);
-        let mut variants = Vec::new();
-
-        for section in &sections {
-            let name = lines[section.start];
-
-            // NOTE: one `#` comes off every line but the prose ones,
-            // which stay comments, the heading included.
-            let uncommented: Vec<_> = section
-                .clone()
-                .filter_map(|i| {
-                    let line = lines[i].strip_prefix('#')?;
-                    let rest = line.trim_start();
-                    let code = rest.starts_with('#') || rest == "]" || code(lines[i]).is_some();
-                    code.then(|| (i, line.to_owned()))
-                })
-                .collect();
-
-            let base = swap(&lines, &uncommented);
-            let base: Vec<_> = base.iter().map(String::as_str).collect();
-            variants.push((name.to_owned(), base.join("\n")));
-
-            for (i, line) in base.iter().enumerate() {
-                let elsewhere = sections.iter().any(|s| s != section && s.contains(&i));
-
-                let Some(code) = code(line).filter(|_| !elsewhere) else {
-                    continue;
-                };
-
-                let variant = swap(&base, &[(i, code.to_owned())]);
-                variants.push((format!("{name}, {code}"), variant.join("\n")));
-            }
-        }
-
-        variants
-    }
+    /// The provider sections of config.sample.toml, one of which a user
+    /// uncomments.
+    const SECTIONS: [&str; 5] = [
+        "# Google",
+        "# Microsoft Graph",
+        "# Microsoft IMAP and SMTP",
+        "# Fastmail",
+        "# Custom",
+    ];
 
     /// Checks config.sample.toml: one `[accounts.example]` table and no
     /// other, its provider sections each parsed through the loader `-c`
@@ -571,26 +468,12 @@ hooks.on-issue.success.command = "true"
         let headers: Vec<_> = text.lines().filter(|l| l.starts_with('[')).collect();
         assert_eq!(headers, ["[accounts.example]"]);
 
-        let variants = variants(&text);
-
-        let sections = [
-            "# Google",
-            "# Microsoft Graph",
-            "# Microsoft IMAP and SMTP",
-            "# Fastmail",
-            "# Custom",
-        ];
-
-        for section in sections {
-            let found = variants.iter().any(|(code, _)| code == section);
-            assert!(found, "{section}");
-        }
-
-        for (code, text) in variants {
-            let config = try_parse(&text).unwrap_or_else(|err| {
-                panic!("config.sample.toml with {code} uncommented: {err:?}")
+        for variant in variants(&text, &SECTIONS) {
+            let name = variant.name;
+            let config = try_parse(&variant.text).unwrap_or_else(|err| {
+                panic!("config.sample.toml with {name} uncommented: {err:?}")
             });
-            assert!(config.accounts.contains_key("example"), "{code}");
+            assert!(config.accounts.contains_key("example"), "{name}");
         }
     }
 }

@@ -14,12 +14,13 @@
 //! The main thread owns the account and runs everything touching it,
 //! requests, exchanges and polls alike, so the account needs no lock and
 //! two storage writes never race. The stdin reader and the listener only
-//! feed it events.
+//! feed it events. pimalaya-cli's [`mcp`] module answers the protocol and
+//! checks each tool call, this one runs the tools and their flows.
+//!
+//! [`mcp`]: pimalaya_cli::mcp
 
 use std::{
-    fmt,
-    io::{self, BufRead, Write},
-    mem,
+    io, mem,
     net::{SocketAddr, TcpStream},
     sync::mpsc::{self, RecvTimeoutError, Sender},
     thread,
@@ -37,7 +38,15 @@ use io_oauth::{
     rfc7636::pkce::Oauth20PkceCodeVerifier,
     rfc8628::{auth::Oauth20DeviceAuthSuccessParams, token::Oauth20DeviceAccessTokenRequestParams},
 };
-use pimalaya_cli::{error::ErrorReport, output::Bytes, printer::Printer};
+use pimalaya_cli::{
+    clap::commands::json_schema::output_schema,
+    error::{ErrorReport, NoErrorCode},
+    mcp::{
+        Input, ServerInfo, ToolCall, ToolResult, answer, send, spawn_stdin_reader,
+        tool_output_schema,
+    },
+    printer::CapturePrinter,
+};
 use pimalaya_config::secret::Secret;
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -61,10 +70,6 @@ use crate::{
     },
 };
 
-/// The MCP revision the server speaks, the first carrying
-/// `structuredContent` and `outputSchema`.
-const PROTOCOL_VERSION: &str = "2025-06-18";
-
 /// What the server tells the agent at initialization.
 const INSTRUCTIONS: &str = "Obtains and renews the OAuth 2.0 token of one \
 account. Call auth_get, then show the user the authorizationUri to open, or \
@@ -84,6 +89,7 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::Registry("ortie-token-inspect"),
         read_only: true,
         destructive: false,
+        open_world: false,
     },
     McpTool {
         name: "auth_get",
@@ -96,6 +102,7 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::AuthGet,
         read_only: false,
         destructive: false,
+        open_world: true,
     },
     McpTool {
         name: "auth_status",
@@ -105,6 +112,7 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::AuthStatus,
         read_only: true,
         destructive: false,
+        open_world: false,
     },
     McpTool {
         name: "auth_resume",
@@ -118,6 +126,7 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::Registry("ortie-auth-resume"),
         read_only: false,
         destructive: false,
+        open_world: true,
     },
     McpTool {
         name: "token_refresh",
@@ -127,6 +136,7 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::Registry("ortie-token-refresh"),
         read_only: false,
         destructive: false,
+        open_world: true,
     },
     McpTool {
         name: "token_revoke",
@@ -137,6 +147,7 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::Registry("ortie-token-revoke"),
         read_only: false,
         destructive: true,
+        open_world: true,
     },
 ];
 
@@ -167,21 +178,7 @@ impl McpCommand {
     /// stdout.
     pub fn execute(self, account: Account) -> Result<()> {
         let (events, inbox) = mpsc::channel();
-
-        let lines = events.clone();
-        thread::spawn(move || {
-            for line in io::stdin().lock().lines() {
-                let Ok(line) = line else {
-                    break;
-                };
-
-                if lines.send(McpEvent::Line(line)).is_err() {
-                    return;
-                }
-            }
-
-            let _ = lines.send(McpEvent::Eof);
-        });
+        spawn_stdin_reader(events.clone(), McpEvent::Stdin);
 
         let mut server = McpServer {
             account,
@@ -191,6 +188,13 @@ impl McpCommand {
             flows: 0,
         };
 
+        let info = ServerInfo {
+            name: "ortie",
+            version: env!("CARGO_PKG_VERSION"),
+            instructions: Some(INSTRUCTIONS),
+        };
+
+        let tools = server.definitions();
         let mut stdout = io::stdout();
 
         loop {
@@ -214,13 +218,12 @@ impl McpCommand {
             };
 
             match event {
-                McpEvent::Eof => break,
-                McpEvent::Line(line) if line.trim().is_empty() => continue,
-                McpEvent::Line(line) => {
-                    if let Some(response) = server.answer(&line) {
-                        serde_json::to_writer(&mut stdout, &response)?;
-                        writeln!(stdout)?;
-                        stdout.flush()?;
+                McpEvent::Stdin(Input::Eof) => break,
+                McpEvent::Stdin(Input::Line(line)) => {
+                    let response = answer(&line, &info, &tools, |call| server.call(call));
+
+                    if let Some(response) = response {
+                        send(&mut stdout, &response)?;
                     }
                 }
                 McpEvent::Redirect { flow, result } => server.redirected(flow, result),
@@ -235,10 +238,8 @@ impl McpCommand {
 
 /// What the main loop is woken by.
 enum McpEvent {
-    /// A line read off stdin, one JSON-RPC message.
-    Line(String),
-    /// stdin closed.
-    Eof,
+    /// A line read off stdin, one JSON-RPC message, or its end.
+    Stdin(Input),
     /// The listener of flow `flow` caught a request, or failed.
     Redirect {
         flow: u64,
@@ -291,43 +292,6 @@ struct McpServer {
 }
 
 impl McpServer {
-    /// Answers one JSON-RPC message, `None` for a notification or a
-    /// response.
-    fn answer(&mut self, line: &str) -> Option<Value> {
-        let message: Value = match serde_json::from_str(line) {
-            Ok(message) => message,
-            Err(err) => return Some(failure(Value::Null, -32700, format!("Parse error: {err}"))),
-        };
-
-        let id = message.get("id").cloned();
-        let params = message.get("params").cloned().unwrap_or(Value::Null);
-
-        let Some(method) = message.get("method").and_then(Value::as_str) else {
-            // NOTE: a response to a request the server never sends.
-            return id.map(|id| failure(id, -32600, String::from("Invalid request")));
-        };
-
-        let id = id?;
-
-        let result = match method {
-            "initialize" => Ok(json!({
-                "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": { "tools": { "listChanged": false } },
-                "serverInfo": { "name": "ortie", "version": env!("CARGO_PKG_VERSION") },
-                "instructions": INSTRUCTIONS,
-            })),
-            "ping" => Ok(json!({})),
-            "tools/list" => Ok(json!({ "tools": self.definitions() })),
-            "tools/call" => self.call(&params),
-            method => Err((-32601, format!("Method not found: {method}"))),
-        };
-
-        Some(match result {
-            Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
-            Err((code, message)) => failure(id, code, message),
-        })
-    }
-
     /// The tools the gate lists.
     fn listed(&self) -> impl Iterator<Item = &'static McpTool> {
         let allow_revoke = self.allow_revoke;
@@ -336,7 +300,8 @@ impl McpServer {
             .filter(move |tool| allow_revoke || tool.name != REVOKE_TOOL)
     }
 
-    /// The definitions `tools/list` answers.
+    /// The definitions `tools/list` answers, each output schema the
+    /// printed shape of what the tool answers.
     fn definitions(&self) -> Vec<Value> {
         let schemas = json_schema::registry().schemas;
 
@@ -355,12 +320,8 @@ impl McpServer {
 
                 let output = match tool.output {
                     McpToolOutput::Registry(key) => schemas.get(key).cloned(),
-                    McpToolOutput::AuthGet => {
-                        serde_json::to_value(schemars::schema_for!(McpAuthGetOutput)).ok()
-                    }
-                    McpToolOutput::AuthStatus => {
-                        serde_json::to_value(schemars::schema_for!(McpAuthStatusOutput)).ok()
-                    }
+                    McpToolOutput::AuthGet => Some(output_schema::<McpAuthGetOutput>()),
+                    McpToolOutput::AuthStatus => Some(output_schema::<McpAuthStatusOutput>()),
                 };
 
                 let mut definition = json!({
@@ -375,12 +336,12 @@ impl McpServer {
                     "annotations": {
                         "readOnlyHint": tool.read_only,
                         "destructiveHint": tool.destructive,
-                        "openWorldHint": !tool.read_only,
+                        "openWorldHint": tool.open_world,
                     },
                 });
 
-                if let Some(output) = output {
-                    definition["outputSchema"] = output;
+                if let Some(output) = output.as_ref().and_then(tool_output_schema) {
+                    definition["outputSchema"] = output.clone();
                 }
 
                 definition
@@ -388,81 +349,53 @@ impl McpServer {
             .collect()
     }
 
-    /// Runs a tool call, a failure being a result with `isError` rather
-    /// than a protocol error, so the caller reads it.
-    fn call(&mut self, params: &Value) -> Result<Value, (i64, String)> {
-        let name = params
-            .get("name")
-            .and_then(Value::as_str)
-            .ok_or((-32602, String::from("Missing tool name")))?;
-
-        let tool = self
-            .listed()
-            .find(|tool| tool.name == name)
-            .ok_or_else(|| (-32602, format!("Unknown tool: {name}")))?;
-
-        let empty = Map::new();
-        let arguments = match params.get("arguments") {
-            None | Some(Value::Null) => &empty,
-            Some(Value::Object(arguments)) => arguments,
-            Some(_) => return Err((-32602, String::from("Arguments must be an object"))),
+    /// Runs a tool call, listed and holding only the arguments its tool
+    /// declares, a failure being a result with `isError` rather than a
+    /// protocol error, so the caller reads it.
+    fn call(&mut self, call: &ToolCall) -> ToolResult {
+        let Some(tool) = self.listed().find(|tool| tool.name == call.name) else {
+            return tool_result(Err(anyhow!("Unknown tool: {}", call.name)));
         };
 
-        let outcome = tool
-            .arguments(arguments)
-            .map_err(report)
-            .and_then(|arg| self.run_tool(tool.name, arg));
+        let arg = match tool.argument(&call.arguments) {
+            Ok(arg) => arg,
+            Err(err) => return tool_result(Err(err)),
+        };
 
-        Ok(match outcome {
-            Ok(value) => json!({
-                "content": [{ "type": "text", "text": value.to_string() }],
-                "structuredContent": value,
-            }),
-            Err(report) => json!({
-                "content": [{ "type": "text", "text": report.to_string() }],
-                "isError": true,
-            }),
-        })
-    }
-
-    /// Runs the tool `name`, answering its value or the `ortie-error`
-    /// object.
-    fn run_tool(&mut self, name: &str, arg: Option<String>) -> Result<Value, Value> {
-        match name {
+        match tool.name {
             "token_inspect" => self.run(|p, a| TokenInspectCommand.execute(p, a)),
             "token_refresh" => self.run(|p, a| TokenRefreshCommand.execute(p, a)),
             "token_revoke" => self.run(|p, a| TokenRevokeCommand.execute(p, a)),
-            "auth_get" => self.auth_get(),
-            "auth_status" => Ok(self.auth_status()),
+            "auth_get" => tool_result(self.auth_get()),
+            "auth_status" => ToolResult::success(self.auth_status()),
             "auth_resume" => self.auth_resume(arg.unwrap_or_default()),
-            name => Err(anyhow!("Unknown tool: {name}").into()),
+            name => tool_result(Err(anyhow!("Unknown tool: {name}"))),
         }
-        .map_err(|err| match err {
-            McpRunError::Report(report) => report,
-            McpRunError::Error(err) => report(err),
-        })
+    }
+
+    /// Runs one command over the account, answering what it printed.
+    fn run(
+        &mut self,
+        cmd: impl FnOnce(&mut CapturePrinter, &mut Account) -> Result<()>,
+    ) -> ToolResult {
+        let mut printer = CapturePrinter::default();
+        let result = cmd(&mut printer, &mut self.account);
+        ToolResult::printed::<NoErrorCode>(printer, result)
     }
 
     /// Runs one command over the account, answering the single value it
     /// printed.
-    fn run(
+    fn capture(
         &mut self,
-        cmd: impl FnOnce(&mut McpPrinter, &mut Account) -> Result<()>,
-    ) -> Result<Value, McpRunError> {
-        let mut printer = McpPrinter::default();
+        cmd: impl FnOnce(&mut CapturePrinter, &mut Account) -> Result<()>,
+    ) -> Result<Value> {
+        let mut printer = CapturePrinter::default();
         cmd(&mut printer, &mut self.account)?;
-
-        let mut values = printer.values;
-        match values.pop().filter(|_| values.is_empty()) {
-            Some(value) => Ok(value),
-            None => {
-                Err(anyhow!("The command printed {} values, one expected", values.len()).into())
-            }
-        }
+        printer.into_single()
     }
 
     /// Starts the account's grant, replacing the pending flow.
-    fn auth_get(&mut self) -> Result<Value, McpRunError> {
+    fn auth_get(&mut self) -> Result<Value> {
         self.cancel_flow();
 
         if self.account.grant == GrantConfig::Device {
@@ -485,11 +418,11 @@ impl McpServer {
                 device,
             };
 
-            return Ok(to_value(output)?);
+            return to_value(output);
         }
 
         if self.account.grant.is_client_credentials() {
-            let receipt = self.run(|p, a| AuthGetCommand.execute(p, a, ""))?;
+            let receipt = self.capture(|p, a| AuthGetCommand.execute(p, a, ""))?;
             self.flow = McpFlow::Issued(receipt.clone());
 
             let output = McpAuthGetOutput {
@@ -498,7 +431,7 @@ impl McpServer {
                 ..McpAuthGetOutput::default()
             };
 
-            return Ok(to_value(output)?);
+            return to_value(output);
         }
 
         self.auth_get_code()
@@ -507,7 +440,7 @@ impl McpServer {
     /// Starts an authorization code flow, binding the loopback listener
     /// before the authorization URI goes out so no other process can
     /// take its port.
-    fn auth_get_code(&mut self) -> Result<Value, McpRunError> {
+    fn auth_get_code(&mut self) -> Result<Value> {
         let (redirect_uri, listener) = match self.account.redirection_endpoint.clone() {
             Some(uri) if is_loopback_redirect(&uri) => {
                 let (uri, listener) = bind_loopback(&uri)?;
@@ -515,7 +448,7 @@ impl McpServer {
             }
             Some(uri) => (uri, None),
             None => {
-                let uri = DEFAULT_REDIRECTION.parse().map_err(anyhow::Error::from)?;
+                let uri: Url = DEFAULT_REDIRECTION.parse()?;
                 let (uri, listener) = bind_loopback(&uri)?;
                 (uri, Some(listener))
             }
@@ -530,7 +463,7 @@ impl McpServer {
         let listening = match listener {
             None => None,
             Some(listener) => {
-                let addr = listener.local_addr().map_err(anyhow::Error::from)?;
+                let addr = listener.local_addr()?;
                 let events = self.events.clone();
                 let redirect_uri = redirect_uri.clone();
 
@@ -560,7 +493,7 @@ impl McpServer {
             ..McpAuthGetOutput::default()
         };
 
-        Ok(to_value(output)?)
+        to_value(output)
     }
 
     /// Reports the flow `auth_get` started.
@@ -585,11 +518,10 @@ impl McpServer {
 
     /// Completes the pending code flow from a redirected URI the
     /// listener did not catch.
-    fn auth_resume(&mut self, uri: String) -> Result<Value, McpRunError> {
+    fn auth_resume(&mut self, uri: String) -> ToolResult {
         let McpFlow::Code { .. } = self.flow else {
-            return Err(
-                anyhow!("No authorization code flow is pending, call auth_get first").into(),
-            );
+            let err = anyhow!("No authorization code flow is pending, call auth_get first");
+            return tool_result(Err(err));
         };
 
         let McpFlow::Code {
@@ -610,12 +542,12 @@ impl McpServer {
         match self.exchange(uri, state, pkce, redirect_uri) {
             Ok(receipt) => {
                 self.flow = McpFlow::Issued(receipt.clone());
-                Ok(receipt)
+                ToolResult::success(receipt)
             }
             Err(err) => {
                 let report = report(err);
                 self.flow = McpFlow::Failed(report.clone());
-                Err(McpRunError::Report(report))
+                ToolResult::failure(report)
             }
         }
     }
@@ -668,10 +600,7 @@ impl McpServer {
             redirect_uri: Some(redirect_uri),
         };
 
-        self.run(|p, a| cmd.execute(p, a)).map_err(|err| match err {
-            McpRunError::Error(err) => err,
-            McpRunError::Report(report) => anyhow!("{report}"),
-        })
+        self.capture(|p, a| cmd.execute(p, a))
     }
 
     /// When the pending device flow polls next.
@@ -773,18 +702,6 @@ impl McpServer {
     }
 }
 
-/// A tool failure: an error to report, or a report already built.
-enum McpRunError {
-    Error(anyhow::Error),
-    Report(Value),
-}
-
-impl From<anyhow::Error> for McpRunError {
-    fn from(err: anyhow::Error) -> Self {
-        Self::Error(err)
-    }
-}
-
 /// One tool: what it is called, what it takes and what it answers.
 struct McpTool {
     name: &'static str,
@@ -794,25 +711,16 @@ struct McpTool {
     output: McpToolOutput,
     read_only: bool,
     destructive: bool,
+    /// Whether the tool reaches the authorization server, an entity
+    /// outside the server and its account.
+    open_world: bool,
 }
 
 impl McpTool {
-    /// Checks the call arguments against the tool's, answering the
-    /// value of its argument.
-    ///
-    /// An unknown key is refused naming the known ones rather than
-    /// ignored, so a misspelt argument never passes for a valid call.
-    fn arguments(&self, arguments: &Map<String, Value>) -> Result<Option<String>> {
-        let known = self.arg.map(|(name, _)| name);
-
-        if let Some(key) = arguments.keys().find(|key| Some(key.as_str()) != known) {
-            match known {
-                Some(name) => bail!("Unknown argument `{key}`, {} takes `{name}`", self.name),
-                None => bail!("Unknown argument `{key}`, {} takes none", self.name),
-            }
-        }
-
-        let Some(name) = known else {
+    /// The value of the tool's argument in a call whose keys are checked
+    /// already, failing when it is missing or not a string.
+    fn argument(&self, arguments: &Map<String, Value>) -> Result<Option<String>> {
+        let Some((name, _)) = self.arg else {
             return Ok(None);
         };
 
@@ -909,31 +817,6 @@ pub enum McpAuthStatusKind {
     Failed,
 }
 
-/// A [`Printer`] keeping each value and event a command prints as JSON.
-#[derive(Default)]
-struct McpPrinter {
-    values: Vec<Value>,
-}
-
-impl Printer for McpPrinter {
-    fn out<T: fmt::Display + Serialize>(&mut self, data: T) -> Result<()> {
-        self.values.push(serde_json::to_value(&data)?);
-        Ok(())
-    }
-
-    fn event<T: fmt::Display + Serialize>(&mut self, _event: T) -> Result<()> {
-        Ok(())
-    }
-
-    fn out_bytes(&mut self, bytes: Bytes) -> Result<()> {
-        self.out(bytes)
-    }
-
-    fn is_json(&self) -> bool {
-        true
-    }
-}
-
 /// Sends one device access token request for `device`.
 fn request_device_token(
     account: &Account,
@@ -967,13 +850,18 @@ fn to_value(data: impl Serialize) -> Result<Value> {
     Ok(serde_json::to_value(data)?)
 }
 
-/// The `ortie-error` object of `err`.
-fn report(err: anyhow::Error) -> Value {
-    let report: ErrorReport = err.into();
-    serde_json::to_value(report).unwrap_or_else(|err| Value::from(err.to_string()))
+/// The tool result of `outcome`, a failure carrying the `ortie-error`
+/// object.
+fn tool_result(outcome: Result<Value>) -> ToolResult {
+    match outcome {
+        Ok(value) => ToolResult::success(value),
+        Err(err) => ToolResult::error::<NoErrorCode>(err),
+    }
 }
 
-/// A JSON-RPC error response.
-fn failure(id: Value, code: i64, message: String) -> Value {
-    json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
+/// The `ortie-error` object of `err`, which a failed flow keeps for
+/// `auth_status`.
+fn report(err: anyhow::Error) -> Value {
+    let report = ErrorReport::<NoErrorCode>::from(err);
+    serde_json::to_value(report).unwrap_or_else(|err| Value::from(err.to_string()))
 }

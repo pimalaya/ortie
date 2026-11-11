@@ -26,7 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **BREAKING**: Changed `--json` keys to camelCase; the configuration keeps its kebab-case keys.
 - **BREAKING**: Changed `token refresh`, `auth resume` and a token-issuing `auth get` to print the receipt `{expiresIn, withRefreshToken}` under `--json`, instead of a `{"message": …}` sentence.
 - **BREAKING**: Changed `token inspect --json` to print `issuedAt` as an RFC 3339 instant in UTC.
-- **BREAKING**: Changed a piped `ortie repl` to print its errors on stdout, as `ortie-error` objects under `--json`; an interactive session keeps them on stderr.
+- **BREAKING**: Changed `ortie repl` to print its errors on stdout, interactive or piped, as `ortie-error` objects under `--json`.
+
+  On a terminal, a line that does not parse keeps clap's message on stderr. In a `--json` session the help goes to stderr, so stdout carries one JSON value per line. The prompt `ortie> ` no longer opens with a blank line.
+
 - **BREAKING**: Changed `auto-refresh` to default to true: `token show` refreshes an expired token unless the account sets `auto-refresh = false`.
 - **BREAKING**: Changed `-c` to take one path per occurrence, repeated to merge several files (`-c public.toml -c private.toml`).
 
@@ -36,7 +39,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed `auth get` to print the authorization link, or the verification URI and user code, without opening a browser.
 - Changed `token show` to end the token with a newline, like every text output; `$(ortie token show)` and Pimalaya's secret commands strip it.
 - Changed the text output of `token inspect` and `auth get` to aligned `Label: value` fields, one scope per line, and the links and commands to copy to a two-space indent.
-- Changed `ortie repl` to split its lines as a shell does, quotes and escapes included, and to accept `--json` on a line, for that line only.
+- Changed `ortie repl` to split its lines as a shell does, quotes, escapes and `#` comments included, to infer subcommand prefixes as the command line does, and to accept `--json` on a line, for that line only.
+
+  A line setting `-a`, `-c` or a log flag is refused naming it, the session having fixed them when it started.
+
 - Changed piped `--json` output to print one value per line.
 - Changed every `json-schema` schema to carry an `$id` naming the contract version, and to require the keys a command always prints.
 - Changed the help, usage and logs to carry no colour, and the help to print each paragraph on one line, for the terminal to fold.
@@ -59,6 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed several accounts marked `default = true` taking one at random: they are refused, naming them, with both ways of picking one.
 - Fixed a configured `http` loopback redirection naming no port, such as `http://localhost`, binding port 80: it binds an ephemeral port, so `auth get` and the MCP server catch the redirection.
 - Fixed the `auth resume` command printed by `auth get` dropping a generated redirect URI, and its `-a` and `-c` ([#16](https://github.com/pimalaya/ortie/issues/16)).
 

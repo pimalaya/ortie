@@ -17,13 +17,18 @@ status: current
 - THEN each prints the access token without re-running the read storage command
 
 ### Requirement: Command grammar reuse
-Each stdin line SHALL be split as a shell splits it, quotes and escapes included, then parsed with the same `token` and `auth` command grammar as the one-shot CLI. A line whose quote is not closed, a parse error or a command error SHALL be reported and the loop SHALL continue, never terminating the process.
+Each stdin line SHALL be split as a shell splits it, quotes and escapes included, a word opening on `#` starting a comment to the end of the line, then parsed with the same `token` and `auth` command grammar as the one-shot CLI, subcommand prefixes inferred as there. A line left without words SHALL be skipped. A line setting a flag the session fixed when it started, `-a`, `-c` or a log flag, SHALL be refused naming that flag. A line that is not UTF-8 or whose quote is not closed, a parse error or a command error SHALL be reported and the loop SHALL continue, never terminating the process.
+
+#### Scenario: A session flag on a line
+- GIVEN a running `ortie repl` session
+- WHEN `token show -a other` is entered
+- THEN it fails with "Cannot set `-a` inside a session, start a new session with it instead", and the next line runs on the session's account
 
 ### Requirement: Auth runs against the session account
 `auth get` and `auth resume` in the REPL SHALL run against the session's in-memory account, so a token they issue updates the cached token and is served by a following `token show` without re-reading storage.
 
 ### Requirement: Interactive versus piped output
-When stdin is a TTY the session SHALL render a prompt on stderr and report errors on stderr. When piped it SHALL write one flushed result per command on stdout, so an application can drive it, and SHALL print a parse error or a command error through the printer on stdout as the failure object (`ortie-error` under `--json`), one per line, then continue the loop. Under `--json` each result and each failure SHALL be one JSON value per line.
+Every result and every failure SHALL be printed through the printer on stdout, flushed, the failure as the failure object (`ortie-error` under `--json`), whether stdin is a TTY or piped, and the loop SHALL continue; under `--json` each SHALL be one JSON value per line. When stdin is a TTY the session SHALL render the prompt `ortie> ` on stderr, and a line clap cannot parse SHALL get clap's message on stderr; piped, that parse error SHALL be printed on stdout as any failure. Help and version SHALL be no failure: printed on stdout in a text session, on stderr in a `--json` one, so its stdout stays one JSON value per line.
 
 ### Requirement: A line's JSON flag
 A REPL line SHALL accept `--json`, printing that line's result or failure as JSON; the following lines SHALL keep the session's output format.

@@ -11,14 +11,10 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Subcommand;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{printer::Printer, shell::invocation};
 
 use crate::{
-    auth::{
-        get::{AuthGetCommand, invocation},
-        listen::AuthListenCommand,
-        resume::AuthResumeCommand,
-    },
+    auth::{get::AuthGetCommand, listen::AuthListenCommand, resume::AuthResumeCommand},
     cli::take_account,
 };
 
@@ -46,7 +42,7 @@ impl AuthCommand {
         match self {
             Self::Get(cmd) => {
                 let mut account = take_account(config_paths, account_name)?;
-                let invocation = invocation(config_paths, account_name);
+                let invocation = invocation("ortie", config_paths, account_name);
                 cmd.execute(printer, &mut account, &invocation)
             }
             Self::Listen(cmd) => {

@@ -28,6 +28,7 @@ panic = "abort"
 pimalaya-cli = { version = "0.3.2", default-features = false, features = ["build"] }
 
 [dev-dependencies]
+pimalaya-config = { version = "0.3.1", default-features = false, features = ["sample"] }
 tempfile = { version = "3", default-features = false }
 
 [dependencies]
@@ -38,13 +39,16 @@ humantime = { version = "2.2", default-features = false }
 idna_adapter = { version = "=1.0.0", default-features = false }
 io-oauth = { version = "0.5.2", default-features = false, features = ["client", "jwt-bearer"] }
 log = { version = "0.4", default-features = false }
-pimalaya-cli = { version = "0.3.2", default-features = false, features = ["terminal"] }
+pimalaya-cli = { version = "0.3.2", default-features = false, features = ["mcp", "repl", "terminal"] }
 pimalaya-config = { version = "0.3.1", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.3", default-features = false, features = ["std"] }
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }
 secrecy = { version = "0.10", default-features = false, features = ["serde"] }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
-shlex = { version = "2", default-features = false }
 simd-cpu = { version = "0.1", default-features = false, features = ["std"] }
 url = { version = "2.5", default-features = false, features = ["serde"] }
+
+[patch.crates-io]
+pimalaya-cli = { path = "../cli" }
+pimalaya-config = { path = "../config" }

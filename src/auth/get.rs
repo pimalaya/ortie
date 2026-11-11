@@ -12,7 +12,6 @@ use std::{
     collections::BTreeSet,
     fmt, fs,
     io::{IsTerminal, stdout},
-    path::PathBuf,
     time::Duration,
 };
 
@@ -20,7 +19,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use base64_codec::codec::{Base64Alphabet, Base64Codec};
 use clap::Parser;
 use humantime::format_duration;
-use pimalaya_cli::{fields::Fields, printer::Printer};
+use pimalaya_cli::{fields::Fields, printer::Printer, shell::quote};
 use schemars::JsonSchema;
 use secrecy::ExposeSecret;
 use serde::{
@@ -75,7 +74,10 @@ impl AuthGetCommand {
     /// token, interactive shells chaining into resume.
     ///
     /// The `invocation` starts the `auth listen` and `auth resume`
-    /// commands printed when the flow hands off (see [`invocation`]).
+    /// commands printed when the flow hands off, the binary with the `-c`
+    /// and `-a` it ran with (see [`invocation`]).
+    ///
+    /// [`invocation`]: pimalaya_cli::shell::invocation
     pub fn execute(
         self,
         printer: &mut impl Printer,
@@ -255,15 +257,15 @@ fn print_handoff(
     redirect_uri: &Url,
     listen: bool,
 ) {
-    let state = shell_quote(&String::from_utf8_lossy(state.expose()));
+    let state = quote(&String::from_utf8_lossy(state.expose()));
     let mut flags = format!("--state={state}");
 
     if let Some(verifier) = pkce {
-        let verifier = shell_quote(&String::from_utf8_lossy(verifier.expose()));
+        let verifier = quote(&String::from_utf8_lossy(verifier.expose()));
         flags.push_str(&format!(" --pkce={verifier}"));
     }
 
-    let redirect_uri = shell_quote(redirect_uri.as_str());
+    let redirect_uri = quote(redirect_uri.as_str());
     flags.push_str(&format!(" --redirect-uri={redirect_uri}"));
 
     let resume = "copy the URL your browser was redirected to, then run the resume subcommand:";
@@ -414,10 +416,7 @@ fn execute_device(
             println!();
             println!("Once authorized, run:");
             println!();
-            println!(
-                "  {invocation} auth resume {}",
-                shell_quote(&view.device_code)
-            );
+            println!("  {invocation} auth resume {}", quote(&view.device_code));
         }
         return Ok(());
     }
@@ -695,51 +694,6 @@ pub(crate) fn report_token_issued(
     Ok(TokenIssuedOutput::issued(res))
 }
 
-/// Builds the invocation the printed `auth listen` and `auth resume`
-/// commands start with.
-///
-/// It carries the `-c` and `-a` the grant ran with, quoted, so the
-/// command reaches the configuration and account that issued the state:
-/// the default one could hold another provider, whose token endpoint
-/// would refuse the code, or the same client, storing the token under
-/// the wrong account.
-pub fn invocation(config_paths: &[PathBuf], account_name: Option<&str>) -> String {
-    let mut invocation = String::from("ortie");
-
-    for path in config_paths {
-        invocation.push_str(" -c ");
-        invocation.push_str(&shell_quote(&path.to_string_lossy()));
-    }
-
-    if let Some(name) = account_name.filter(|name| !name.is_empty()) {
-        invocation.push_str(" -a ");
-        invocation.push_str(&shell_quote(name));
-    }
-
-    invocation
-}
-
-/// Quotes `s` for a paste into a command line: single quotes for a POSIX
-/// shell, double quotes on Windows, which cmd and PowerShell both read,
-/// a Windows path never holding one.
-pub(crate) fn shell_quote(s: &str) -> String {
-    if cfg!(windows) {
-        return format!("\"{s}\"");
-    }
-
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('\'');
-    for ch in s.chars() {
-        if ch == '\'' {
-            out.push_str("'\\''");
-        } else {
-            out.push(ch);
-        }
-    }
-    out.push('\'');
-    out
-}
-
 /// Printable device authorization response, carrying what a resume
 /// handoff needs.
 #[derive(JsonSchema, Serialize)]
@@ -794,32 +748,5 @@ impl fmt::Display for DeviceAuthorization {
                 writeln!(f, "Open the link and enter the code {code}:\n\n  {uri}")
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[cfg(not(windows))]
-    fn shell_quote_escapes_embedded_quotes() {
-        assert_eq!(shell_quote("plain"), "'plain'");
-        assert_eq!(shell_quote("a;b"), "'a;b'");
-        assert_eq!(shell_quote("it's"), "'it'\\''s'");
-    }
-
-    #[test]
-    #[cfg(not(windows))]
-    fn invocation_carries_the_account_and_config() {
-        assert_eq!(invocation(&[], None), "ortie");
-        assert_eq!(invocation(&[], Some("")), "ortie");
-        assert_eq!(invocation(&[], Some("gmail")), "ortie -a 'gmail'");
-
-        let paths = [PathBuf::from("/a.toml"), PathBuf::from("/b c.toml")];
-        assert_eq!(
-            invocation(&paths, Some("work's")),
-            "ortie -c '/a.toml' -c '/b c.toml' -a 'work'\\''s'"
-        );
     }
 }

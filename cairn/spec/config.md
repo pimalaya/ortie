@@ -38,7 +38,12 @@ An account SHALL define read and write storage as external shell commands. The r
 Every v1.x config file SHALL parse and run unchanged, the `hooks` table aside, refused like any unknown key: `grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, and `pkce = true`/`false` are still accepted. The behaviours an existing account can notice are PKCE by default and `token show` refreshing an expired token, unless it sets `auto-refresh = false`.
 
 ### Requirement: Account resolution failures name what is missing
-Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for and points at config.sample.toml, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
+Each of the four ways account resolution fails SHALL name what is missing or wrong and what to do about it: a missing configuration names the path it looked for and points at config.sample.toml, a missing named account lists the accounts the configuration does hold, sorted, a missing default names both ways of picking one, and several accounts marked `default = true`, none named, are refused naming them, sorted, rather than one taken.
+
+#### Scenario: Two default accounts
+- GIVEN a configuration whose accounts `a` and `b` both set `default = true`
+- WHEN `ortie token show` runs without `-a`
+- THEN it fails with "Several accounts are marked default (a, b), keep `default = true` on one, or name one with `-a <NAME>`", and `ortie -a b token show` runs on `b`
 
 ### Requirement: The configuration path comes from `-c` only
 The configuration path SHALL be overridden by `-c` only, repeatable, the first path the base and the next ones merged on top in order. Each occurrence SHALL be one path, never split on a delimiter, and no environment variable SHALL be read for it.

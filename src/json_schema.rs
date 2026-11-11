@@ -15,9 +15,9 @@
 //! decision of this repository rather than of the libraries below it.
 //! The failure object is the exception, being the family's shared one.
 //!
-//! [`JsonSchemaCommand`]: pimalaya_cli::clap::commands::JsonSchemaCommand
+//! [`JsonSchemaCommand`]: pimalaya_cli::clap::commands::json_schema::JsonSchemaCommand
 
-use pimalaya_cli::{clap::commands::JsonSchemaRegistry, error::ErrorReport};
+use pimalaya_cli::{clap::commands::json_schema::JsonSchemaRegistry, error::ErrorReport};
 
 use crate::{
     auth::get::AuthGetOutput,
@@ -51,9 +51,7 @@ pub fn registry() -> JsonSchemaRegistry {
 mod tests {
     use clap::CommandFactory;
 
-    use crate::cli::Cli;
-
-    use super::*;
+    use crate::{cli::Cli, json_schema::registry};
 
     /// The commands printing nothing a schema could describe: a bare `ortie`
     /// shows the help, and the REPL prints the payloads of the leaves it
