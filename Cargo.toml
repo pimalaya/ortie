@@ -25,7 +25,7 @@ strip = "symbols"
 panic = "abort"
 
 [build-dependencies]
-pimalaya-cli = { version = "0.3", default-features = false, features = ["build"] }
+pimalaya-cli = { version = "0.3.2", default-features = false, features = ["build"] }
 
 [dev-dependencies]
 tempfile = { version = "3", default-features = false }
@@ -36,10 +36,10 @@ base64-codec = { version = "0.1", default-features = false, features = ["alloc"]
 clap = { version = "4.4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage"] }
 humantime = { version = "2.2", default-features = false }
 idna_adapter = { version = "=1.0.0", default-features = false }
-io-oauth = { version = "0.5", default-features = false, features = ["client", "jwt-bearer"] }
+io-oauth = { version = "0.5.2", default-features = false, features = ["client", "jwt-bearer"] }
 log = { version = "0.4", default-features = false }
-pimalaya-cli = { version = "0.3", default-features = false, features = ["terminal"] }
-pimalaya-config = { version = "0.3", default-features = false, features = ["toml", "secret"] }
+pimalaya-cli = { version = "0.3.2", default-features = false, features = ["terminal"] }
+pimalaya-config = { version = "0.3.1", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.3", default-features = false, features = ["std"] }
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }
 secrecy = { version = "0.10", default-features = false, features = ["serde"] }
@@ -48,8 +48,3 @@ serde_json = { version = "1", default-features = false, features = ["std"] }
 shlex = { version = "2", default-features = false }
 simd-cpu = { version = "0.1", default-features = false, features = ["std"] }
 url = { version = "2.5", default-features = false, features = ["serde"] }
-
-[patch.crates-io]
-io-oauth = { git = "https://github.com/pimalaya/io-oauth", rev = "1f88ccb10fef6aa9e0d1206c0ee6d653e232eab1" }
-pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "5dd94165899d4e02bdd04b8f70a6a8bed9fd1f21" }
-pimalaya-config = { git = "https://github.com/pimalaya/config", rev = "7601a554bd378263d947079e3dc8eb269cd8e43e" }

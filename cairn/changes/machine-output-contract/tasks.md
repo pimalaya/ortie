@@ -11,4 +11,4 @@ change: machine-output-contract
 - [x] Drop the REPL's own newline after a JSON result
 - [x] CHANGELOG
 - [x] Fold into cairn/spec/output.md; log; land
-- [ ] Move to the pimalaya-cli release carrying `55b6693` once published
+- [x] Move to the pimalaya-cli release carrying `55b6693` once published

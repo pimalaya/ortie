@@ -520,8 +520,9 @@ dependencies = [
 
 [[package]]
 name = "io-oauth"
-version = "0.5.1"
-source = "git+https://github.com/pimalaya/io-oauth?rev=1f88ccb10fef6aa9e0d1206c0ee6d653e232eab1#1f88ccb10fef6aa9e0d1206c0ee6d653e232eab1"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b61b6c101769c3603dbd05bcf548bf66d03c044f4815083aad946147a48b86ec"
 dependencies = [
  "anyhow",
  "base64-codec",
@@ -789,8 +790,9 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pimalaya-cli"
-version = "0.3.1"
-source = "git+https://github.com/pimalaya/cli?rev=5dd94165899d4e02bdd04b8f70a6a8bed9fd1f21#5dd94165899d4e02bdd04b8f70a6a8bed9fd1f21"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ea1f038c2e981fb3c602db486618bf2c1086cf35aedc8ab5b94e0b024f7656f"
 dependencies = [
  "anyhow",
  "base64-codec",
@@ -809,8 +811,9 @@ dependencies = [
 
 [[package]]
 name = "pimalaya-config"
-version = "0.3.0"
-source = "git+https://github.com/pimalaya/config?rev=7601a554bd378263d947079e3dc8eb269cd8e43e#7601a554bd378263d947079e3dc8eb269cd8e43e"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ad77781dbbf792d8dde2271661de341e78893163a3099ebe6a2dd1b4be71f81"
 dependencies = [
  "anyhow",
  "dirs",
