@@ -13,4 +13,4 @@ change: pimalaya-applications-lead
 - [x] Tests: Pimalaya leads on Google and Microsoft, the service match, the calendar narrowing, the ephemeral loopback port; the composed services checked under a pseudo-terminal (discovery is network-bound)
 - [x] Spec folded (discovery, auth, provider-quirks), log, CHANGELOG, README
 - [x] fmt, clippy, test, `--no-default-features --features rustls-ring` check
-- [ ] Live, by the owner: a Google and a Microsoft sign-in through `ortie configure` then `auth get` with the Pimalaya clients, on the test accounts
+- [x] ~~Live, by the owner: a Google and a Microsoft sign-in through `ortie configure` then `auth get` with the Pimalaya clients, on the test accounts~~ Dropped: `configure` is gone (samples-replace-the-wizard); the Microsoft sections of config.sample.toml signed in live instead.

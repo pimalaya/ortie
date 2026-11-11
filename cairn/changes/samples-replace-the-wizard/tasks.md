@@ -39,6 +39,6 @@ change: samples-replace-the-wizard
 
 ## The owner's
 
-- [ ] On push, allow the `GOCSPX-` value of samples/google-pimalaya-*.toml if push protection stops it
-- [ ] Live: `ortie auth get` from samples/google-pimalaya-mail.toml and samples/microsoft-pimalaya-outlook.toml on the test accounts
+- [x] ~~On push, allow the `GOCSPX-` value of samples/google-pimalaya-*.toml if push protection stops it~~ Done on config.sample.toml, allowed on push; its Google client is left empty since 2026-11-11.
+- [x] ~~Live: `ortie auth get` from samples/google-pimalaya-mail.toml and samples/microsoft-pimalaya-outlook.toml on the test accounts~~ Done from the sections of config.sample.toml, samples/ being gone.
 - [ ] Order the releases: Ortie without `configure` ships no earlier than the CLI releases that stop calling it

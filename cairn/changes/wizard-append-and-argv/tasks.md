@@ -14,4 +14,4 @@ id: wizard-append-and-argv
 - [x] Update the banner, `src/main.rs` and `src/wizard.rs` headers, the README and the CHANGELOG.
 - [x] Run `cargo fmt`, `cargo clippy` and `cargo test`.
 - [x] Fold the delta into `cairn/spec/discovery.md`, write the log entry, set this change to landed.
-- [ ] Once validated here, port the save prompt and the append behaviour back to the Himalaya wizard.
+- [x] ~~Once validated here, port the save prompt and the append behaviour back to the Himalaya wizard.~~ Dropped: the wizards leave the family (samples-replace-the-wizard, 2026-11-08).

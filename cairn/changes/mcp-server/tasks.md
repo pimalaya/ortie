@@ -7,7 +7,7 @@ change: mcp-server
 
 ## Before (other repositories)
 
-- [ ] pimalaya-cli: `mcp` module with the JSON-RPC loop, the capture printer and the failure mapping (deferred: copied for now, see the proposal)
+- [ ] pimalaya-cli: `mcp` module with the JSON-RPC loop, the capture printer and the failure mapping (deferred to the next CLI releases' preparation: copied for now, see the proposal)
 - [x] io-oauth: accept the redirect on a caller-bound `TcpListener` (`client::await_redirect_on`); release pending, path-patched meanwhile
 
 ## ortie
