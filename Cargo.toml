@@ -50,5 +50,5 @@ simd-cpu = { version = "0.1", default-features = false, features = ["std"] }
 url = { version = "2.5", default-features = false, features = ["serde"] }
 
 [patch.crates-io]
-pimalaya-cli = { path = "../cli" }
-pimalaya-config = { path = "../config" }
+pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "3a0d6380a00858d84986c2a84d14766c17f5cd74" }
+pimalaya-config = { git = "https://github.com/pimalaya/config", rev = "05109108da308f1d38c72606b3bb5bff8c4c7d83" }
