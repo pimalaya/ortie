@@ -789,8 +789,9 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pimalaya-cli"
-version = "0.3.2"
-source = "git+https://github.com/pimalaya/cli?rev=3a0d6380a00858d84986c2a84d14766c17f5cd74#3a0d6380a00858d84986c2a84d14766c17f5cd74"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c6e60dfb1a369c13e8f4bd7fb48603629a7042e2aa087d8c3da985e5fc3cbcc"
 dependencies = [
  "anyhow",
  "base64-codec",
@@ -811,8 +812,9 @@ dependencies = [
 
 [[package]]
 name = "pimalaya-config"
-version = "0.3.1"
-source = "git+https://github.com/pimalaya/config?rev=05109108da308f1d38c72606b3bb5bff8c4c7d83#05109108da308f1d38c72606b3bb5bff8c4c7d83"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f317d9d0c52264bab92ce5ccc69155a558e0c82f173e70c6751a1fbf6ae780c0"
 dependencies = [
  "anyhow",
  "dirs",

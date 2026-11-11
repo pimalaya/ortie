@@ -49,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed the help, usage and logs to carry no colour, and the help to print each paragraph on one line, for the terminal to fold.
 - Changed config.sample.toml to one flat `[accounts.example]` table: every field and its values, the defaults active, then a commented section per provider (Google, Microsoft Graph, Microsoft IMAP and SMTP, Fastmail), on Pimalaya's applications except Google whose client is left blank, and a custom one for an application of your own.
 - Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
+- Bumped pimalaya-cli and pimalaya-config to 0.4.
 
 ### Removed
 

@@ -25,10 +25,10 @@ strip = "symbols"
 panic = "abort"
 
 [build-dependencies]
-pimalaya-cli = { version = "0.3.2", default-features = false, features = ["build"] }
+pimalaya-cli = { version = "0.4.0", default-features = false, features = ["build"] }
 
 [dev-dependencies]
-pimalaya-config = { version = "0.3.1", default-features = false, features = ["sample"] }
+pimalaya-config = { version = "0.4.0", default-features = false, features = ["sample"] }
 tempfile = { version = "3", default-features = false }
 
 [dependencies]
@@ -39,8 +39,8 @@ humantime = { version = "2.2", default-features = false }
 idna_adapter = { version = "=1.0.0", default-features = false }
 io-oauth = { version = "0.5.2", default-features = false, features = ["client", "jwt-bearer"] }
 log = { version = "0.4", default-features = false }
-pimalaya-cli = { version = "0.3.2", default-features = false, features = ["mcp", "repl", "terminal"] }
-pimalaya-config = { version = "0.3.1", default-features = false, features = ["toml", "secret"] }
+pimalaya-cli = { version = "0.4.0", default-features = false, features = ["mcp", "repl", "terminal"] }
+pimalaya-config = { version = "0.4.0", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.3", default-features = false, features = ["std"] }
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }
 secrecy = { version = "0.10", default-features = false, features = ["serde"] }
@@ -48,7 +48,3 @@ serde = { version = "1", default-features = false, features = ["alloc", "derive"
 serde_json = { version = "1", default-features = false, features = ["std"] }
 simd-cpu = { version = "0.1", default-features = false, features = ["std"] }
 url = { version = "2.5", default-features = false, features = ["serde"] }
-
-[patch.crates-io]
-pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "3a0d6380a00858d84986c2a84d14766c17f5cd74" }
-pimalaya-config = { git = "https://github.com/pimalaya/config", rev = "05109108da308f1d38c72606b3bb5bff8c4c7d83" }
