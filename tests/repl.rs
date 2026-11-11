@@ -3,16 +3,31 @@
 //! End-to-end coverage of a piped REPL session, driving the real binary
 //! over stdin and stdout.
 
+mod common;
+
 use std::{
     io::{Read, Write},
     net::TcpListener,
-    path::PathBuf,
-    process::{Command, Stdio},
+    path::{Path, PathBuf},
     thread,
 };
 
 use serde_json::Value;
 use tempfile::TempDir;
+
+use crate::common::*;
+
+/// The account the sessions run on: a device account whose endpoints
+/// point at a closed port, its token stored as `at-test`.
+const DEVICE_ACCOUNT: &str = "client-id = \"c\"\ngrant = \"device\"\nendpoints.device-authorization = \"http://127.0.0.1:1/devicecode\"\nendpoints.token = \"http://127.0.0.1:1/token\"";
+
+/// The token the sessions start from.
+const TOKEN: &str = r#"{"access_token":"at-test","token_type":"Bearer"}"#;
+
+/// Writes the [`DEVICE_ACCOUNT`] configuration holding [`TOKEN`].
+fn write_device_config(dir: &Path) -> (PathBuf, PathBuf) {
+    write_config(dir, "device", DEVICE_ACCOUNT, TOKEN)
+}
 
 /// A piped `--json` session prints every result and every failure on
 /// stdout as one JSON object per line, and keeps going after each
@@ -23,46 +38,10 @@ use tempfile::TempDir;
 #[test]
 fn piped_json_session_prints_errors_on_stdout() {
     let dir = TempDir::new().unwrap();
-    let token = dir.path().join("token.json");
-    std::fs::write(
-        &token,
-        r#"{"access_token":"at-test","token_type":"Bearer"}"#,
-    )
-    .unwrap();
-    let config = dir.path().join("config.toml");
-    std::fs::write(
-        &config,
-        format!(
-            r#"
-[accounts.device]
-default = true
-client-id = "c"
-grant = "device"
-endpoints.device-authorization = "http://127.0.0.1:1/devicecode"
-endpoints.token = "http://127.0.0.1:1/token"
-storage.read.command = ["cat", "{t}"]
-storage.write.command = ["tee", "{t}"]
-"#,
-            t = token.display()
-        ),
-    )
-    .unwrap();
-    let bin = PathBuf::from(env!("CARGO_BIN_EXE_ortie"));
+    let (config, _) = write_device_config(dir.path());
 
-    let mut child = Command::new(&bin)
-        .args(["-c", config.to_str().unwrap(), "--json", "repl"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(b"token show\ntoken frobnicate\nauth resume dc-test\ntoken show\nquit\n")
-        .unwrap();
-    let out = child.wait_with_output().unwrap();
+    let input = b"token show\ntoken frobnicate\nauth resume dc-test\ntoken show\nquit\n";
+    let out = ortie_with_input(&config, &["--json", "repl"], input);
 
     assert!(out.status.success(), "{out:?}");
 
@@ -142,20 +121,8 @@ storage.write.command = ["false"]
     )
     .unwrap();
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_ortie"))
-        .args(["-c", config.to_str().unwrap(), "--json", "repl"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(b"token refresh\ntoken show\nquit\n")
-        .unwrap();
-    let out = child.wait_with_output().unwrap();
+    let input = b"token refresh\ntoken show\nquit\n";
+    let out = ortie_with_input(&config, &["--json", "repl"], input);
 
     let stdout = String::from_utf8(out.stdout).unwrap();
     let lines: Vec<Value> = stdout
@@ -173,46 +140,10 @@ storage.write.command = ["false"]
 #[test]
 fn lines_are_split_as_a_shell_splits_them() {
     let dir = TempDir::new().unwrap();
-    let token = dir.path().join("token.json");
-    std::fs::write(
-        &token,
-        r#"{"access_token":"at-test","token_type":"Bearer"}"#,
-    )
-    .unwrap();
-    let config = dir.path().join("config.toml");
-    std::fs::write(
-        &config,
-        format!(
-            r#"
-[accounts.device]
-default = true
-client-id = "c"
-grant = "device"
-endpoints.device-authorization = "http://127.0.0.1:1/devicecode"
-endpoints.token = "http://127.0.0.1:1/token"
-storage.read.command = ["cat", "{t}"]
-storage.write.command = ["tee", "{t}"]
-"#,
-            t = token.display()
-        ),
-    )
-    .unwrap();
-    let bin = PathBuf::from(env!("CARGO_BIN_EXE_ortie"));
+    let (config, _) = write_device_config(dir.path());
 
-    let mut child = Command::new(&bin)
-        .args(["-c", config.to_str().unwrap(), "--json", "repl"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(b"token \"show\"\nauth resume 'dc-test\ntoken show\nquit\n")
-        .unwrap();
-    let out = child.wait_with_output().unwrap();
+    let input = b"token \"show\"\nauth resume 'dc-test\ntoken show\nquit\n";
+    let out = ortie_with_input(&config, &["--json", "repl"], input);
 
     assert!(out.status.success(), "{out:?}");
 
@@ -234,11 +165,7 @@ storage.write.command = ["tee", "{t}"]
 fn run_counted_session(input: &[u8]) -> (std::process::Output, usize) {
     let dir = TempDir::new().unwrap();
     let token = dir.path().join("token.json");
-    std::fs::write(
-        &token,
-        r#"{"access_token":"at-test","token_type":"Bearer"}"#,
-    )
-    .unwrap();
+    std::fs::write(&token, TOKEN).unwrap();
     let reads = dir.path().join("reads");
     let config = dir.path().join("config.toml");
     std::fs::write(
@@ -247,10 +174,7 @@ fn run_counted_session(input: &[u8]) -> (std::process::Output, usize) {
             r#"
 [accounts.device]
 default = true
-client-id = "c"
-grant = "device"
-endpoints.device-authorization = "http://127.0.0.1:1/devicecode"
-endpoints.token = "http://127.0.0.1:1/token"
+{DEVICE_ACCOUNT}
 storage.read.command = ["sh", "-c", "echo read >> '{r}'; cat '{t}'"]
 storage.write.command = ["tee", "{t}"]
 "#,
@@ -259,17 +183,8 @@ storage.write.command = ["tee", "{t}"]
         ),
     )
     .unwrap();
-    let bin = PathBuf::from(env!("CARGO_BIN_EXE_ortie"));
 
-    let mut child = Command::new(&bin)
-        .args(["-c", config.to_str().unwrap(), "repl"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(input).unwrap();
-    let out = child.wait_with_output().unwrap();
+    let out = ortie_with_input(&config, &["repl"], input);
 
     let reads = std::fs::read_to_string(reads).unwrap_or_default();
     (out, reads.lines().count())

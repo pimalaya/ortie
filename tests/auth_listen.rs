@@ -5,11 +5,13 @@
 //! `auth listen` catches the redirection the test sends as the browser,
 //! then exchanges the code against a mock token endpoint.
 
+mod common;
+
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
@@ -18,6 +20,8 @@ use std::{
 use serde_json::Value;
 use tempfile::TempDir;
 use url::Url;
+
+use crate::common::*;
 
 /// Starts a mock token endpoint answering every POST with a token,
 /// keeping each form body.
@@ -81,41 +85,12 @@ fn start_mock() -> (SocketAddr, Arc<Mutex<Vec<String>>>) {
 
 /// Writes an authorization code account reaching the mock at `addr`,
 /// with file-backed storage and the given extra lines.
-fn write_config(dir: &Path, addr: SocketAddr, extra: &str) -> (PathBuf, PathBuf) {
-    let token = dir.join("token.json");
-    std::fs::write(&token, "").unwrap();
+fn write_code_config(dir: &Path, addr: SocketAddr, extra: &str) -> (PathBuf, PathBuf) {
+    let lines = format!(
+        "client-id = \"app-id\"\nendpoints.authorization = \"http://127.0.0.1:1/authorize\"\nendpoints.token = \"http://{addr}/token\"\n{extra}"
+    );
 
-    let config = dir.join("config.toml");
-    std::fs::write(
-        &config,
-        format!(
-            r#"
-[accounts.code]
-default = true
-client-id = "app-id"
-endpoints.authorization = "http://127.0.0.1:1/authorize"
-endpoints.token = "http://{addr}/token"
-storage.read.command = ["cat", "{t}"]
-storage.write.command = ["tee", "{t}"]
-{extra}
-"#,
-            t = token.display()
-        ),
-    )
-    .unwrap();
-
-    (config, token)
-}
-
-/// Runs the built binary against `config` with piped stdio.
-fn ortie(config: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_ortie"))
-        .arg("-c")
-        .arg(config)
-        .args(args)
-        .stdin(Stdio::null())
-        .output()
-        .unwrap()
+    write_config(dir, "code", &lines, "")
 }
 
 /// The query parameter `key` of `uri`.
@@ -137,7 +112,7 @@ fn form(body: &str, key: &str) -> Option<String> {
 fn a_handed_off_flow_carries_its_redirect_uri() {
     let dir = TempDir::new().unwrap();
     let (addr, _) = start_mock();
-    let (config, _) = write_config(dir.path(), addr, "");
+    let (config, _) = write_code_config(dir.path(), addr, "");
 
     let output = ortie(&config, &["--json", "auth", "get"]);
     assert!(output.status.success(), "{output:?}");
@@ -161,7 +136,7 @@ fn a_handed_off_flow_carries_its_redirect_uri() {
 fn a_handed_off_flow_is_listened_for_and_stored() {
     let dir = TempDir::new().unwrap();
     let (addr, bodies) = start_mock();
-    let (config, token) = write_config(dir.path(), addr, "");
+    let (config, token) = write_code_config(dir.path(), addr, "");
 
     let output = ortie(&config, &["--json", "auth", "get"]);
     assert!(output.status.success(), "{output:?}");
@@ -228,7 +203,7 @@ fn listen_is_refused_without_a_loopback_redirect_or_on_a_device_account() {
     let dir = TempDir::new().unwrap();
     let (addr, _) = start_mock();
 
-    let (config, _) = write_config(dir.path(), addr, "");
+    let (config, _) = write_code_config(dir.path(), addr, "");
     let output = ortie(
         &config,
         &["auth", "listen", "--redirect-uri=org.example.app:/cb"],
@@ -237,7 +212,7 @@ fn listen_is_refused_without_a_loopback_redirect_or_on_a_device_account() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("loopback"), "{stdout}");
 
-    let (config, _) = write_config(dir.path(), addr, r#"grant = "device""#);
+    let (config, _) = write_code_config(dir.path(), addr, r#"grant = "device""#);
     let output = ortie(&config, &["auth", "listen"]);
     assert_eq!(output.status.code(), Some(1), "{output:?}");
     let stdout = String::from_utf8_lossy(&output.stdout);

@@ -5,11 +5,12 @@
 //! re-acquisition on expiry, a fresh JWT assertion per mint, and the
 //! certificate renewal hint.
 
+mod common;
+
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpListener},
     path::{Path, PathBuf},
-    process::Command,
     sync::{Arc, Mutex},
     thread,
     time::Duration,
@@ -19,37 +20,7 @@ use base64_codec::codec::{Base64Alphabet, Base64Codec};
 use serde_json::Value;
 use tempfile::TempDir;
 
-/// Deterministic 2048-bit test key, the RustCrypto pkcs8 crate's
-/// rsa2048-priv.pem example (mirrors the io-oauth test fixture).
-const KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC2xCxRXxCmqvKC
-xj7b4kJDoXDz+iYzvUgzY39Hyk9vNuA6XSnvwxkayA85DYdLOeMPQU/Owfyg7YHl
-R+3CzTgsdvYckBiXPbn6U3lyp8cB9rd+CYLfwV/AGSfuXnzZS09Zn/BwE6fIKBvf
-Ity8mtfKu3xDEcmC9Y7bchOtRVizMiZtdDrtgZLRiEytuLFHOaja2mbclwgG2ces
-RQyxPQ18V1+xmFNPxhvEG8DwV04OATDHu7+9/cn2puLj4q/xy+rIm6V4hFKNVc+w
-gyeh6MifTgA88oiOkzJB2daVvLus3JC0Tj4JX6NwWOolsT9eKVy+rG3oOKuMUK9h
-4piXW4cvAgMBAAECggEAfsyDYsDtsHQRZCFeIvdKudkboGkAcAz2NpDlEU2O5r3P
-uy4/lhRpKmd6CD8Wil5S5ZaOZAe52XxuDkBk+C2gt1ihTxe5t9QfX0jijWVRcE9W
-5p56qfpjD8dkKMBtJeRV3PxVt6wrT3ZkP97T/hX/eKuyfmWsxKrQvfbbJ+9gppEM
-XEoIXtQydasZwdmXoyxu/8598tGTX25gHu3hYaErXMJ8oh+B0smcPR6gjpDjBTqw
-m++nJN7w0MOjwel0DA2fdhJqFJ7Aqn2AeCBUhCVNlR2wfEz5H7ZFTAlliP1ZJNur
-6zWcogJSaNAE+dZus9b3rcETm61A8W3eY54RZHN2wQKBgQDcwGEkLU6Sr67nKsUT
-ymW593A2+b1+Dm5hRhp+92VCJewVPH5cMaYVem5aE/9uF46HWMHLM9nWu+MXnvGJ
-mOQi7Ny+149Oz9vl9PzYrsLJ0NyGRzypvRbZ0jjSH7Xd776xQ8ph0L1qqNkfM6CX
-eQ6WQNvJEIXcXyY0O6MTj2stZwKBgQDT8xR1fkDpVINvkr4kI2ry8NoEo0ZTwYCv
-Z+lgCG2T/eZcsj79nQk3R2L1mB42GEmvaM3XU5T/ak4G62myCeQijbLfpw5A9/l1
-ClKBdmR7eI0OV3eiy4si480mf/cLTzsC06r7DhjFkKVksDGIsKpfxIFWsHYiIUJD
-vRIn76fy+QKBgQDOaLesGw0QDWNuVUiHU8XAmEP9s5DicF33aJRXyb2Nl2XjCXhh
-fi78gEj0wyQgbbhgh7ZU6Xuz1GTn7j+M2D/hBDb33xjpqWPE5kkR1n7eNAQvLibj
-06GtNGra1rm39ncIywlOYt7p/01dZmmvmIryJV0c6O0xfGp9hpHaNU0S2wKBgCX2
-5ZRCIChrTfu/QjXA7lhD0hmAkYlRINbKeyALgm0+znOOLgBJj6wKKmypacfww8oa
-sLxAKXEyvnU4177fTLDvxrmO99ulT1aqmaq85TTEnCeUfUZ4xRxjx4x84WhyMbTI
-61h65u8EgMuvT8AXPP1Yen5nr1FfubnedREYOXIpAoGAMZlUBtQGIHyt6uo1s40E
-DF+Kmhrggn6e0GsVPYO2ghk1tLNqgr6dVseRtYwnJxpXk9U6HWV8CJl5YLFDPlFx
-mH9FLxRKfHIwbWPh0//Atxt1qwjy5FpILpiEUcvkeOEusijQdFbJJLZvbO0EjYU/
-Uz4xpoYU8cPObY7JmDznKvc=
------END PRIVATE KEY-----
-";
+use crate::common::*;
 
 /// The fake DER certificate bytes whose x5t thumbprint is the known
 /// constant asserted by the io-oauth test suite.
@@ -132,30 +103,12 @@ fn start_mock(status: u16, response: &str) -> (SocketAddr, Arc<Mutex<Vec<Capture
 
 /// Writes a config bound to the mock token endpoint and file-backed
 /// storage, returning the config and token file paths.
-fn write_config(dir: &Path, addr: SocketAddr, grant_lines: &str) -> (PathBuf, PathBuf) {
-    let token = dir.join("token.json");
-    std::fs::write(&token, b"").unwrap();
+fn write_cc_config(dir: &Path, addr: SocketAddr, grant_lines: &str) -> (PathBuf, PathBuf) {
+    let lines = format!(
+        "client-id = \"app-id\"\n{grant_lines}\nendpoints.token = \"http://{addr}/token\"\nscopes = [\"https://graph.microsoft.com/.default\"]"
+    );
 
-    let config = dir.join("config.toml");
-    std::fs::write(
-        &config,
-        format!(
-            r#"
-[accounts.cc]
-default = true
-client-id = "app-id"
-{grant_lines}
-endpoints.token = "http://{addr}/token"
-scopes = ["https://graph.microsoft.com/.default"]
-storage.read.command = ["cat", "{t}"]
-storage.write.command = ["tee", "{t}"]
-"#,
-            t = token.display()
-        ),
-    )
-    .unwrap();
-
-    (config, token)
+    write_config(dir, "cc", &lines, "")
 }
 
 /// Seeds the storage file with an already expired token.
@@ -167,17 +120,6 @@ fn seed_expired_token(token: &Path) {
     .unwrap();
 }
 
-/// Runs the built binary against `config` and captures its output.
-fn ortie(config: &Path, args: &[&str]) -> std::process::Output {
-    let bin = PathBuf::from(env!("CARGO_BIN_EXE_ortie"));
-    Command::new(&bin)
-        .arg("-c")
-        .arg(config)
-        .args(args)
-        .output()
-        .unwrap()
-}
-
 /// The successful token response the mock server answers with.
 const TOKEN_RESPONSE: &str =
     r#"{"access_token":"at-fresh","token_type":"Bearer","expires_in":3600}"#;
@@ -186,7 +128,7 @@ const TOKEN_RESPONSE: &str =
 fn token_show_reacquires_an_expired_client_credentials_token() {
     let (addr, requests) = start_mock(200, TOKEN_RESPONSE);
     let dir = TempDir::new().unwrap();
-    let (config, token) = write_config(
+    let (config, token) = write_cc_config(
         dir.path(),
         addr,
         "grant = \"client-credentials\"\nclient-secret.raw = \"s3cret\"",
@@ -198,7 +140,7 @@ fn token_show_reacquires_an_expired_client_credentials_token() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("at-fresh"), "{stdout}");
 
-    let stored: Value = serde_json::from_str(&std::fs::read_to_string(&token).unwrap()).unwrap();
+    let stored = stored(&token);
     assert_eq!(stored["access_token"], "at-fresh");
     assert!(stored["refresh_token"].is_null());
 
@@ -223,7 +165,7 @@ fn token_show_reacquires_an_expired_client_credentials_token() {
 fn token_show_acquires_when_storage_is_empty() {
     let (addr, requests) = start_mock(200, TOKEN_RESPONSE);
     let dir = TempDir::new().unwrap();
-    let (config, token) = write_config(
+    let (config, token) = write_cc_config(
         dir.path(),
         addr,
         "grant = \"client-credentials\"\nclient-secret.raw = \"s3cret\"",
@@ -233,7 +175,7 @@ fn token_show_acquires_when_storage_is_empty() {
     assert!(out.status.success(), "{out:?}");
     assert!(String::from_utf8_lossy(&out.stdout).contains("at-fresh"));
 
-    let stored: Value = serde_json::from_str(&std::fs::read_to_string(&token).unwrap()).unwrap();
+    let stored = stored(&token);
     assert_eq!(stored["access_token"], "at-fresh");
     assert_eq!(requests.lock().unwrap().len(), 1);
 }
@@ -256,7 +198,7 @@ fn jwt_kind_mints_a_fresh_assertion_per_reacquisition() {
     );
     std::fs::write(&cert, cert_pem).unwrap();
 
-    let (config, token) = write_config(
+    let (config, token) = write_cc_config(
         dir.path(),
         addr,
         &format!(
@@ -271,7 +213,7 @@ fn jwt_kind_mints_a_fresh_assertion_per_reacquisition() {
     let refresh2 = ortie(&config, &["token", "refresh"]);
     assert!(refresh2.status.success(), "{refresh2:?}");
 
-    let stored: Value = serde_json::from_str(&std::fs::read_to_string(&token).unwrap()).unwrap();
+    let stored = stored(&token);
     assert_eq!(stored["access_token"], "at-fresh");
 
     let requests = requests.lock().unwrap();
@@ -354,7 +296,7 @@ fn invalid_client_on_the_jwt_kind_hints_certificate_renewal() {
     let cert = dir.path().join("cert.der");
     std::fs::write(&cert, CERT_DER).unwrap();
 
-    let (config, _token) = write_config(
+    let (config, _token) = write_cc_config(
         dir.path(),
         addr,
         &format!(

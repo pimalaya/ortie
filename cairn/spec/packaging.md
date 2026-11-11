@@ -33,3 +33,6 @@ Every dependency SHALL be declared with `default-features = false` and the featu
 
 ### Requirement: Dependency checks pass clean
 `cargo deny check` SHALL pass over the targets deny.toml lists, which are the release targets and the ones people build from source. A duplicate the tree cannot avoid stays a visible warning rather than a skip: today getrandom 0.2, which ring 0.17 needs until its next release.
+
+### Requirement: Live provider suites
+The binary SHALL carry one ignored integration suite per provider under tests/ (google.rs, microsoft.rs, fastmail.rs), run with `--ignored` and sharing tests/common.rs with the mock suites. Each SHALL hold an `anonymous` module that runs on public or made-up clients and touches no account, its accounts taken from the provider sections of config.sample.toml where one fits so a provider drifting from the sample fails it, and MAY hold a `credentialed` module reading `ORTIE_`-prefixed variables, which CI runs in the upstream repository only. A client secret SHALL reach the binary through a secret command and a key or certificate through a file only its owner reads, never argv nor the configuration, and no assertion SHALL print a token or secret. CI SHALL run each suite in its own job at `RUST_LOG=debug` at most.

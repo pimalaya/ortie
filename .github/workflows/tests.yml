@@ -7,3 +7,44 @@ jobs:
   tests:
     uses: pimalaya/nix/.github/workflows/tests.yml@master
     secrets: inherit
+  live:
+    # The binary against the real providers, whose endpoints drift without
+    # notice. RUST_LOG stays at debug: trace logs carry secrets and tokens.
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [google, microsoft, fastmail]
+    runs-on: ubuntu-latest
+    env:
+      RUST_LOG: debug
+      HAS_MICROSOFT_CLIENT_KEY: ${{ secrets.MICROSOFT_CLIENT_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: experimental-features = nix-command flakes
+      - uses: cachix/cachix-action@v17
+        with:
+          name: soywod
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          extraPullNames: nix-community
+      - uses: Swatinem/rust-cache@v2
+      - name: Run the anonymous tests
+        run: 'nix develop -c cargo test --test ${{ matrix.provider }} -- --ignored anonymous::'
+      # The credentialed steps run in this repository only: a fork holds no
+      # secret, and they would fail on every contributor's push.
+      - name: Run the credentialed tests
+        if: matrix.provider == 'microsoft' && github.repository == 'pimalaya/ortie'
+        env:
+          ORTIE_MICROSOFT_TENANT_ID: ${{ secrets.MICROSOFT_TENANT_ID }}
+          ORTIE_MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
+          ORTIE_MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
+        run: 'nix develop -c cargo test --test microsoft -- --ignored credentialed:: --skip client_credentials_jwt_token_show'
+      - name: Run the credentialed JWT test
+        if: matrix.provider == 'microsoft' && github.repository == 'pimalaya/ortie' && env.HAS_MICROSOFT_CLIENT_KEY == 'true'
+        env:
+          ORTIE_MICROSOFT_TENANT_ID: ${{ secrets.MICROSOFT_TENANT_ID }}
+          ORTIE_MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
+          ORTIE_MICROSOFT_CLIENT_KEY: ${{ secrets.MICROSOFT_CLIENT_KEY }}
+          ORTIE_MICROSOFT_CLIENT_CERT: ${{ secrets.MICROSOFT_CLIENT_CERT }}
+        run: 'nix develop -c cargo test --test microsoft -- --ignored credentialed::client_credentials_jwt_token_show'

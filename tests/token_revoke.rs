@@ -3,17 +3,20 @@
 //! End-to-end coverage of `token revoke`, driving the real binary
 //! against a local mock revocation endpoint (RFC 7009).
 
+mod common;
+
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpListener},
     path::{Path, PathBuf},
-    process::Command,
     sync::{Arc, Mutex},
     thread,
 };
 
 use serde_json::Value;
 use tempfile::TempDir;
+
+use crate::common::*;
 
 /// Starts a mock endpoint answering every POST with `status` and
 /// `response`, capturing each form body.
@@ -76,39 +79,12 @@ fn start_mock(status: u16, response: &'static str) -> (SocketAddr, Arc<Mutex<Vec
 
 /// Writes a config revoking against the mock, with file-backed storage
 /// seeded with `token`, returning the config and token paths.
-fn write_config(dir: &Path, addr: SocketAddr, token: &str) -> (PathBuf, PathBuf) {
-    let token_path = dir.join("token.json");
-    std::fs::write(&token_path, token).unwrap();
+fn write_revoke_config(dir: &Path, addr: SocketAddr, token: &str) -> (PathBuf, PathBuf) {
+    let lines = format!(
+        "client-id = \"app-id\"\nendpoints.token = \"http://{addr}/token\"\nendpoints.revocation = \"http://{addr}/revoke\""
+    );
 
-    let config = dir.join("config.toml");
-    std::fs::write(
-        &config,
-        format!(
-            r#"
-[accounts.revoke]
-default = true
-client-id = "app-id"
-endpoints.token = "http://{addr}/token"
-endpoints.revocation = "http://{addr}/revoke"
-storage.read.command = ["cat", "{t}"]
-storage.write.command = ["tee", "{t}"]
-"#,
-            t = token_path.display()
-        ),
-    )
-    .unwrap();
-
-    (config, token_path)
-}
-
-/// Runs the built binary against `config` and captures its output.
-fn ortie(config: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_ortie"))
-        .arg("-c")
-        .arg(config)
-        .args(args)
-        .output()
-        .unwrap()
+    write_config(dir, "revoke", &lines, token)
 }
 
 const TOKEN_WITH_REFRESH: &str =
@@ -118,7 +94,7 @@ const TOKEN_WITH_REFRESH: &str =
 fn the_refresh_token_is_revoked_and_storage_kept() {
     let dir = TempDir::new().unwrap();
     let (addr, bodies) = start_mock(200, "");
-    let (config, token) = write_config(dir.path(), addr, TOKEN_WITH_REFRESH);
+    let (config, token) = write_revoke_config(dir.path(), addr, TOKEN_WITH_REFRESH);
 
     let output = ortie(&config, &["--json", "token", "revoke"]);
     assert!(output.status.success(), "{output:?}");
@@ -139,7 +115,7 @@ fn the_refresh_token_is_revoked_and_storage_kept() {
 fn without_a_refresh_token_the_access_token_is_revoked() {
     let dir = TempDir::new().unwrap();
     let (addr, bodies) = start_mock(200, "");
-    let (config, _) = write_config(
+    let (config, _) = write_revoke_config(
         dir.path(),
         addr,
         r#"{"access_token":"at","token_type":"Bearer"}"#,
@@ -160,7 +136,7 @@ fn without_a_refresh_token_the_access_token_is_revoked() {
 fn a_rejected_revocation_fails_with_its_code() {
     let dir = TempDir::new().unwrap();
     let (addr, _) = start_mock(400, r#"{"error":"unsupported_token_type"}"#);
-    let (config, _) = write_config(dir.path(), addr, TOKEN_WITH_REFRESH);
+    let (config, _) = write_revoke_config(dir.path(), addr, TOKEN_WITH_REFRESH);
 
     let output = ortie(&config, &["token", "revoke"]);
     assert_eq!(output.status.code(), Some(1), "{output:?}");

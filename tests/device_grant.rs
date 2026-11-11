@@ -3,11 +3,12 @@
 //! End-to-end coverage of the device authorization grant, driving the
 //! real binary against a local mock authorization server.
 
+mod common;
+
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpListener},
-    path::PathBuf,
-    process::{Command, Stdio},
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -18,6 +19,8 @@ use std::{
 
 use serde_json::Value;
 use tempfile::TempDir;
+
+use crate::common::*;
 
 /// Starts a mock authorization server issuing a device code.
 ///
@@ -71,49 +74,32 @@ fn start_mock() -> (SocketAddr, Arc<AtomicUsize>, thread::JoinHandle<()>) {
     (addr, polls, handle)
 }
 
+/// Writes a device account reaching the mock at `addr`, with
+/// file-backed storage, returning the config and token paths.
+fn write_device_config(dir: &Path, addr: SocketAddr) -> (PathBuf, PathBuf) {
+    let lines = format!(
+        "client-id = \"c\"\ngrant = \"device\"\nendpoints.device-authorization = \"http://{addr}/devicecode\"\nendpoints.token = \"http://{addr}/token\""
+    );
+
+    write_config(dir, "device", &lines, "")
+}
+
 #[test]
 fn auth_get_json_then_resume_stores_token() {
     let (addr, polls, _h) = start_mock();
     let dir = TempDir::new().unwrap();
-    let token = dir.path().join("token.json");
-    std::fs::write(&token, b"").unwrap();
-    let config = dir.path().join("config.toml");
-    std::fs::write(
-        &config,
-        format!(
-            r#"
-[accounts.device]
-default = true
-client-id = "c"
-grant = "device"
-endpoints.device-authorization = "http://{addr}/devicecode"
-endpoints.token = "http://{addr}/token"
-storage.read.command = ["cat", "{t}"]
-storage.write.command = ["tee", "{t}"]
-"#,
-            t = token.display()
-        ),
-    )
-    .unwrap();
-    let bin = PathBuf::from(env!("CARGO_BIN_EXE_ortie"));
+    let (config, token) = write_device_config(dir.path(), addr);
 
-    let get = Command::new(&bin)
-        .args(["-c", config.to_str().unwrap(), "--json", "auth", "get"])
-        .output()
-        .unwrap();
+    let get = ortie(&config, &["--json", "auth", "get"]);
     assert!(get.status.success(), "{get:?}");
     let v: Value = serde_json::from_slice(&get.stdout).unwrap();
     assert_eq!(v["deviceCode"], "dc-test");
     assert_eq!(polls.load(Ordering::SeqCst), 0);
 
-    let resume = Command::new(&bin)
-        .args(["-c", config.to_str().unwrap(), "auth", "resume", "dc-test"])
-        .output()
-        .unwrap();
+    let resume = ortie(&config, &["auth", "resume", "dc-test"]);
     assert!(resume.status.success(), "{resume:?}");
     assert!(polls.load(Ordering::SeqCst) >= 2);
-    let stored: Value = serde_json::from_str(&std::fs::read_to_string(&token).unwrap()).unwrap();
-    assert_eq!(stored["access_token"], "at-test");
+    assert_eq!(stored(&token)["access_token"], "at-test");
 }
 
 /// The whole grant runs in one REPL session.
@@ -125,42 +111,10 @@ storage.write.command = ["tee", "{t}"]
 fn repl_auth_get_resume_then_token_show() {
     let (addr, polls, _h) = start_mock();
     let dir = TempDir::new().unwrap();
-    let token = dir.path().join("token.json");
-    std::fs::write(&token, b"").unwrap();
-    let config = dir.path().join("config.toml");
-    std::fs::write(
-        &config,
-        format!(
-            r#"
-[accounts.device]
-default = true
-client-id = "c"
-grant = "device"
-endpoints.device-authorization = "http://{addr}/devicecode"
-endpoints.token = "http://{addr}/token"
-storage.read.command = ["cat", "{t}"]
-storage.write.command = ["tee", "{t}"]
-"#,
-            t = token.display()
-        ),
-    )
-    .unwrap();
-    let bin = PathBuf::from(env!("CARGO_BIN_EXE_ortie"));
+    let (config, _) = write_device_config(dir.path(), addr);
 
-    let mut child = Command::new(&bin)
-        .args(["-c", config.to_str().unwrap(), "repl"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(b"auth get\nauth resume dc-test\ntoken show\nquit\n")
-        .unwrap();
-    let out = child.wait_with_output().unwrap();
+    let input = b"auth get\nauth resume dc-test\ntoken show\nquit\n";
+    let out = ortie_with_input(&config, &["repl"], input);
 
     assert!(out.status.success(), "{out:?}");
     assert!(polls.load(Ordering::SeqCst) >= 2);

@@ -6,6 +6,8 @@
 //! the redirect the server listens for. Every response is kept, so each
 //! test can assert that no secret ever reached stdout.
 
+mod common;
+
 use std::{
     io::{BufRead, BufReader, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
@@ -22,6 +24,8 @@ use std::{
 use serde_json::{Value, json};
 use tempfile::TempDir;
 use url::Url;
+
+use crate::common::*;
 
 const TOKEN: &str = r#"{"access_token":"at-test","token_type":"Bearer","expires_in":3600,"refresh_token":"rt-test"}"#;
 
@@ -108,31 +112,12 @@ fn start_mock(pending: usize) -> (SocketAddr, Arc<Mutex<Vec<String>>>) {
 /// Writes an account config reaching the mock at `addr`, with
 /// file-backed storage and the given extra lines, returning the config
 /// and token paths.
-fn write_config(dir: &Path, addr: SocketAddr, extra: &str) -> (PathBuf, PathBuf) {
-    let token = dir.join("token.json");
-    std::fs::write(&token, "").unwrap();
+fn write_mcp_config(dir: &Path, addr: SocketAddr, extra: &str) -> (PathBuf, PathBuf) {
+    let lines = format!(
+        "client-id = \"app-id\"\nendpoints.authorization = \"http://127.0.0.1:1/authorize\"\nendpoints.device-authorization = \"http://{addr}/devicecode\"\nendpoints.token = \"http://{addr}/token\"\n{extra}"
+    );
 
-    let config = dir.join("config.toml");
-    std::fs::write(
-        &config,
-        format!(
-            r#"
-[accounts.mcp]
-default = true
-client-id = "app-id"
-endpoints.authorization = "http://127.0.0.1:1/authorize"
-endpoints.device-authorization = "http://{addr}/devicecode"
-endpoints.token = "http://{addr}/token"
-storage.read.command = ["cat", "{t}"]
-storage.write.command = ["tee", "{t}"]
-{extra}
-"#,
-            t = token.display()
-        ),
-    )
-    .unwrap();
-
-    (config, token)
+    write_config(dir, "mcp", &lines, "")
 }
 
 /// A running server, answering one request per line.
@@ -260,7 +245,7 @@ fn form(body: &str, key: &str) -> Option<String> {
 fn tools_are_listed_with_their_schemas_and_revocation_is_opt_in() {
     let dir = TempDir::new().unwrap();
     let (addr, _) = start_mock(0);
-    let (config, _) = write_config(dir.path(), addr, "");
+    let (config, _) = write_mcp_config(dir.path(), addr, "");
 
     let mut server = Server::start(&config, &[]);
     let init = server.request("initialize", json!({}));
@@ -308,7 +293,7 @@ fn tools_are_listed_with_their_schemas_and_revocation_is_opt_in() {
 fn a_code_flow_is_captured_exchanged_and_stored() {
     let dir = TempDir::new().unwrap();
     let (addr, bodies) = start_mock(0);
-    let (config, token) = write_config(dir.path(), addr, "");
+    let (config, token) = write_mcp_config(dir.path(), addr, "");
 
     let mut server = Server::start(&config, &[]);
     assert_eq!(server.settle()["status"], "none");
@@ -348,7 +333,7 @@ fn a_code_flow_is_captured_exchanged_and_stored() {
 fn a_redirect_no_listener_catches_is_resumed_from_its_uri() {
     let dir = TempDir::new().unwrap();
     let (addr, bodies) = start_mock(0);
-    let (config, _) = write_config(
+    let (config, _) = write_mcp_config(
         dir.path(),
         addr,
         r#"endpoints.redirection = "org.example.app:/cb""#,
@@ -380,7 +365,7 @@ fn a_redirect_no_listener_catches_is_resumed_from_its_uri() {
 fn a_device_flow_is_polled_to_the_token() {
     let dir = TempDir::new().unwrap();
     let (addr, bodies) = start_mock(1);
-    let (config, _) = write_config(dir.path(), addr, r#"grant = "device""#);
+    let (config, _) = write_mcp_config(dir.path(), addr, r#"grant = "device""#);
 
     let mut server = Server::start(&config, &[]);
 
@@ -403,7 +388,7 @@ fn a_device_flow_is_polled_to_the_token() {
 fn a_new_flow_stops_the_listener_of_the_old_one() {
     let dir = TempDir::new().unwrap();
     let (addr, _) = start_mock(0);
-    let (config, _) = write_config(dir.path(), addr, "");
+    let (config, _) = write_mcp_config(dir.path(), addr, "");
 
     let mut server = Server::start(&config, &[]);
 
@@ -429,7 +414,7 @@ fn a_new_flow_stops_the_listener_of_the_old_one() {
 fn an_unknown_argument_or_tool_is_refused() {
     let dir = TempDir::new().unwrap();
     let (addr, _) = start_mock(0);
-    let (config, _) = write_config(dir.path(), addr, "");
+    let (config, _) = write_mcp_config(dir.path(), addr, "");
 
     let mut server = Server::start(&config, &[]);
 
