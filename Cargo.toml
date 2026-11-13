@@ -37,7 +37,7 @@ base64-codec = { version = "0.1", default-features = false, features = ["alloc"]
 clap = { version = "4.4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage"] }
 humantime = { version = "2.2", default-features = false }
 idna_adapter = { version = "=1.0.0", default-features = false }
-io-oauth = { version = "0.5.2", default-features = false, features = ["client", "jwt-bearer"] }
+io-oauth = { version = "0.6.0", default-features = false, features = ["client", "jwt-bearer"] }
 log = { version = "0.4", default-features = false }
 pimalaya-cli = { version = "0.4.0", default-features = false, features = ["mcp", "repl", "terminal"] }
 pimalaya-config = { version = "0.4.0", default-features = false, features = ["toml", "secret"] }

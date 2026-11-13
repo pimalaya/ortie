@@ -315,3 +315,20 @@ fn invalid_client_on_the_jwt_kind_hints_certificate_renewal() {
         "{stdout}"
     );
 }
+
+#[test]
+fn an_error_status_without_an_oauth_body_is_reported() {
+    let (addr, _requests) = start_mock(503, "<html>Service Unavailable</html>");
+    let dir = TempDir::new().unwrap();
+    let (config, token) = write_cc_config(
+        dir.path(),
+        addr,
+        "grant = \"client-credentials\"\nclient-secret.raw = \"s3cret\"",
+    );
+
+    let out = ortie(&config, &["auth", "get"]);
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("status 503"), "{stdout}");
+    assert!(std::fs::read_to_string(token).unwrap().is_empty());
+}

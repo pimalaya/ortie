@@ -33,6 +33,12 @@ const TOKEN: &str = r#"{"access_token":"at-test","token_type":"Bearer","expires_
 /// `/token` answers `authorization_pending` for the first `pending`
 /// requests and a token after. Each token request body is kept.
 fn start_mock(pending: usize) -> (SocketAddr, Arc<Mutex<Vec<String>>>) {
+    start_mock_with(pending, r#""expires_in":60,"interval":1"#)
+}
+
+/// The mock of [`start_mock`], its device code answer carrying `timing`
+/// as its lifetime and interval members.
+fn start_mock_with(pending: usize, timing: &'static str) -> (SocketAddr, Arc<Mutex<Vec<String>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let bodies = Arc::new(Mutex::new(Vec::new()));
@@ -80,7 +86,7 @@ fn start_mock(pending: usize) -> (SocketAddr, Arc<Mutex<Vec<String>>>) {
                 (
                     200,
                     format!(
-                        r#"{{"device_code":"dc-test","user_code":"USER","verification_uri":"http://{addr}/d","expires_in":60,"interval":1}}"#
+                        r#"{{"device_code":"dc-test","user_code":"USER","verification_uri":"http://{addr}/d",{timing}}}"#
                     ),
                 )
             } else if path.starts_with("/token") {
@@ -384,6 +390,63 @@ fn a_device_flow_is_polled_to_the_token() {
     }
 }
 
+/// A lifetime no clock can add and an interval of zero: the flow still
+/// polls once a second, to the token.
+#[cfg(target_pointer_width = "64")]
+#[test]
+fn a_device_flow_bounds_the_lifetime_and_the_interval_of_the_server() {
+    let dir = TempDir::new().unwrap();
+    let timing = r#""expires_in":18446744073709551615,"interval":0"#;
+    let (addr, bodies) = start_mock_with(1, timing);
+    let (config, _) = write_mcp_config(dir.path(), addr, r#"grant = "device""#);
+
+    let mut server = Server::start(&config, &[]);
+    let start = Instant::now();
+
+    let get = server.call("auth_get", json!({}))["structuredContent"].clone();
+    assert_eq!(get["kind"], "device", "{get}");
+
+    let status = server.settle();
+    assert_eq!(status["status"], "issued", "{status}");
+    assert!(
+        start.elapsed() >= Duration::from_secs(2),
+        "{:?}",
+        start.elapsed()
+    );
+
+    server.finish();
+    assert_eq!(bodies.lock().unwrap().len(), 2);
+}
+
+#[test]
+fn a_request_not_echoing_the_state_does_not_end_the_flow() {
+    let dir = TempDir::new().unwrap();
+    let (addr, bodies) = start_mock(0);
+    let (config, _) = write_mcp_config(dir.path(), addr, "");
+
+    let mut server = Server::start(&config, &[]);
+
+    let get = server.call("auth_get", json!({}))["structuredContent"].clone();
+    let uri = Url::parse(get["authorizationUri"].as_str().unwrap()).unwrap();
+    let redirect_uri = query(&uri, "redirect_uri");
+
+    let page = redirect(&redirect_uri, "forged-code", "forged-state");
+    assert!(page.starts_with("HTTP/1.0 404"), "{page}");
+
+    let status = server.call("auth_status", json!({}))["structuredContent"].clone();
+    assert_eq!(status["status"], "pending", "{status}");
+
+    let page = redirect(&redirect_uri, "the-code", &query(&uri, "state"));
+    assert!(page.starts_with("HTTP/1.0 200 OK"), "{page}");
+    assert_eq!(server.settle()["status"], "issued");
+
+    server.finish();
+
+    let bodies = bodies.lock().unwrap();
+    assert_eq!(bodies.len(), 1, "{bodies:?}");
+    assert_eq!(form(&bodies[0], "code").as_deref(), Some("the-code"));
+}
+
 #[test]
 fn a_new_flow_stops_the_listener_of_the_old_one() {
     let dir = TempDir::new().unwrap();
@@ -407,6 +470,28 @@ fn a_new_flow_stops_the_listener_of_the_old_one() {
 
     let status = server.call("auth_status", json!({}))["structuredContent"].clone();
     assert_eq!(status["status"], "pending", "{status}");
+    server.finish();
+}
+
+#[test]
+fn a_new_flow_binds_the_configured_port_again() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock(0);
+
+    let free = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = free.local_addr().unwrap().port();
+    drop(free);
+
+    let redirection = format!(r#"endpoints.redirection = "http://127.0.0.1:{port}/cb""#);
+    let (config, _) = write_mcp_config(dir.path(), addr, &redirection);
+
+    let mut server = Server::start(&config, &[]);
+
+    for _ in 0..3 {
+        let get = server.call("auth_get", json!({}));
+        assert_eq!(get["structuredContent"]["redirectCaptured"], true, "{get}");
+    }
+
     server.finish();
 }
 

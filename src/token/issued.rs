@@ -35,7 +35,7 @@ impl TokenIssuedOutput {
     /// The receipt of a token a grant issued.
     pub fn issued(res: &Oauth20AccessTokenSuccessParams) -> Self {
         Self {
-            expires_in: res.expires_in.map(|exp| exp as u64),
+            expires_in: res.expires_in,
             with_refresh_token: res.refresh_token.is_some(),
             refreshed: false,
         }
@@ -62,7 +62,7 @@ impl fmt::Display for TokenIssuedOutput {
         match self.expires_in {
             None => writeln!(f, " (unknown expiry)"),
             Some(exp) => {
-                let exp = Duration::from_secs(exp + 1);
+                let exp = Duration::from_secs(exp.saturating_add(1));
                 writeln!(f, " (expires in {})", format_duration(exp))
             }
         }

@@ -51,7 +51,7 @@ pub struct TokenInspectOutput {
     #[schemars(with = "Option<String>")]
     pub issued_at: Option<u64>,
     /// The lifetime granted at issuance, in seconds, when known.
-    pub expires_in: Option<usize>,
+    pub expires_in: Option<u64>,
     /// Whether a refresh token was stored alongside the access token.
     pub with_refresh_token: bool,
     /// The granted scope, when the server reported one.
@@ -100,8 +100,10 @@ impl fmt::Display for TokenInspectOutput {
             None => String::from("unknown"),
             Some(exp) => {
                 let remaining = match (self.issued_at, now_epoch) {
-                    (Some(issued_at), Some(now)) => (issued_at + exp as u64).saturating_sub(now),
-                    _ => exp as u64,
+                    (Some(issued_at), Some(now)) => {
+                        issued_at.saturating_add(exp).saturating_sub(now)
+                    }
+                    _ => exp,
                 };
 
                 match remaining {

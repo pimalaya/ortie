@@ -90,20 +90,18 @@ impl TokenShowCommand {
 /// `expires_in` is the lifetime granted at issuance, not a countdown,
 /// so it is added to `issued_at`. An unknown `issued_at` counts as
 /// valid, a missing `expires_in` as [`DEFAULT_EXPIRES_IN_SECS`].
-fn is_expired(issued_at: Option<u64>, expires_in: Option<usize>) -> bool {
+fn is_expired(issued_at: Option<u64>, expires_in: Option<u64>) -> bool {
     let Some(issued_at) = issued_at else {
         return false;
     };
-    let expires_in = expires_in
-        .map(|exp| exp as u64)
-        .unwrap_or(DEFAULT_EXPIRES_IN_SECS);
+    let expires_in = expires_in.unwrap_or(DEFAULT_EXPIRES_IN_SECS);
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    issued_at + expires_in <= now + EXPIRY_SKEW_SECS
+    issued_at.saturating_add(expires_in) <= now.saturating_add(EXPIRY_SKEW_SECS)
 }
 
 /// Printable raw access token, exposed for piping.

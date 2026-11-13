@@ -22,10 +22,7 @@ use humantime::format_duration;
 use pimalaya_cli::{fields::Fields, printer::Printer, shell::quote};
 use schemars::JsonSchema;
 use secrecy::ExposeSecret;
-use serde::{
-    Deserialize, Serialize, Serializer,
-    de::value::{Error, StringDeserializer},
-};
+use serde::{Serialize, Serializer};
 use url::{Host, Url};
 
 use pimalaya_config::secret::Secret;
@@ -156,7 +153,7 @@ impl AuthGetCommand {
 
         println!("Wait for redirection…");
 
-        let redirected_uri = match await_redirect(&redirect_uri) {
+        let redirected_uri = match await_redirect(&redirect_uri, Some(&state)) {
             Ok(redirected_uri) => redirected_uri,
             // NOTE: the listener could not bind or accept, so fall back
             // to the manual flow instead of aborting the whole grant.
@@ -212,7 +209,7 @@ pub(crate) fn authorization_request(
     // round-trips through the redirect URI without escaping.
     let state = Oauth20State::default();
     let state = base64_url(state.expose());
-    let state = Oauth20State::deserialize(StringDeserializer::<Error>::new(state)).unwrap();
+    let state = Oauth20State::try_from(state.as_bytes())?;
 
     let pkce = match account.pkce {
         PkceConfig::S256 => Some(Oauth20PkceCodeChallenge::default()),
@@ -405,8 +402,8 @@ fn execute_device(
         user_code: device.user_code.clone(),
         verification_uri: device.verification_uri.clone(),
         verification_uri_complete: device.verification_uri_complete.clone(),
-        expires_in: device.expires_in,
-        interval: device.interval,
+        expires_in: device.lifetime().as_secs(),
+        interval: device.poll_interval().as_secs(),
         interactive,
     };
 
@@ -709,10 +706,12 @@ pub struct DeviceAuthorization {
     /// The verification page with the code already in it, when the
     /// server offers one.
     verification_uri_complete: Option<String>,
-    /// How long the device code stays valid, in seconds.
-    expires_in: usize,
-    /// The minimum delay between two token endpoint polls, in seconds.
-    interval: usize,
+    /// How long the device code stays valid, in seconds, an hour at
+    /// most.
+    expires_in: u64,
+    /// The delay between two token endpoint polls, in seconds, kept
+    /// between 1 and 60.
+    interval: u64,
     /// Whether the flow was initiated from an interactive shell.
     interactive: bool,
 }
@@ -733,7 +732,7 @@ impl fmt::Display for DeviceAuthorization {
             fields.push("Device code", &self.device_code);
         }
 
-        let expires_in = Duration::from_secs(self.expires_in as u64);
+        let expires_in = Duration::from_secs(self.expires_in);
         fields.push("Expires in", format_duration(expires_in));
         fields.push("Polling interval", format!("{}s", self.interval));
 

@@ -9,10 +9,6 @@ use anyhow::{Result, anyhow, bail};
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 use secrecy::SecretString;
-use serde::{
-    Deserialize,
-    de::value::{Error, StrDeserializer},
-};
 use url::Url;
 
 use pimalaya_config::secret::Secret;
@@ -95,7 +91,11 @@ impl AuthResumeCommand {
         let redirected_uri = Url::parse(self.input.trim())
             .map_err(|err| anyhow!("Invalid redirected URI: {err}"))?;
 
-        let code = match Oauth20AuthParams::from(&redirected_uri).validate(self.state.as_ref()) {
+        // NOTE: an account names no issuer, so the `iss` of the response
+        // (RFC 9207) has nothing to be compared with.
+        let params = Oauth20AuthParams::from(&redirected_uri);
+
+        let code = match params.validate(self.state.as_ref(), None) {
             Ok(code) => code,
             Err(Oauth20AuthParamsValidationError::Server(params)) => {
                 let err = anyhow!("Authorization error (code {:?})", params.error);
@@ -113,6 +113,9 @@ impl AuthResumeCommand {
                 return Err(anyhow!(
                     "Authorization request and response states do not match"
                 ));
+            }
+            Err(err @ Oauth20AuthParamsValidationError::IssuerMismatch(_)) => {
+                return Err(anyhow!("{err}"));
             }
         };
 
@@ -200,20 +203,14 @@ pub fn uri_parser(url: &str) -> Result<Url, String> {
 
 /// Clap value parser for the CSRF state argument.
 pub fn state_parser(state: &str) -> Result<Oauth20State, String> {
-    match Oauth20State::deserialize(StrDeserializer::<Error>::new(state)) {
-        Ok(state) => Ok(state),
-        Err(err) => Err(err.to_string()),
-    }
+    Oauth20State::try_from(state.as_bytes()).map_err(|err| err.to_string())
 }
 
 /// Clap value parser for the PKCE code verifier argument.
 pub fn pkce_code_verifier_parser(verifier: &str) -> Result<Oauth20PkceCodeVerifier, String> {
-    // NOTE: the verifier body is omitted, clap surfacing this string in
-    // its parse error.
-    match verifier.parse() {
-        Ok(verifier) => Ok(verifier),
-        Err(b) => Err(format!("Invalid 0x{b:x} found in PKCE code verifier")),
-    }
+    // NOTE: the error names a length or a byte, never the verifier body,
+    // clap surfacing this string in its parse error.
+    Oauth20PkceCodeVerifier::try_from(verifier.as_bytes()).map_err(|err| err.to_string())
 }
 
 #[cfg(test)]
@@ -222,9 +219,14 @@ mod tests {
 
     #[test]
     fn pkce_code_verifier_parser_error_omits_verifier_body() {
-        let secret = "pkce-secret-value-with space";
+        let secret = "pkce-secret-value-with space-over-43-characters";
         let err = pkce_code_verifier_parser(secret).unwrap_err();
         assert!(!err.contains(secret), "{err}");
-        assert!(err.contains("Invalid 0x"), "{err}");
+        assert!(err.contains("byte 0x20"), "{err}");
+
+        let secret = "pkce-secret-value-too-short";
+        let err = pkce_code_verifier_parser(secret).unwrap_err();
+        assert!(!err.contains(secret), "{err}");
+        assert!(err.contains("length 27"), "{err}");
     }
 }

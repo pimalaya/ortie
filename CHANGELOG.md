@@ -48,8 +48,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed every `json-schema` schema to carry an `$id` naming the contract version, and to require the keys a command always prints.
 - Changed the help, usage and logs to carry no colour, and the help to print each paragraph on one line, for the terminal to fold.
 - Changed config.sample.toml to one flat `[accounts.example]` table: every field and its values, the defaults active, then a commented section per provider (Google, Microsoft Graph, Microsoft IMAP and SMTP, Fastmail), on Pimalaya's applications except Google whose client is left blank, and a custom one for an application of your own.
+- Changed the wait for the redirection to end only on the redirect of its flow.
+
+  A request to the loopback port that does not echo the state, goes to another path, is not a `GET` or carries neither a code nor an error is answered `404 Not Found`, and the wait goes on. The page answered to the redirect no longer claims a success.
+
+- Changed `--pkce` to refuse a verifier that is not 43 to 128 unreserved characters (RFC 7636 section 4.1), and `--state` an empty state.
+- Changed the device handoff of `auth get` to report `expiresIn` capped at one hour and `interval` kept between 1 and 60 seconds.
+- Changed a token, device authorization or revocation endpoint answering an error status without an OAuth error body to fail naming the HTTP status.
+- Changed a token response to take `expires_in` as a numeric string too, and a missing `token_type` as `Bearer`.
 - Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
 - Bumped pimalaya-cli and pimalaya-config to 0.4.
+- Bumped io-oauth to 0.6.
+
+  A client secret is still sent as HTTP Basic credentials, the client id and the secret now form-encoded first (RFC 6749 section 2.3.1): one made of letters, digits and `*-._~` is unchanged on the wire.
 
 ### Removed
 
@@ -79,9 +90,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed a failed storage write after a refresh leaving the session on the old refresh token, which a rotating server had already invalidated.
 - Fixed an OAuth 2.0 endpoint able to make Ortie buffer an endless response, spin on a connection closed mid-body, or panic.
 
-  io-oauth 0.5 runs on io-http 0.6, which caps response heads at 64 KiB and bodies at 256 MiB.
+  io-oauth 0.6 runs on io-http 0.7, which caps response heads at 64 KiB and bodies at 256 MiB.
 
 - Fixed the state and the PKCE code verifier never repeating a character, which lowered their entropy.
+- Fixed the device grant panicking, waiting without end or polling without pause on a lifetime or an interval the server chose.
+
+  The lifetime is capped at one hour and the interval kept between 1 and 60 seconds.
 
 ## [2.3.0] - 2026-10-02
 

@@ -12,7 +12,7 @@ The `token` command tree works on the access token already persisted in storage:
 `token show` SHALL read the token from storage and print the raw access token on stdout, followed by a newline like every text output, suitable for piping: `$(ortie token show)` and secret readers strip it. Under `--json` it prints the token as a JSON object.
 
 ### Requirement: Storage round-trip
-The token response persisted to and read from storage SHALL be the OAuth 2.0 success-params JSON, carrying at least the access token, token type, optional expiry lifetime, optional refresh token, and the issuance timestamp.
+The token response persisted to and read from storage SHALL be the OAuth 2.0 success-params JSON, carrying at least the access token, token type, optional expiry lifetime, optional refresh token, and the issuance timestamp. The lifetime SHALL be read from a number or from a numeric string, and a missing token type as `Bearer`.
 
 ### Requirement: Expiry with skew
 `token show` SHALL treat a token as expired when `issued_at + expires_in` is within a fixed skew (60 seconds) of the wall clock. When `expires_in` is absent it SHALL default to one hour (3600 seconds). When `issued_at` is absent the token is assumed still valid.

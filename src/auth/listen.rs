@@ -36,6 +36,9 @@ use crate::{
 #[derive(Debug, Parser)]
 pub struct AuthListenCommand {
     /// The state generated during the authorization flow initiation.
+    ///
+    /// A request that does not echo it is answered 404 Not Found, and the
+    /// wait goes on.
     #[arg(long, short, value_parser = state_parser)]
     #[arg(value_name = "VALUE")]
     pub state: Option<Oauth20State>,
@@ -89,7 +92,7 @@ impl AuthListenCommand {
             println!("Wait for redirection on {redirect_uri}…");
         }
 
-        let redirected_uri = await_redirect(&redirect_uri)?;
+        let redirected_uri = await_redirect(&redirect_uri, self.state.as_ref())?;
 
         let cmd = AuthResumeCommand {
             input: redirected_uri.to_string(),

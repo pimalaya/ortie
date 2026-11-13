@@ -20,10 +20,11 @@
 //! [`mcp`]: pimalaya_cli::mcp
 
 use std::{
-    io, mem,
+    io::{self, Read, Write},
+    mem,
     net::{SocketAddr, TcpStream},
     sync::mpsc::{self, RecvTimeoutError, Sender},
-    thread,
+    thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
@@ -51,7 +52,7 @@ use pimalaya_config::secret::Secret;
 use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
-use url::Url;
+use url::{Position, Url};
 
 use crate::{
     account::{Account, DEFAULT_REDIRECTION, bind_loopback},
@@ -153,6 +154,9 @@ const TOOLS: &[McpTool] = &[
 
 /// The tool only `--allow-revoke` lists.
 const REVOKE_TOOL: &str = "token_revoke";
+
+/// How long a stopped listener is given to answer.
+const LISTENER_STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Start an MCP server over stdio for one account.
 ///
@@ -257,9 +261,9 @@ enum McpFlow {
         state: Oauth20State,
         pkce: Option<Oauth20PkceCodeVerifier>,
         redirect_uri: Url,
-        /// The address of the listener catching the redirect, `None`
-        /// when the redirection is not loopback.
-        listening: Option<SocketAddr>,
+        /// The listener catching the redirect, `None` when the
+        /// redirection is not loopback.
+        listening: Option<McpListener>,
     },
     /// A device flow waiting for the user's approval.
     Device {
@@ -273,6 +277,48 @@ enum McpFlow {
     Issued(Value),
     /// The flow ended in failure, holding the `ortie-error` object.
     Failed(Value),
+}
+
+/// The loopback listener of a code flow, waiting on its own thread.
+struct McpListener {
+    addr: SocketAddr,
+    thread: JoinHandle<()>,
+}
+
+impl McpListener {
+    /// Ends the listener with the one request it takes, a refusal
+    /// echoing `state`, then waits for its port to be free.
+    ///
+    /// Its flow no longer being the pending one, nobody reads the
+    /// refusal.
+    fn stop(self, redirect_uri: &Url, state: &Oauth20State) {
+        let Ok(mut stream) = TcpStream::connect_timeout(&self.addr, LISTENER_STOP_TIMEOUT) else {
+            return;
+        };
+
+        let mut target = redirect_uri.clone();
+        target.set_fragment(None);
+        target
+            .query_pairs_mut()
+            .clear()
+            .append_pair("error", "access_denied")
+            .append_pair("state", &String::from_utf8_lossy(state.expose()));
+
+        let request = format!("GET {} HTTP/1.0\r\n\r\n", &target[Position::BeforePath..]);
+        let mut answer = Vec::new();
+
+        // NOTE: a listener busy with another connection answers late, and
+        // still ends on this request: it is then left to end by itself.
+        let answered = stream
+            .set_read_timeout(Some(LISTENER_STOP_TIMEOUT))
+            .and_then(|()| stream.write_all(request.as_bytes()))
+            .and_then(|()| stream.read_to_end(&mut answer))
+            .is_ok();
+
+        if answered && answer.starts_with(b"HTTP/1.0 200") {
+            let _ = self.thread.join();
+        }
+    }
 }
 
 /// The outcome of one device poll.
@@ -409,12 +455,13 @@ impl McpServer {
             };
 
             let now = Instant::now();
-            let interval = Duration::from_secs(device.interval as u64);
+            let interval = device.poll_interval();
+            let deadline = now + device.lifetime();
             self.flow = McpFlow::Device {
                 token_endpoint,
-                next_poll: now + interval,
+                next_poll: deadline.min(now + interval),
                 interval,
-                deadline: now + Duration::from_secs(device.expires_in as u64),
+                deadline,
                 device,
             };
 
@@ -466,17 +513,20 @@ impl McpServer {
                 let addr = listener.local_addr()?;
                 let events = self.events.clone();
                 let redirect_uri = redirect_uri.clone();
+                let state = state.clone();
 
-                thread::spawn(move || {
-                    let result = await_redirect_on(&listener, &redirect_uri)
+                let thread = thread::spawn(move || {
+                    let result = await_redirect_on(&listener, &redirect_uri, Some(&state))
                         .map(|uri| uri.to_string())
                         .map_err(|err| err.to_string());
                     let _ = events.send(McpEvent::Redirect { flow: id, result });
                 });
 
-                Some(addr)
+                Some(McpListener { addr, thread })
             }
         };
+
+        let redirect_captured = listening.is_some();
 
         self.flow = McpFlow::Code {
             id,
@@ -489,7 +539,7 @@ impl McpServer {
         let output = McpAuthGetOutput {
             kind: McpAuthGetKind::Authorization,
             authorization_uri: Some(uri.to_string()),
-            redirect_captured: Some(listening.is_some()),
+            redirect_captured: Some(redirect_captured),
             ..McpAuthGetOutput::default()
         };
 
@@ -535,8 +585,8 @@ impl McpServer {
             unreachable!();
         };
 
-        if let Some(addr) = listening {
-            wake(addr);
+        if let Some(listener) = listening {
+            listener.stop(&redirect_uri, &state);
         }
 
         match self.exchange(uri, state, pkce, redirect_uri) {
@@ -645,9 +695,9 @@ impl McpServer {
                     // NOTE: RFC 8628 section 3.5 adds 5 seconds to the
                     // interval at every slow_down.
                     if slow_down {
-                        *interval += Duration::from_secs(5);
+                        *interval = interval.saturating_add(Duration::from_secs(5));
                     }
-                    *next_poll = Instant::now() + *interval;
+                    *next_poll = deadline.min(Instant::now() + *interval);
                 }
             }
             McpDevicePoll::Done(Ok(receipt)) => self.flow = McpFlow::Issued(receipt),
@@ -693,14 +743,14 @@ impl McpServer {
     /// Drops the pending flow, stopping its listener.
     fn cancel_flow(&mut self) {
         if let McpFlow::Code {
-            listening: Some(addr),
+            state,
+            redirect_uri,
+            listening: Some(listener),
             ..
-        } = &self.flow
+        } = mem::replace(&mut self.flow, McpFlow::None)
         {
-            wake(*addr);
+            listener.stop(&redirect_uri, &state);
         }
-
-        self.flow = McpFlow::None;
     }
 }
 
@@ -839,12 +889,6 @@ fn request_device_token(
     })?;
 
     Ok(res)
-}
-
-/// Wakes the listener at `addr` so its thread ends: the empty request it
-/// reads fails, and its flow no longer being pending, nobody reads it.
-fn wake(addr: SocketAddr) {
-    let _ = TcpStream::connect_timeout(&addr, Duration::from_secs(1));
 }
 
 /// Serializes `data`, an output type of this module.

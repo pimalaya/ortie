@@ -504,9 +504,9 @@ dependencies = [
 
 [[package]]
 name = "io-http"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a9086cd840a757b9dd4105caad54a59fdb440c49be33882491a07274ca32e06"
+checksum = "9d195f9fce7b6202be9ec43c8f93e057006ddd5c9223258789606839aea62182"
 dependencies = [
  "anyhow",
  "base64-codec",
@@ -520,9 +520,9 @@ dependencies = [
 
 [[package]]
 name = "io-oauth"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b61b6c101769c3603dbd05bcf548bf66d03c044f4815083aad946147a48b86ec"
+checksum = "84b1c9414c0d8b0349553c891962d54aa88b2287555d0893fdae95a0729b0dcf"
 dependencies = [
  "anyhow",
  "base64-codec",
@@ -542,12 +542,13 @@ dependencies = [
 
 [[package]]
 name = "io-proxy"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "155d6f9416bdcf3a147e156ad92c94ec772b3684276e6405b2d3319d610922e5"
+checksum = "6b8a1b3698a70ea041d11dea1532276cf270aa289388bce8c68b27d949eb3506"
 dependencies = [
  "base64-codec",
  "log",
+ "secrecy",
  "thiserror",
 ]
 
@@ -828,9 +829,9 @@ dependencies = [
 
 [[package]]
 name = "pimalaya-stream"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2390fbe42466eda5498c913b7558a76376e982915ed3aad3a19758a86c46c098"
+checksum = "6a863f89f3c3eb4799bb4d6ae33bd8b4c399769bced7d7660d97065bd4163d81"
 dependencies = [
  "anyhow",
  "io-proxy",

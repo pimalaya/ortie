@@ -27,6 +27,12 @@ use crate::common::*;
 /// It answers the first token poll with `authorization_pending` and the
 /// next with a token, counting the polls it received.
 fn start_mock() -> (SocketAddr, Arc<AtomicUsize>, thread::JoinHandle<()>) {
+    start_mock_with(r#""expires_in":60,"interval":1"#)
+}
+
+/// The mock of [`start_mock`], its device code answer carrying `timing`
+/// as its lifetime and interval members.
+fn start_mock_with(timing: &'static str) -> (SocketAddr, Arc<AtomicUsize>, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let polls = Arc::new(AtomicUsize::new(0));
@@ -47,7 +53,7 @@ fn start_mock() -> (SocketAddr, Arc<AtomicUsize>, thread::JoinHandle<()>) {
                 (
                     200,
                     format!(
-                        r#"{{"device_code":"dc-test","user_code":"USER","verification_uri":"http://{addr}/d","expires_in":60,"interval":1}}"#
+                        r#"{{"device_code":"dc-test","user_code":"USER","verification_uri":"http://{addr}/d",{timing}}}"#
                     ),
                 )
             } else if path.starts_with("/token") {
@@ -100,6 +106,19 @@ fn auth_get_json_then_resume_stores_token() {
     assert!(resume.status.success(), "{resume:?}");
     assert!(polls.load(Ordering::SeqCst) >= 2);
     assert_eq!(stored(&token)["access_token"], "at-test");
+}
+
+#[test]
+fn auth_get_reports_the_lifetime_and_the_interval_bounded() {
+    let (addr, _, _h) = start_mock_with(r#""expires_in":86400,"interval":0"#);
+    let dir = TempDir::new().unwrap();
+    let (config, _) = write_device_config(dir.path(), addr);
+
+    let get = ortie(&config, &["--json", "auth", "get"]);
+    assert!(get.status.success(), "{get:?}");
+    let v: Value = serde_json::from_slice(&get.stdout).unwrap();
+    assert_eq!(v["expiresIn"], 3600, "{v}");
+    assert_eq!(v["interval"], 1, "{v}");
 }
 
 /// The whole grant runs in one REPL session.

@@ -3,7 +3,8 @@
 //! End-to-end coverage of the handed-off authorization code flow: a
 //! piped `auth get` hands off its state, verifier and redirect URI, and
 //! `auth listen` catches the redirection the test sends as the browser,
-//! then exchanges the code against a mock token endpoint.
+//! skipping a request that does not echo the state, then exchanges the
+//! code against a mock token endpoint.
 
 mod common;
 
@@ -160,14 +161,14 @@ fn a_handed_off_flow_is_listened_for_and_stored() {
         .unwrap();
 
     // NOTE: a refused connection never reaches the listener, so the
-    // first one accepted is the redirect itself.
+    // first one accepted is the first request it reads.
     let target = Url::parse(&redirect_uri).unwrap();
     let target = (
         target.host_str().unwrap().to_owned(),
         target.port().unwrap(),
     );
     let deadline = Instant::now() + Duration::from_secs(5);
-    let mut browser = loop {
+    let mut forger = loop {
         match TcpStream::connect((target.0.as_str(), target.1)) {
             Ok(stream) => break stream,
             Err(_) if Instant::now() < deadline => thread::sleep(Duration::from_millis(20)),
@@ -175,6 +176,16 @@ fn a_handed_off_flow_is_listened_for_and_stored() {
         }
     };
 
+    write!(
+        forger,
+        "GET /?code=forged-code&state=forged-state HTTP/1.1\r\nHost: x\r\n\r\n"
+    )
+    .unwrap();
+    let mut page = String::new();
+    let _ = forger.read_to_string(&mut page);
+    assert!(page.starts_with("HTTP/1.0 404"), "{page}");
+
+    let mut browser = TcpStream::connect((target.0.as_str(), target.1)).unwrap();
     write!(
         browser,
         "GET /?code=the-code&state={state} HTTP/1.1\r\nHost: x\r\n\r\n"
@@ -191,6 +202,7 @@ fn a_handed_off_flow_is_listened_for_and_stored() {
     assert_eq!(receipt["expiresIn"], 3600, "{receipt}");
 
     let bodies = bodies.lock().unwrap();
+    assert_eq!(bodies.len(), 1, "{bodies:?}");
     assert_eq!(form(&bodies[0], "code").as_deref(), Some("the-code"));
     assert_eq!(form(&bodies[0], "redirect_uri"), Some(redirect_uri));
     assert_eq!(form(&bodies[0], "code_verifier"), Some(verifier));

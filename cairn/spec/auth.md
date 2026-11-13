@@ -11,10 +11,19 @@ The `auth` command tree obtains tokens by running the grant configured on the ac
 ### Requirement: Authorization code grant
 On an authorization-code account, `auth get` SHALL build the authorization URL (with PKCE per the account's posture, a generated `state`, and any `extras`), print it for the user to open, and capture the redirect on a loopback listener, then exchange the code and write storage. Ortie SHALL NOT launch a browser.
 
+### Requirement: Only the redirect of the flow ends the wait
+A loopback listener, the one of `auth get`, of `auth listen` or of the MCP server, SHALL end its wait only on a `GET` to the path of the redirect URI carrying a `code` or an `error` and echoing the state of the flow, when it holds one (`auth listen` run without `--state` holds none). Any other connection SHALL be answered `404 Not Found` and dropped, after at most 5 seconds and a request line of 8 KiB, and the wait SHALL go on: a stray or forged request to the port cannot end the flow. The page answered to the redirect SHALL NOT claim a success, the code not being exchanged yet.
+
+### Requirement: The issuer is not compared
+An account names no issuer and Ortie reads no server metadata, so the `iss` parameter of an authorization response (RFC 9207) SHALL NOT be compared: the state and PKCE bind the response to its request.
+
+### Requirement: A bare error status is named
+When the token, device authorization or revocation endpoint answers an error status without an OAuth error body, the command SHALL fail naming the HTTP status.
+
 ### Requirement: Manual resume fallback
 When the account's redirection uses a non-loopback scheme the local listener cannot capture (for example a reverse-DNS private-use scheme), `auth get` SHALL skip the listener and print the manual `auth resume` command (state, PKCE and redirect URI included) after the authorization URL. A non-interactive or `--json` `auth get` SHALL hand off with the authorization URI, the state, the PKCE verifier and the redirect URI (`redirectUri`), and its human output SHALL print the `auth listen` command, when the redirect URI is loopback, before the `auth resume` one. `auth resume` interprets its positional input per the account's grant: the redirected URI on an authorization-code account.
 
-The printed commands SHALL be runnable as printed, whatever the generated values look like: each value SHALL be attached to its flag with `=` and quoted for the platform's shells, single quoted on Unix and double quoted on Windows, which cmd and PowerShell both read. A PKCE verifier is drawn from the RFC 7636 unreserved set and a state from URL-safe base64, so either can begin with `-` and be taken for a flag, which the `=` form settles before the parser sees it, or with `~`, which the quotes stop the shell expanding.
+The printed commands SHALL be runnable as printed, whatever the generated values look like: each value SHALL be attached to its flag with `=` and quoted for the platform's shells, single quoted on Unix and double quoted on Windows, which cmd and PowerShell both read. A PKCE verifier is drawn from the RFC 7636 unreserved set and a state from URL-safe base64, so either can begin with `-` and be taken for a flag, which the `=` form settles before the parser sees it, or with `~`, which the quotes stop the shell expanding. `--pkce` SHALL refuse a verifier that is not 43 to 128 characters of that set, without echoing it, and `--state` an empty state or one holding a byte outside printable ASCII.
 
 The printed commands, and the one the device grant prints when it hands off, SHALL carry one `-c` per configuration path and the `-a` name `auth get` ran with, each quoted the same way, and omit either flag when it was not given. Resumed against another account, the code reaches a token endpoint that did not issue it, or the token lands in another account's storage.
 
@@ -26,6 +35,8 @@ An account SHALL accept `endpoints.device-authorization`, checked by `auth get` 
 
 ### Requirement: Device grant runs
 On a device account, `auth get` SHALL request device authorization, display the user code and verification URI (preferring `verification_uri_complete` when present), and either poll to completion (interactive) or print the device response and hand off (non-interactive / `--json`), then write storage as the code grant does. `auth resume` SHALL interpret its positional as the device code, and the authorization-code-only flags (`--state`, `--pkce`, `--redirect-uri`) SHALL be rejected on device accounts. Account `extras` are not forwarded on the device authorization request.
+
+The lifetime and the polling interval the server states SHALL be bounded before use, the lifetime capped at one hour and the interval kept between 1 and 60 seconds, 5 seconds more at each `slow_down`, and no wait SHALL outlast the lifetime: a server cannot make Ortie wait without end, nor poll without pause. The device response printed SHALL carry the bounded values. A resume, handed the device code alone, polls every 5 seconds for 30 minutes.
 
 ### Requirement: Client credentials grants
 The flat `grant` selector SHALL accept `client-credentials` (RFC 6749 section 4.4, client authenticated by `client-secret`) and `client-credentials-jwt` (RFC 7523 section 2.2, client authenticated by a signed JWT assertion). On these accounts `auth get` SHALL run the exchange headlessly in one shot against `endpoints.token` and write storage; `auth resume` SHALL be rejected since there is nothing to resume.
