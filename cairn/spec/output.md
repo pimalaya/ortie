@@ -54,3 +54,10 @@ Every command's text rendering SHALL end with a newline, `token show` included, 
 
 ### Requirement: A text record prints as aligned fields
 A text rendering holding a record, `token inspect` and the `auth get` authorization and device requests, SHALL print it through pimalaya-cli's `fields::Fields`: one `Label: value` line per field, values aligned two spaces past the longest label's colon, a list such as the scopes one item per line under the first. A link or a command for the user to copy SHALL follow its sentence after a blank line, indented two spaces, as the welcome and clap's usage lines are.
+
+### Requirement: A refused command line exits 2
+The command line SHALL be parsed through pimalaya-cli's `clap::parse`: help and version print as clap prints them, and a command line the grammar refuses (an unknown flag or command, a missing argument, a bad value) SHALL exit 2 before any configuration is read. With a `--json` word before any `--`, it SHALL print on stdout the failure object coded `usage-invalid`, its `error` clap's message without its `error: ` prefix nor styles, `sources` empty and `backtrace` null, and nothing on stderr; otherwise clap's rendering on stderr and nothing on stdout. Exit 1 stays a failure object.
+
+#### Scenario: An unknown flag under JSON
+- WHEN `ortie --json token show --nope` runs
+- THEN it prints one failure object coded `usage-invalid`, its `error` naming `--nope`, on stdout and exits 2

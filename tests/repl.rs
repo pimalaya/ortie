@@ -34,7 +34,8 @@ fn write_device_config(dir: &Path) -> (PathBuf, PathBuf) {
 /// failure.
 ///
 /// The token endpoint points at a closed port, so `auth resume` fails
-/// without a server, and an unknown subcommand fails at parsing.
+/// without a server, and an unknown subcommand fails at parsing, coded
+/// `usage-invalid` and stripped of clap's `error: ` prefix.
 #[test]
 fn piped_json_session_prints_errors_on_stdout() {
     let dir = TempDir::new().unwrap();
@@ -53,8 +54,12 @@ fn piped_json_session_prints_errors_on_stdout() {
 
     assert_eq!(lines.len(), 4, "stdout: {stdout}");
     assert_eq!(lines[0]["accessToken"], "at-test");
-    assert!(lines[1]["error"].is_string(), "stdout: {stdout}");
+    let refused = lines[1]["error"].as_str().unwrap();
+    assert_eq!(lines[1]["code"], "usage-invalid", "stdout: {stdout}");
+    assert!(refused.contains("frobnicate"), "{refused}");
+    assert!(!refused.starts_with("error:"), "{refused}");
     assert!(lines[2]["error"].is_string(), "stdout: {stdout}");
+    assert_eq!(lines[2]["code"], Value::Null, "stdout: {stdout}");
     assert_eq!(lines[3]["accessToken"], "at-test");
 
     let stderr = String::from_utf8_lossy(&out.stderr);

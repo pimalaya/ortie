@@ -90,8 +90,8 @@ mod token;
 
 use std::process;
 
-use clap::Parser;
 use pimalaya_cli::{
+    clap::parse,
     error::ErrorReport,
     log::Logger,
     printer::StdoutPrinter,
@@ -107,7 +107,7 @@ fn main() {
     // portable baseline until one is installed.
     let _ = SimdCpu::install_detected();
 
-    let cli = Cli::parse();
+    let cli = parse::<Cli>();
 
     Logger::try_init(&cli.log).expect("init logger");
     let mut printer = StdoutPrinter::new(&cli.json);

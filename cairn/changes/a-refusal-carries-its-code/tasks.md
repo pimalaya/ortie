@@ -26,13 +26,13 @@ change: a-refusal-carries-its-code
 
 ## Phase 2, the refused line (commit `feat!: print a refused command line as a failure object under --json`)
 
-- [ ] src/main.rs:110: `pimalaya_cli::clap::parse::<Cli>()`.
-- [ ] src/mcp.rs:781-782: ortie's own argument refusals coded `usage-invalid` through `CodedError::new(CommonCode::UsageInvalid, ..)`.
-- [ ] tests/exit.rs (new): `--json token show --nope` (stdout one failure object coded `usage-invalid`, stderr empty, exit 2); without `--json` (stderr clap's text, stdout empty, exit 2); `--json` after `--` stays an argument.
-- [ ] tests/repl.rs: a piped refused line prints `"code":"usage-invalid"` and no `error: ` prefix (tests/repl.rs:39 checks only a string today).
-- [ ] tests/mcp.rs:499: the undeclared argument's failure carries `usage-invalid`.
-- [ ] Spec: "A refused command line exits 2" (output), "Interactive versus piped output" (repl), "A tool's output is the command's payload" (mcp) folded.
-- [ ] Phase checks pass.
+- [x] src/main.rs:110: `pimalaya_cli::clap::parse::<Cli>()`.
+- [x] src/mcp.rs:781-782: ortie's own argument refusals coded `usage-invalid` through `CodedError::new(CommonCode::UsageInvalid, ..)`.
+- [x] tests/exit.rs (new): `--json token show --nope` (stdout one failure object coded `usage-invalid`, stderr empty, exit 2); without `--json` (stderr clap's text, stdout empty, exit 2); `--json` after `--` stays an argument.
+- [x] tests/repl.rs: a piped refused line prints `"code":"usage-invalid"` and no `error: ` prefix (tests/repl.rs:39 checks only a string today).
+- [x] tests/mcp.rs:499: the undeclared argument's failure carries `usage-invalid`.
+- [x] Spec: "A refused command line exits 2" (output), "Interactive versus piped output" (repl), "A tool's output is the command's payload" (mcp) folded.
+- [x] Phase checks pass.
 
 ## Phase 3, the codes (commit `feat: code the OAuth refusals`)
 

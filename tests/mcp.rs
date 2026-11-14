@@ -210,6 +210,13 @@ impl Server {
     }
 }
 
+/// The failure object a failed tool call holds as its text.
+fn failure(result: &Value) -> Value {
+    assert_eq!(result["isError"], true, "{result}");
+    let text = result["content"][0]["text"].as_str().unwrap();
+    serde_json::from_str(text).unwrap_or_else(|err| panic!("{err}: {text}"))
+}
+
 /// The query parameter `key` of `uri`.
 fn query(uri: &Url, key: &str) -> String {
     uri.query_pairs()
@@ -503,16 +510,16 @@ fn an_unknown_argument_or_tool_is_refused() {
 
     let mut server = Server::start(&config, &[]);
 
-    let resume = server.call("auth_resume", json!({ "url": "x" }));
-    assert_eq!(resume["isError"], true, "{resume}");
+    let resume = failure(&server.call("auth_resume", json!({ "url": "x" })));
+    assert_eq!(resume["code"], "usage-invalid", "{resume}");
     assert!(resume.to_string().contains("takes `uri`"), "{resume}");
 
-    let inspect = server.call("token_inspect", json!({ "verbose": true }));
-    assert_eq!(inspect["isError"], true, "{inspect}");
+    let inspect = failure(&server.call("token_inspect", json!({ "verbose": true })));
+    assert_eq!(inspect["code"], "usage-invalid", "{inspect}");
     assert!(inspect.to_string().contains("takes none"), "{inspect}");
 
     let resume = server.call("auth_resume", json!({ "uri": "http://127.0.0.1/" }));
-    assert_eq!(resume["isError"], true, "{resume}");
+    assert_eq!(failure(&resume)["code"], Value::Null, "{resume}");
     assert!(
         resume.to_string().contains("call auth_get first"),
         "{resume}"
@@ -523,6 +530,30 @@ fn an_unknown_argument_or_tool_is_refused() {
         json!({ "name": "token_show", "arguments": {} }),
     );
     assert_eq!(unknown["error"]["code"], -32602, "{unknown}");
+
+    server.finish();
+}
+
+/// A tool argument missing or not a string is refused by Ortie itself,
+/// coded as pimalaya-cli codes the arguments it refuses.
+#[test]
+fn a_missing_or_mistyped_argument_is_refused_as_usage() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock(0);
+    let (config, _) = write_mcp_config(dir.path(), addr, "");
+
+    let mut server = Server::start(&config, &[]);
+
+    let missing = failure(&server.call("auth_resume", json!({})));
+    assert_eq!(missing["code"], "usage-invalid", "{missing}");
+    assert_eq!(missing["error"], "Missing argument `uri`", "{missing}");
+
+    let mistyped = failure(&server.call("auth_resume", json!({ "uri": 1 })));
+    assert_eq!(mistyped["code"], "usage-invalid", "{mistyped}");
+    assert_eq!(
+        mistyped["error"], "Argument `uri` must be a string",
+        "{mistyped}"
+    );
 
     server.finish();
 }

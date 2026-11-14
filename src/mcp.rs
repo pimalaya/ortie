@@ -28,7 +28,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use clap::Parser;
 use io_oauth::{
     client::{Oauth20ClientStd, Oauth20ClientStdError, await_redirect_on},
@@ -41,7 +41,7 @@ use io_oauth::{
 };
 use pimalaya_cli::{
     clap::commands::json_schema::output_schema,
-    error::{ErrorReport, NoErrorCode},
+    error::{CodedError, CommonCode, ErrorReport, NoErrorCode},
     mcp::{
         Input, ServerInfo, ToolCall, ToolResult, answer, error_object, send, spawn_stdin_reader,
         tool_output_schema,
@@ -776,11 +776,13 @@ impl McpTool {
             return Ok(None);
         };
 
-        match arguments.get(name) {
-            Some(Value::String(value)) => Ok(Some(value.clone())),
-            Some(_) => bail!("Argument `{name}` must be a string"),
-            None => bail!("Missing argument `{name}`"),
-        }
+        let message = match arguments.get(name) {
+            Some(Value::String(value)) => return Ok(Some(value.clone())),
+            Some(_) => format!("Argument `{name}` must be a string"),
+            None => format!("Missing argument `{name}`"),
+        };
+
+        Err(CodedError::new(CommonCode::UsageInvalid, message).into())
     }
 }
 
