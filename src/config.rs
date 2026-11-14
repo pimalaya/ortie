@@ -112,12 +112,31 @@ pub struct AccountConfig {
     pub auto_refresh: bool,
     /// Shell commands reading and writing the persisted token.
     pub storage: StoragesConfig,
+    /// Refused: the hooks were removed in 3.0.0.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub hooks: Option<HooksRemovedConfig>,
 }
 
 /// The default of [`AccountConfig::auto_refresh`]: on, since a caller of
 /// `token show` wants a token it can use.
 fn auto_refresh_default() -> bool {
     true
+}
+
+/// The `hooks` table, which no configuration holds any more.
+#[derive(Debug)]
+pub enum HooksRemovedConfig {}
+
+impl<'de> Deserialize<'de> for HooksRemovedConfig {
+    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+        Err(de::Error::custom(
+            "The `hooks` table was removed in 3.0.0: chain a command after \
+             `storage.write.command`, which receives the token on every issue \
+             and refresh, see \
+             https://github.com/pimalaya/ortie/blob/master/CHANGELOG.md",
+        ))
+    }
 }
 
 /// OAuth 2.0 grant flow run by the auth commands.
@@ -421,27 +440,69 @@ storage.write.command = ["tee", "token.json"]
         assert!(try_parse(&account("xn--bcher-kva.example")).is_ok());
     }
 
-    /// A `hooks` table, which older versions read, is refused like any
-    /// unknown key rather than dropped without a word.
-    #[test]
-    fn a_hooks_table_is_refused() {
-        let err = try_parse(
+    /// An account every level of which is valid, `extra` lines appended.
+    fn account_with(root: &str, extra: &str) -> String {
+        format!(
             r#"
+{root}
 [accounts.test]
 client-id = "app-id"
-grant = "client-credentials"
+client-secret.raw = "s3cret"
 endpoints.token = "https://login.example.com/token"
 storage.read.command = ["cat", "token.json"]
 storage.write.command = ["tee", "token.json"]
-hooks.on-issue.success.command = "true"
-"#,
+{extra}
+"#
         )
-        .unwrap_err();
+    }
 
-        assert!(
-            format!("{err:?}").contains("unknown field `hooks`"),
-            "{err:?}"
-        );
+    #[test]
+    fn an_unknown_key_is_refused_at_every_level() {
+        let cases = [
+            ("typo = 1", "", "typo"),
+            ("", "client-idd = \"app-id\"", "client-idd"),
+            ("", "endpoints.tokn = \"https://x.example\"", "tokn"),
+            ("", "storage.typo = 1", "typo"),
+            ("", "storage.read.typo = 1", "typo"),
+            ("", "storage.write.typo = 1", "typo"),
+        ];
+
+        assert!(try_parse(&account_with("", "")).is_ok());
+
+        for (root, extra, key) in cases {
+            let err = try_parse(&account_with(root, extra)).unwrap_err();
+            let err = format!("{err:?}");
+            let needle = format!("unknown field `{key}`");
+            assert!(err.contains(&needle), "{root}{extra}: {err}");
+        }
+
+        // pimalaya-config's secret is a one-key enum, refusing a second key
+        // without naming it.
+        assert!(try_parse(&account_with("", "client-secret.typo = 1")).is_err());
+    }
+
+    /// The `hooks` table, which Ortie read until 3.0.0, is refused by
+    /// name whatever it holds, pointing at the notes of its removal.
+    #[test]
+    fn a_removed_key_points_at_the_migration_notes() {
+        let cases = [
+            "hooks.on-issue.success.command = \"true\"",
+            "hooks.on-refresh.error.notify.summary = \"Ortie\"",
+            "hooks = {}",
+            "[accounts.test.hooks.on-issue.success]\ncommand = \"true\"",
+        ];
+
+        for extra in cases {
+            let err = try_parse(&account_with("", extra)).unwrap_err();
+            let err = format!("{err:?}");
+            assert!(
+                err.contains("The `hooks` table was removed"),
+                "{extra}: {err}"
+            );
+            assert!(err.contains("storage.write.command"), "{extra}: {err}");
+            assert!(err.contains("CHANGELOG.md"), "{extra}: {err}");
+            assert!(!err.contains("unknown field"), "{extra}: {err}");
+        }
     }
 
     #[test]
