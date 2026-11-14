@@ -425,6 +425,26 @@ fn a_device_flow_bounds_the_lifetime_and_the_interval_of_the_server() {
     assert_eq!(bodies.lock().unwrap().len(), 2);
 }
 
+/// A device code left unapproved past its lifetime fails the flow, the
+/// failure object `auth_status` answers coded `device-code-expired`.
+#[test]
+fn a_device_flow_past_its_deadline_is_coded_device_code_expired() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock_with(usize::MAX, r#""expires_in":1,"interval":1"#);
+    let (config, _) = write_mcp_config(dir.path(), addr, r#"grant = "device""#);
+
+    let mut server = Server::start(&config, &[]);
+
+    let get = server.call("auth_get", json!({}))["structuredContent"].clone();
+    assert_eq!(get["kind"], "device", "{get}");
+
+    let status = server.settle();
+    assert_eq!(status["status"], "failed", "{status}");
+    assert_eq!(status["error"]["code"], "device-code-expired", "{status}");
+
+    server.finish();
+}
+
 #[test]
 fn a_request_not_echoing_the_state_does_not_end_the_flow() {
     let dir = TempDir::new().unwrap();

@@ -14,7 +14,6 @@ use pimalaya_cli::{
             completion::CompletionCommand, json_schema::JsonSchemaCommand, manual::ManualCommand,
         },
     },
-    error::NoErrorCode,
     footer, long_version,
     mcp::exit_on_failure,
     printer::Printer,
@@ -24,8 +23,14 @@ use pimalaya_cli::{
 use pimalaya_config::toml::{ConfigMissingError, TomlConfig};
 
 use crate::{
-    account::Account, auth::AuthCommand, config::Config, json_schema, mcp::McpCommand,
-    repl::ReplCommand, token::TokenCommand,
+    account::Account,
+    auth::AuthCommand,
+    config::Config,
+    error::{self, ErrorCode},
+    json_schema,
+    mcp::McpCommand,
+    repl::ReplCommand,
+    token::TokenCommand,
 };
 
 /// The sample configuration as a raw file, for `curl` to fetch.
@@ -100,10 +105,10 @@ impl Command {
                     Err(err) if err.is::<ConfigMissingError>() && is_wanted(&*printer) => {
                         return Err(err);
                     }
-                    account => exit_on_failure::<NoErrorCode, _>(account),
+                    account => exit_on_failure::<ErrorCode, _>(account),
                 };
 
-                exit_on_failure::<NoErrorCode, _>(cmd.execute(account));
+                exit_on_failure::<ErrorCode, _>(cmd.execute(account).map_err(error::with_code));
                 Ok(())
             }
             Self::Manual(cmd) => cmd.execute(printer, Cli::command()),

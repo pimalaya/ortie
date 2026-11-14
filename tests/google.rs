@@ -52,7 +52,8 @@ mod anonymous {
         let error = json_failure(&ortie(&config, &args));
 
         let message = error["error"].as_str().unwrap_or_default();
-        assert!(message.contains("InvalidClient"), "{error}");
+        assert!(message.contains("(code invalid_client)"), "{error}");
+        assert_eq!(error["code"], "client-invalid", "{error}");
         assert_eq!(fs::read_to_string(token).unwrap(), "");
     }
 

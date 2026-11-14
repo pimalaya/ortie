@@ -20,11 +20,12 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use pimalaya_cli::{error::NoErrorCode, printer::Printer, repl::Repl};
+use pimalaya_cli::{printer::Printer, repl::Repl};
 
 use crate::{
     account::Account,
     auth::{get::AuthGetCommand, listen::AuthListenCommand, resume::AuthResumeCommand},
+    error::{self, ErrorCode},
     token::TokenCommand,
 };
 
@@ -104,8 +105,9 @@ impl ReplCommand {
     ) -> Result<()> {
         let repl = Repl::new("ortie", printer.is_json());
 
-        repl.run::<ReplCommandTree, NoErrorCode>(|printer, cmd| {
+        repl.run::<ReplCommandTree, ErrorCode>(|printer, cmd| {
             cmd.execute(printer, &mut account, invocation)
+                .map_err(error::with_code)
         })
     }
 }

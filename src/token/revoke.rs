@@ -5,7 +5,7 @@
 
 use std::fmt;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::Result;
 use clap::Parser;
 use io_oauth::{client::Oauth20ClientStd, rfc7009::revoke::*};
 use pimalaya_cli::printer::Printer;
@@ -14,7 +14,7 @@ use schemars::JsonSchema;
 use secrecy::ExposeSecret;
 use serde::Serialize;
 
-use crate::account::Account;
+use crate::{account::Account, error};
 
 /// Revoke the stored token at the authorization server.
 ///
@@ -29,7 +29,7 @@ impl TokenRevokeCommand {
     /// reports which one went.
     pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         let Some(endpoint) = account.revocation_endpoint.clone() else {
-            bail!("Missing endpoints.revocation in the account config");
+            return Err(error::endpoint_missing("endpoints.revocation"));
         };
 
         let token = account.resolve_token()?;
@@ -60,16 +60,13 @@ impl TokenRevokeCommand {
 
         match client.revoke_token(&endpoint, params)? {
             Ok(()) => printer.out(TokenRevokeOutput { revoked }),
-            Err(res) => {
-                let err = anyhow!("Revoke token error (code {:?})", res.error);
-
-                Err(match (res.error_description, res.error_uri) {
-                    (None, None) => err,
-                    (Some(desc), None) => anyhow!("{desc}").context(err),
-                    (None, Some(uri)) => anyhow!("{uri}").context(err),
-                    (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
-                })
-            }
+            Err(res) => Err(error::oauth_error(
+                "Revoke token error",
+                &res.error,
+                res.error_description,
+                res.error_uri,
+                None,
+            )),
         }
     }
 }

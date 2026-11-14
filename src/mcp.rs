@@ -41,7 +41,7 @@ use io_oauth::{
 };
 use pimalaya_cli::{
     clap::commands::json_schema::output_schema,
-    error::{CodedError, CommonCode, ErrorReport, NoErrorCode},
+    error::{CodedError, CommonCode, ErrorReport},
     mcp::{
         Input, ServerInfo, ToolCall, ToolResult, answer, error_object, send, spawn_stdin_reader,
         tool_output_schema,
@@ -64,6 +64,7 @@ use crate::{
         resume::AuthResumeCommand,
     },
     config::GrantConfig,
+    error::{self, ErrorCode},
     json_schema,
     token::{
         inspect::TokenInspectCommand, issued::TokenIssuedOutput, refresh::TokenRefreshCommand,
@@ -426,7 +427,7 @@ impl McpServer {
     ) -> ToolResult {
         let mut printer = CapturePrinter::default();
         let result = cmd(&mut printer, &mut self.account);
-        ToolResult::printed::<NoErrorCode>(printer, result)
+        ToolResult::printed::<ErrorCode>(printer, result.map_err(error::with_code))
     }
 
     /// Runs one command over the account, answering the single value it
@@ -595,7 +596,7 @@ impl McpServer {
                 ToolResult::success(receipt)
             }
             Err(err) => {
-                let report = error_object::<NoErrorCode>(err);
+                let report = failure_object(err);
                 self.flow = McpFlow::Failed(report.clone());
                 ToolResult::failure(report)
             }
@@ -630,7 +631,7 @@ impl McpServer {
 
         self.flow = match outcome {
             Ok(receipt) => McpFlow::Issued(receipt),
-            Err(err) => McpFlow::Failed(error_object::<NoErrorCode>(err)),
+            Err(err) => McpFlow::Failed(failure_object(err)),
         };
     }
 
@@ -701,9 +702,7 @@ impl McpServer {
                 }
             }
             McpDevicePoll::Done(Ok(receipt)) => self.flow = McpFlow::Issued(receipt),
-            McpDevicePoll::Done(Err(err)) => {
-                self.flow = McpFlow::Failed(error_object::<NoErrorCode>(err))
-            }
+            McpDevicePoll::Done(Err(err)) => self.flow = McpFlow::Failed(failure_object(err)),
         }
     }
 
@@ -728,15 +727,13 @@ impl McpServer {
             Err(res) if res.error == Oauth20AccessTokenErrorCode::SlowDown => {
                 McpDevicePoll::SlowDown
             }
-            Err(res) => {
-                let err = anyhow!("Issue access token error (code {:?})", res.error);
-                McpDevicePoll::Done(Err(match (res.error_description, res.error_uri) {
-                    (None, None) => err,
-                    (Some(desc), None) => anyhow!("{desc}").context(err),
-                    (None, Some(uri)) => anyhow!("{uri}").context(err),
-                    (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
-                }))
-            }
+            Err(res) => McpDevicePoll::Done(Err(error::oauth_error(
+                "Issue access token error",
+                &res.error,
+                res.error_description,
+                res.error_uri,
+                None,
+            ))),
         }
     }
 
@@ -843,7 +840,7 @@ pub struct McpAuthStatusOutput {
     #[schemars(with = "Option<TokenIssuedOutput>")]
     pub receipt: Option<Value>,
     /// The `ortie-error` object, once failed.
-    #[schemars(with = "Option<ErrorReport>")]
+    #[schemars(with = "Option<ErrorReport<ErrorCode>>")]
     pub error: Option<Value>,
 }
 
@@ -903,6 +900,11 @@ fn to_value(data: impl Serialize) -> Result<Value> {
 fn tool_result(outcome: Result<Value>) -> ToolResult {
     match outcome {
         Ok(value) => ToolResult::success(value),
-        Err(err) => ToolResult::error::<NoErrorCode>(err),
+        Err(err) => ToolResult::error::<ErrorCode>(error::with_code(err)),
     }
+}
+
+/// The `ortie-error` object of `err`, with its code.
+fn failure_object(err: anyhow::Error) -> Value {
+    error_object::<ErrorCode>(error::with_code(err))
 }

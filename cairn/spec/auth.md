@@ -18,7 +18,7 @@ A loopback listener, the one of `auth get`, of `auth listen` or of the MCP serve
 An account names no issuer and Ortie reads no server metadata, so the `iss` parameter of an authorization response (RFC 9207) SHALL NOT be compared: the state and PKCE bind the response to its request.
 
 ### Requirement: A bare error status is named
-When the token, device authorization or revocation endpoint answers an error status without an OAuth error body, the command SHALL fail naming the HTTP status.
+When the token, device authorization or revocation endpoint answers an error status without an OAuth error body, the command SHALL fail naming the HTTP status, coded `permission-denied` for a 403 and `rate-limited` for a 429.
 
 ### Requirement: Manual resume fallback
 When the account's redirection uses a non-loopback scheme the local listener cannot capture (for example a reverse-DNS private-use scheme), `auth get` SHALL skip the listener and print the manual `auth resume` command (state, PKCE and redirect URI included) after the authorization URL. A non-interactive or `--json` `auth get` SHALL hand off with the authorization URI, the state, the PKCE verifier and the redirect URI (`redirectUri`), and its human output SHALL print the `auth listen` command, when the redirect URI is loopback, before the `auth resume` one. `auth resume` interprets its positional input per the account's grant: the redirected URI on an authorization-code account.

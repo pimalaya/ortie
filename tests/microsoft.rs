@@ -65,7 +65,8 @@ mod anonymous {
         let error = json_failure(&ortie(&config, &["--json", "auth", "get"]));
 
         let message = error["error"].as_str().unwrap_or_default();
-        assert!(message.contains("InvalidClient"), "{error}");
+        assert!(message.contains("(code invalid_client)"), "{error}");
+        assert_eq!(error["code"], "client-invalid", "{error}");
         assert_eq!(fs::read_to_string(token).unwrap(), "");
     }
 }
@@ -195,7 +196,8 @@ mod credentialed {
         let error = json_failure(&ortie(&config, &["--json", "auth", "get"]));
 
         let message = error["error"].as_str().unwrap_or_default();
-        assert!(message.contains("InvalidClient"), "{error}");
+        assert!(message.contains("(code invalid_client)"), "{error}");
+        assert_eq!(error["code"], "client-invalid", "{error}");
 
         let sources = error["sources"].as_array().unwrap();
         let hint = "The certificate credential may be expired and need renewal";

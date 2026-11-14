@@ -309,7 +309,7 @@ fn invalid_client_on_the_jwt_kind_hints_certificate_renewal() {
     let out = ortie(&config, &["auth", "get"]);
     assert!(!out.status.success(), "{out:?}");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("InvalidClient"), "{stdout}");
+    assert!(stdout.contains("(code invalid_client)"), "{stdout}");
     assert!(
         stdout.contains("The certificate credential may be expired and need renewal"),
         "{stdout}"
@@ -330,5 +330,25 @@ fn an_error_status_without_an_oauth_body_is_reported() {
     assert_eq!(out.status.code(), Some(1), "{out:?}");
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("status 503"), "{stdout}");
+    assert!(std::fs::read_to_string(token).unwrap().is_empty());
+}
+
+/// A client secret the server refuses as `invalid_client` is coded
+/// `client-invalid`, its message naming the code as the server spelled it.
+#[test]
+fn invalid_client_is_coded_client_invalid() {
+    let (addr, _requests) = start_mock(401, r#"{"error":"invalid_client"}"#);
+    let dir = TempDir::new().unwrap();
+    let (config, token) = write_cc_config(
+        dir.path(),
+        addr,
+        "grant = \"client-credentials\"\nclient-secret.raw = \"s3cret\"",
+    );
+
+    let failure = json_failure(&ortie(&config, &["--json", "auth", "get"]));
+
+    assert_eq!(failure["code"], "client-invalid", "{failure}");
+    let message = "Issue access token error (code invalid_client)";
+    assert_eq!(failure["error"], message, "{failure}");
     assert!(std::fs::read_to_string(token).unwrap().is_empty());
 }

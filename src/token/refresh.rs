@@ -3,7 +3,7 @@
 //! The `token refresh` subcommand, making the stored access token fresh
 //! again, and the per-grant decision of how that is done.
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result};
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 use secrecy::SecretBox;
@@ -22,6 +22,7 @@ use crate::{
     account::Account,
     auth::get::{client_credentials_error, request_client_credentials_token},
     config::GrantConfig,
+    error::{self, ErrorCode},
     token::issued::TokenIssuedOutput,
 };
 
@@ -71,7 +72,10 @@ impl TokenRefreshCommand {
                 let token = account.resolve_token()?;
 
                 let Some(refresh_token) = token.refresh_token else {
-                    bail!("Missing refresh token");
+                    return Err(error::coded(
+                        ErrorCode::TokenMissing,
+                        "Missing refresh token",
+                    ));
                 };
 
                 Self::refresh(account, refresh_token)?
@@ -106,7 +110,7 @@ impl TokenRefreshCommand {
         refresh_token: SecretBox<str>,
     ) -> Result<Oauth20AccessTokenSuccessParams> {
         let Some(token_endpoint) = account.token_endpoint.clone() else {
-            bail!("Missing endpoints.token in the account config");
+            return Err(error::endpoint_missing("endpoints.token"));
         };
 
         let client_secret = account.client_secret.clone().map(Secret::get).transpose()?;
@@ -135,16 +139,13 @@ impl TokenRefreshCommand {
                     "Store refreshed access token error, run `auth get` if the next refresh fails",
                 )
             }
-            Err(res) => {
-                let err = anyhow!("Refresh access token error (code {:?})", res.error);
-
-                Err(match (res.error_description, res.error_uri) {
-                    (None, None) => err,
-                    (Some(desc), None) => anyhow!("{desc}").context(err),
-                    (None, Some(uri)) => anyhow!("{uri}").context(err),
-                    (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
-                })
-            }
+            Err(res) => Err(error::oauth_error(
+                "Refresh access token error",
+                &res.error,
+                res.error_description,
+                res.error_uri,
+                None,
+            )),
         }
     }
 }

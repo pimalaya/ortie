@@ -15,7 +15,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use base64_codec::codec::{Base64Alphabet, Base64Codec};
 use clap::Parser;
 use humantime::format_duration;
@@ -52,6 +52,7 @@ use crate::{
     account::Account,
     auth::resume::AuthResumeCommand,
     config::{GrantConfig, PkceConfig},
+    error,
     token::issued::TokenIssuedOutput,
 };
 
@@ -202,7 +203,7 @@ pub(crate) fn authorization_request(
     redirect_uri: &Url,
 ) -> Result<AuthorizationRequest> {
     let Some(authorization_endpoint) = &account.authorization_endpoint else {
-        bail!("Missing endpoints.authorization in the account config");
+        return Err(error::endpoint_missing("endpoints.authorization"));
     };
 
     // NOTE: re-encode the random state in URL-safe base64 so it
@@ -431,10 +432,10 @@ pub(crate) fn request_device_authorization(
     account: &mut Account,
 ) -> Result<(Url, Oauth20DeviceAuthSuccessParams)> {
     let Some(device_endpoint) = account.device_authorization_endpoint.clone() else {
-        bail!("Missing endpoints.device-authorization in the account config");
+        return Err(error::endpoint_missing("endpoints.device-authorization"));
     };
     let Some(token_endpoint) = account.token_endpoint.clone() else {
-        bail!("Missing endpoints.token in the account config");
+        return Err(error::endpoint_missing("endpoints.token"));
     };
 
     let params = Oauth20DeviceAuthRequestParams {
@@ -453,13 +454,13 @@ pub(crate) fn request_device_authorization(
     let device = match device_client.request_device_auth(&device_endpoint, params)? {
         Ok(device) => device,
         Err(res) => {
-            let err = anyhow!("Device authorization error (code {:?})", res.error);
-            return Err(match (res.error_description, res.error_uri) {
-                (None, None) => err,
-                (Some(desc), None) => anyhow!("{desc}").context(err),
-                (None, Some(uri)) => anyhow!("{uri}").context(err),
-                (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
-            });
+            return Err(error::oauth_error(
+                "Device authorization error",
+                &res.error,
+                res.error_description,
+                res.error_uri,
+                None,
+            ));
         }
     };
 
@@ -485,15 +486,13 @@ pub(crate) fn complete_device_token_poll(
     // body the server answered with.
     match client.await_device_access_token(&account.tls, device) {
         Ok(Ok(res)) => report_token_issued(account, &res),
-        Ok(Err(res)) => {
-            let err = anyhow!("Issue access token error (code {:?})", res.error);
-            Err(match (res.error_description, res.error_uri) {
-                (None, None) => err,
-                (Some(desc), None) => anyhow!("{desc}").context(err),
-                (None, Some(uri)) => anyhow!("{uri}").context(err),
-                (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
-            })
-        }
+        Ok(Err(res)) => Err(error::oauth_error(
+            "Issue access token error",
+            &res.error,
+            res.error_description,
+            res.error_uri,
+            None,
+        )),
         Err(err) => Err(err.into()),
     }
 }
@@ -530,7 +529,7 @@ pub(crate) fn request_client_credentials_token(
     account: &mut Account,
 ) -> Result<Result<Oauth20AccessTokenSuccessParams, Oauth20AccessTokenErrorParams>> {
     let Some(token_endpoint) = account.token_endpoint.clone() else {
-        bail!("Missing endpoints.token in the account config");
+        return Err(error::endpoint_missing("endpoints.token"));
     };
 
     let mut client =
@@ -665,20 +664,7 @@ pub(crate) fn client_credentials_error(
         && error == Oauth20AccessTokenErrorCode::InvalidClient)
         .then_some("The certificate credential may be expired and need renewal");
 
-    let top = format!("{action} (code {error:?})");
-    let detail = match (error_description, error_uri) {
-        (None, None) => None,
-        (Some(desc), None) => Some(desc),
-        (None, Some(uri)) => Some(uri),
-        (Some(desc), Some(uri)) => Some(format!("{desc}: {uri}")),
-    };
-
-    match (hint, detail) {
-        (None, None) => anyhow!("{top}"),
-        (None, Some(detail)) => anyhow!("{detail}").context(top),
-        (Some(hint), None) => anyhow!("{hint}").context(top),
-        (Some(hint), Some(detail)) => anyhow!("{hint}").context(detail).context(top),
-    }
+    error::oauth_error(action, &error, error_description, error_uri, hint)
 }
 
 /// Persists the token, shared by every grant that issues one, answering

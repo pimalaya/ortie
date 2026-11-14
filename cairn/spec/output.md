@@ -41,7 +41,7 @@ A test SHALL run pimalaya-cli's registry check over the command tree: every runn
 Every write to stdout that is not the printer's SHALL be guarded by the JSON mode, so a `--json` run emits the payload and nothing else. The handoff instructions and the wait notices of `auth get` are human text on the human path only.
 
 ### Requirement: The JSON contract is described and versioned
-`json-schema` SHALL describe the failure object under the key `ortie-error`. Every generated schema SHALL carry an `$id` naming the contract version, the major version of Ortie. Every registered payload SHALL be a JSON object, checked by a test. Piped `--json` output SHALL print one value per line.
+`json-schema` SHALL describe the failure object under the key `ortie-error`, its `code` typed by the code vocabulary and pimalaya-cli's `usage-invalid`. Every generated schema SHALL carry an `$id` naming the contract version, the major version of Ortie. Every registered payload SHALL be a JSON object, checked by a test. Piped `--json` output SHALL print one value per line.
 
 ### Requirement: JSON keys are camelCase
 Every output type Ortie prints SHALL serialize its keys as camelCase, so each key stays reachable by dot access in jq and JavaScript and so the family reads as one surface to a script. A field carrying a provider spelling verbatim SHALL keep its explicit `#[serde(rename)]`. Configuration types SHALL stay kebab-case: what the loader reads is not what the printer emits.
@@ -61,3 +61,27 @@ The command line SHALL be parsed through pimalaya-cli's `clap::parse`: help and 
 #### Scenario: An unknown flag under JSON
 - WHEN `ortie --json token show --nope` runs
 - THEN it prints one failure object coded `usage-invalid`, its `error` naming `--nope`, on stdout and exits 2
+
+### Requirement: A failure carries a stable code
+A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`, found anywhere in the error chain or read from io-oauth's typed client error. A failure with no code SHALL print `"code": null`; the text output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording. An OAuth refusal SHALL name its code in its message as the server spelled it (`invalid_grant`), a code io-oauth does not register reading `unregistered code`.
+
+| Code | Raised when |
+|---|---|
+| `usage-invalid` | the command line, a REPL line or an MCP tool call's arguments do not match the grammar, raised by pimalaya-cli; nothing ran |
+| `permission-denied` | the grant was refused to the user or the client: `access_denied` at the authorization redirect or in the device flow, `authorization_declined` (Microsoft Entra), a bare HTTP 403 |
+| `rate-limited` | a bare HTTP 429; Ortie retries nothing |
+| `grant-invalid` | `invalid_grant`: the authorization code, the refresh token or the device code was refused, has expired or was revoked; run `auth get` again |
+| `client-invalid` | `invalid_client`: the client secret, certificate or assertion was refused |
+| `client-unauthorized` | `unauthorized_client`: the client may not use the grant |
+| `scope-invalid` | `invalid_scope` |
+| `device-code-expired` | the device code expired before the user approved it, by the server's `expired_token` or by the local deadline |
+| `state-mismatch` | the authorization redirect carries no `state`, or another than the request sent |
+| `token-missing` | the account stores no token (its read command prints nothing, exiting 0, or non-zero without a word), or no refresh token where a refresh needs one; run `auth get` |
+| `endpoint-missing` | the account configures no endpoint the grant needs (authorization, token, device authorization, revocation) |
+
+Any other OAuth error code (`invalid_request`, `unsupported_grant_type`, `unsupported_token_type`, `invalid_target`, `server_error`, `temporarily_unavailable`, an unknown one) SHALL carry no code.
+
+#### Scenario: A revoked refresh token
+- GIVEN an account whose stored refresh token the server answers `invalid_grant`
+- WHEN `ortie --json token refresh` runs
+- THEN it exits 1 printing a failure object coded `grant-invalid`, its `error` naming `invalid_grant`

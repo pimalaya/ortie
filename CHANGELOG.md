@@ -20,6 +20,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `resources` to the account configuration, the RFC 8707 resource indicators sent on the authorization request and the code exchange.
 - Added the `ortie-token-revoke`, `ortie-auth-listen` and `ortie-error` schemas to `json-schema`, and those of `completion`, `manual` and `json-schema` itself.
 - Added config.sample.toml to the release archives and the Nix package, as share/doc/ortie/config.sample.toml.
+- Added a stable `code` to the failure object `--json` prints, for the failures a caller acts on: `permission-denied` (`access_denied`, `authorization_declined`, a bare 403), `rate-limited` (a bare 429), `grant-invalid` (`invalid_grant`), `client-invalid` (`invalid_client`), `client-unauthorized` (`unauthorized_client`), `scope-invalid` (`invalid_scope`), `device-code-expired`, `state-mismatch`, `token-missing`, `endpoint-missing` and `usage-invalid`.
+
+  Any other failure prints `"code": null`. The `ortie-error` schema, the MCP failures and the `error` `auth_status` answers carry the code too.
 
 ### Changed
 
@@ -37,6 +40,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **BREAKING**: Changed the configuration loading to read every existing default path as a layer, each deep-merged on top of the ones before, so $HOME/.ortierc overrides $HOME/.config/ortie/config.toml where only the first file found was read.
 - **BREAKING**: Changed every configured URL to take an ASCII host only, an internationalised one written in Punycode (`https://xn--bcher-kva.example` for `bücher.example`), which saves 130 KB of binary.
+- **BREAKING**: Changed a command line the grammar refuses under `--json` to print on stdout the failure object coded `usage-invalid`, instead of clap's text on stderr; it still exits 2.
+
+  Without `--json`, clap's rendering stays on stderr. A refused line of a piped REPL session is coded `usage-invalid` too, and loses its `Error: error:` prefix.
+
 - Changed `auth get` to print the authorization link, or the verification URI and user code, without opening a browser.
 - Changed `token show` to end the token with a newline, like every text output; `$(ortie token show)` and Pimalaya's secret commands strip it.
 - Changed the text output of `token inspect` and `auth get` to aligned `Label: value` fields, one scope per line, and the links and commands to copy to a two-space indent.
@@ -55,6 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed `--pkce` to refuse a verifier that is not 43 to 128 unreserved characters (RFC 7636 section 4.1), and `--state` an empty state.
 - Changed the device handoff of `auth get` to report `expiresIn` capped at one hour and `interval` kept between 1 and 60 seconds.
 - Changed a token, device authorization or revocation endpoint answering an error status without an OAuth error body to fail naming the HTTP status.
+- Changed an OAuth refusal to name its code as the server spelled it, `(code invalid_grant)` instead of `(code InvalidGrant)`; a code io-oauth does not register reads `(unregistered code)`.
 - Changed a token response to take `expires_in` as a numeric string too, and a missing `token_type` as `Bearer`.
 - Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
 - Bumped pimalaya-cli and pimalaya-config to 0.4.
@@ -98,6 +106,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   The lifetime is capped at one hour and the interval kept between 1 and 60 seconds.
 
 - Fixed a credential command prompting for a password (`client-secret.command` behind a pinentry or `systemd-ask-password`) hanging the run: it now reads the terminal when Ortie runs in one (pimalaya-config 0.4.1).
+- Fixed a token storage holding nothing failing with a JSON parse error: it fails coded `token-missing`, telling to run `auth get`.
 
 ## [2.3.0] - 2026-10-02
 

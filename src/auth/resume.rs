@@ -28,6 +28,7 @@ use crate::{
     account::Account,
     auth::get::{complete_device_token_poll, report_token_issued},
     config::GrantConfig,
+    error::{self, ErrorCode},
 };
 
 /// Resume an existing OAuth 2.0 grant flow.
@@ -83,7 +84,7 @@ impl AuthResumeCommand {
         }
 
         let Some(token_endpoint) = account.token_endpoint.clone() else {
-            bail!("Missing endpoints.token in the account config");
+            return Err(error::endpoint_missing("endpoints.token"));
         };
 
         // NOTE: the URI is never echoed back, since a pasted one still
@@ -98,21 +99,21 @@ impl AuthResumeCommand {
         let code = match params.validate(self.state.as_ref(), None) {
             Ok(code) => code,
             Err(Oauth20AuthParamsValidationError::Server(params)) => {
-                let err = anyhow!("Authorization error (code {:?})", params.error);
-                return Err(match (params.error_description, params.error_uri) {
-                    (None, None) => err,
-                    (Some(desc), None) => anyhow!("{desc}").context(err),
-                    (None, Some(uri)) => anyhow!("{uri}").context(err),
-                    (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
-                });
+                return Err(error::oauth_error(
+                    "Authorization error",
+                    &params.error,
+                    params.error_description,
+                    params.error_uri,
+                    None,
+                ));
             }
             Err(Oauth20AuthParamsValidationError::StateMissing) => {
-                return Err(anyhow!("Authorization response is missing state"));
+                let message = "Authorization response is missing state";
+                return Err(error::coded(ErrorCode::StateMismatch, message));
             }
             Err(Oauth20AuthParamsValidationError::StateMismatch) => {
-                return Err(anyhow!(
-                    "Authorization request and response states do not match"
-                ));
+                let message = "Authorization request and response states do not match";
+                return Err(error::coded(ErrorCode::StateMismatch, message));
             }
             Err(err @ Oauth20AuthParamsValidationError::IssuerMismatch(_)) => {
                 return Err(anyhow!("{err}"));
@@ -147,15 +148,13 @@ impl AuthResumeCommand {
 
         match res {
             Ok(res) => printer.out(report_token_issued(account, &res)?),
-            Err(res) => {
-                let err = anyhow!("Issue access token error (code {:?})", res.error);
-                Err(match (res.error_description, res.error_uri) {
-                    (None, None) => err,
-                    (Some(desc), None) => anyhow!("{desc}").context(err),
-                    (None, Some(uri)) => anyhow!("{uri}").context(err),
-                    (Some(desc), Some(uri)) => anyhow!("{desc}: {uri}").context(err),
-                })
-            }
+            Err(res) => Err(error::oauth_error(
+                "Issue access token error",
+                &res.error,
+                res.error_description,
+                res.error_uri,
+                None,
+            )),
         }
     }
 
@@ -174,7 +173,7 @@ impl AuthResumeCommand {
         }
 
         let Some(token_endpoint) = account.token_endpoint.clone() else {
-            bail!("Missing endpoints.token in the account config");
+            return Err(error::endpoint_missing("endpoints.token"));
         };
 
         // NOTE: a resume is handed the device code alone, so the poll

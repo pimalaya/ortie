@@ -61,6 +61,10 @@
 //! double as the CLI help: the first paragraph is `-h`, the rest
 //! completes `--help`.
 //!
+//! A failure a caller is expected to act on, an OAuth refusal or a
+//! missing token or endpoint, carries a stable code of the [`error`]
+//! vocabulary, printed beside the message under `--json`.
+//!
 //! Each command prints one `*Output` type, a confirmation included, and
 //! [`json_schema`] maps its invocation to that type's JSON Schema, which
 //! `ortie json-schema` writes out.
@@ -83,6 +87,7 @@ mod account;
 mod auth;
 mod cli;
 mod config;
+mod error;
 mod json_schema;
 mod mcp;
 mod repl;
@@ -100,7 +105,7 @@ use pimalaya_cli::{
 use pimalaya_config::toml::ConfigMissingError;
 use simd_cpu::SimdCpu;
 
-use crate::cli::Cli;
+use crate::{cli::Cli, error::ErrorCode};
 
 fn main() {
     // NOTE: the base64 codecs below read the installed CPU token, the
@@ -132,5 +137,5 @@ fn main() {
         process::exit(1);
     }
 
-    ErrorReport::eval(&mut printer, result)
+    ErrorReport::<ErrorCode>::eval_coded(&mut printer, result.map_err(error::with_code))
 }

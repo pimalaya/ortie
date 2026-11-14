@@ -1,7 +1,8 @@
 //! # Token revocation
 //!
 //! End-to-end coverage of `token revoke`, driving the real binary
-//! against a local mock revocation endpoint (RFC 7009).
+//! against a local mock revocation endpoint (RFC 7009), and of the codes
+//! a refusal of the revocation or the token endpoint carries.
 
 mod common;
 
@@ -13,7 +14,7 @@ use std::{
     thread,
 };
 
-use serde_json::Value;
+use serde_json::{Value, json};
 use tempfile::TempDir;
 
 use crate::common::*;
@@ -138,9 +139,49 @@ fn a_rejected_revocation_fails_with_its_code() {
     let (addr, _) = start_mock(400, r#"{"error":"unsupported_token_type"}"#);
     let (config, _) = write_revoke_config(dir.path(), addr, TOKEN_WITH_REFRESH);
 
-    let output = ortie(&config, &["token", "revoke"]);
-    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let failure = json_failure(&ortie(&config, &["--json", "token", "revoke"]));
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("UnsupportedTokenType"), "{stdout}");
+    let message = "Revoke token error (code unsupported_token_type)";
+    assert_eq!(failure["error"], message, "{failure}");
+    assert_eq!(failure["code"], Value::Null, "{failure}");
+}
+
+/// A refresh token the server refuses as `invalid_grant` is coded
+/// `grant-invalid`, its message naming the code as the server spelled it.
+#[test]
+fn a_refused_refresh_token_is_coded_grant_invalid() {
+    let dir = TempDir::new().unwrap();
+    let answer =
+        r#"{"error":"invalid_grant","error_description":"Token has been expired or revoked."}"#;
+    let (addr, _) = start_mock(400, answer);
+    let (config, _) = write_revoke_config(dir.path(), addr, TOKEN_WITH_REFRESH);
+
+    let failure = json_failure(&ortie(&config, &["--json", "token", "refresh"]));
+
+    assert_eq!(failure["code"], "grant-invalid", "{failure}");
+    let message = "Refresh access token error (code invalid_grant)";
+    assert_eq!(failure["error"], message, "{failure}");
+    let description = "Token has been expired or revoked.";
+    assert_eq!(failure["sources"], json!([description]), "{failure}");
+}
+
+/// A 403 or a 429 answered without an OAuth body is coded by its status,
+/// at the token endpoint as at the revocation one.
+#[test]
+fn a_bare_403_or_429_is_coded_by_its_status() {
+    let cases = [(403, "permission-denied"), (429, "rate-limited")];
+
+    for (status, code) in cases {
+        for command in ["refresh", "revoke"] {
+            let dir = TempDir::new().unwrap();
+            let (addr, _) = start_mock(status, "<html>refused</html>");
+            let (config, _) = write_revoke_config(dir.path(), addr, TOKEN_WITH_REFRESH);
+
+            let failure = json_failure(&ortie(&config, &["--json", "token", command]));
+
+            assert_eq!(failure["code"], code, "{command}: {failure}");
+            let error = failure["error"].as_str().unwrap();
+            assert!(error.contains(&format!("status {status}")), "{error}");
+        }
+    }
 }

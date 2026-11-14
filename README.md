@@ -145,6 +145,8 @@ ortie token revoke                  # revoke it at the server
 
 When the redirection cannot be caught, `auth get` prints the `auth listen` or `auth resume` command finishing the flow.
 
+Ortie exits 0 on success. Exit 1 is a failure, which `--json` prints on stdout as a failure object whose `code` names what to do next (`grant-invalid` to run `auth get` again, `client-invalid` to fix the client, `null` when none applies; `ortie json-schema` lists them all under `ortie-error`). Exit 2 is a command line Ortie refused, which `--json` prints as a failure object coded `usage-invalid`.
+
 ### REPL
 
 `ortie repl` holds one account in memory and answers `auth` and `token` commands, one per line, until `exit` or EOF. The secret store is read once for the whole session.

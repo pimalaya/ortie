@@ -29,6 +29,7 @@ use crate::{
     config::{
         AccountConfig, EndpointsConfig, GrantConfig, PkceConfig, StorageConfig, StoragesConfig,
     },
+    error::{self, ErrorCode},
 };
 
 /// The redirection bound when the account configures none.
@@ -175,6 +176,14 @@ impl Account {
         let output = cmd
             .output()
             .context("Spawn command to read OAuth 2.0 access token")?;
+
+        // NOTE: a lookup finding nothing prints nothing, exiting 0 or, as
+        // secret-tool does, 1 without a word.
+        let silent = output.status.success() || output.stderr.trim_ascii().is_empty();
+        if silent && output.stdout.trim_ascii().is_empty() {
+            let message = "No access token stored, run `auth get` to issue one";
+            return Err(error::coded(ErrorCode::TokenMissing, message));
+        }
 
         if !output.status.success() {
             let bytes = if output.stdout.is_empty() {

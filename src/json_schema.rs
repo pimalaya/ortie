@@ -13,7 +13,9 @@
 //!
 //! Every registered type is Ortie's own, so the machine contract stays a
 //! decision of this repository rather than of the libraries below it.
-//! The failure object is the exception, being the family's shared one.
+//! The failure object is the exception, being the family's shared one,
+//! its `code` typed by Ortie's vocabulary ([`crate::error`]) and
+//! pimalaya-cli's `usage-invalid`.
 //!
 //! [`JsonSchemaCommand`]: pimalaya_cli::clap::commands::json_schema::JsonSchemaCommand
 
@@ -21,6 +23,7 @@ use pimalaya_cli::{clap::commands::json_schema::JsonSchemaRegistry, error::Error
 
 use crate::{
     auth::get::AuthGetOutput,
+    error::ErrorCode,
     token::{
         inspect::TokenInspectOutput, issued::TokenIssuedOutput, revoke::TokenRevokeOutput,
         show::TokenShowOutput,
@@ -42,7 +45,7 @@ pub fn registry() -> JsonSchemaRegistry {
     registry.insert::<TokenInspectOutput>("ortie-token-inspect");
     registry.insert::<TokenIssuedOutput>("ortie-token-refresh");
     registry.insert::<TokenRevokeOutput>("ortie-token-revoke");
-    registry.insert::<ErrorReport>("ortie-error");
+    registry.insert::<ErrorReport<ErrorCode>>("ortie-error");
 
     registry
 }
@@ -72,6 +75,18 @@ mod tests {
     #[test]
     fn every_payload_is_an_object() {
         assert_eq!(registry().non_object_roots(), Vec::<String>::new());
+    }
+
+    /// The failure object's `code` is typed by Ortie's vocabulary and
+    /// pimalaya-cli's `usage-invalid`.
+    #[test]
+    fn the_error_schema_names_the_codes() {
+        let schemas = registry().schemas;
+        let schema = schemas["ortie-error"].to_string();
+
+        for code in ["grant-invalid", "permission-denied", "usage-invalid"] {
+            assert!(schema.contains(&format!("\"{code}\"")), "{code}: {schema}");
+        }
     }
 
     #[test]

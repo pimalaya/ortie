@@ -27,12 +27,16 @@ use crate::common::*;
 /// It answers the first token poll with `authorization_pending` and the
 /// next with a token, counting the polls it received.
 fn start_mock() -> (SocketAddr, Arc<AtomicUsize>, thread::JoinHandle<()>) {
-    start_mock_with(r#""expires_in":60,"interval":1"#)
+    start_mock_with(r#""expires_in":60,"interval":1"#, None)
 }
 
 /// The mock of [`start_mock`], its device code answer carrying `timing`
-/// as its lifetime and interval members.
-fn start_mock_with(timing: &'static str) -> (SocketAddr, Arc<AtomicUsize>, thread::JoinHandle<()>) {
+/// as its lifetime and interval members, and every token poll answered
+/// with the error body `refusal` when given.
+fn start_mock_with(
+    timing: &'static str,
+    refusal: Option<&'static str>,
+) -> (SocketAddr, Arc<AtomicUsize>, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let polls = Arc::new(AtomicUsize::new(0));
@@ -57,7 +61,10 @@ fn start_mock_with(timing: &'static str) -> (SocketAddr, Arc<AtomicUsize>, threa
                     ),
                 )
             } else if path.starts_with("/token") {
-                if polls_t.fetch_add(1, Ordering::SeqCst) == 0 {
+                let first = polls_t.fetch_add(1, Ordering::SeqCst) == 0;
+                if let Some(refusal) = refusal {
+                    (400, refusal.into())
+                } else if first {
                     (400, r#"{"error":"authorization_pending"}"#.into())
                 } else {
                     (
@@ -110,7 +117,7 @@ fn auth_get_json_then_resume_stores_token() {
 
 #[test]
 fn auth_get_reports_the_lifetime_and_the_interval_bounded() {
-    let (addr, _, _h) = start_mock_with(r#""expires_in":86400,"interval":0"#);
+    let (addr, _, _h) = start_mock_with(r#""expires_in":86400,"interval":0"#, None);
     let dir = TempDir::new().unwrap();
     let (config, _) = write_device_config(dir.path(), addr);
 
@@ -142,4 +149,38 @@ fn repl_auth_get_resume_then_token_show() {
         stdout.contains("at-test"),
         "token show should print the issued token; stdout: {stdout}"
     );
+}
+
+/// Runs `auth resume` on a device code whose every poll the server
+/// refuses with `refusal`, answering the failure object.
+fn resume_refused(refusal: &'static str) -> Value {
+    let (addr, _, _h) = start_mock_with(r#""expires_in":60,"interval":1"#, Some(refusal));
+    let dir = TempDir::new().unwrap();
+    let (config, token) = write_device_config(dir.path(), addr);
+
+    let failure = json_failure(&ortie(&config, &["--json", "auth", "resume", "dc-test"]));
+    assert!(std::fs::read_to_string(token).unwrap().is_empty());
+    failure
+}
+
+/// The user denying the device in the browser is coded
+/// `permission-denied`.
+#[test]
+fn a_denied_device_is_coded_permission_denied() {
+    let failure = resume_refused(r#"{"error":"access_denied"}"#);
+
+    assert_eq!(failure["code"], "permission-denied", "{failure}");
+    let message = "Issue access token error (code access_denied)";
+    assert_eq!(failure["error"], message, "{failure}");
+}
+
+/// A device code the server reports expired is coded
+/// `device-code-expired`.
+#[test]
+fn an_expired_device_code_is_coded_device_code_expired() {
+    let failure = resume_refused(r#"{"error":"expired_token"}"#);
+
+    assert_eq!(failure["code"], "device-code-expired", "{failure}");
+    let message = "Issue access token error (code expired_token)";
+    assert_eq!(failure["error"], message, "{failure}");
 }
