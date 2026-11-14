@@ -58,7 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed a token response to take `expires_in` as a numeric string too, and a missing `token_type` as `Bearer`.
 - Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
 - Bumped pimalaya-cli and pimalaya-config to 0.4.
-- Bumped io-oauth to 0.6.
+- Bumped io-oauth to 0.7 and pimalaya-stream to 0.4.
 
   A client secret is still sent as HTTP Basic credentials, the client id and the secret now form-encoded first (RFC 6749 section 2.3.1): one made of letters, digits and `*-._~` is unchanged on the wire.
 
@@ -90,12 +90,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed a failed storage write after a refresh leaving the session on the old refresh token, which a rotating server had already invalidated.
 - Fixed an OAuth 2.0 endpoint able to make Ortie buffer an endless response, spin on a connection closed mid-body, or panic.
 
-  io-oauth 0.6 runs on io-http 0.7, which caps response heads at 64 KiB and bodies at 256 MiB.
+  io-oauth 0.7 runs on io-http 0.8, which caps response heads at 64 KiB and bodies at 256 MiB.
 
 - Fixed the state and the PKCE code verifier never repeating a character, which lowered their entropy.
 - Fixed the device grant panicking, waiting without end or polling without pause on a lifetime or an interval the server chose.
 
   The lifetime is capped at one hour and the interval kept between 1 and 60 seconds.
+
+- Fixed a credential command prompting for a password (`client-secret.command` behind a pinentry or `systemd-ask-password`) hanging the run: it now reads the terminal when Ortie runs in one (pimalaya-config 0.4.1).
 
 ## [2.3.0] - 2026-10-02
 

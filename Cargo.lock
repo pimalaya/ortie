@@ -97,9 +97,9 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "cc"
-version = "1.11.1"
+version = "1.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ff2a8126fff0f8c839080d619675a585e61720bb12d2baceae45769fd66f155"
+checksum = "33ef9e3e8154a45c7a95cff4c1299702106ad94062d7bb85fdc5d3a5afd91d45"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -361,9 +361,9 @@ checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
 name = "errno"
-version = "0.3.14"
+version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
+checksum = "e35d6e78f4cebb90e51d543db8fe41528851d6deeef6ef21ebd4bfdc1e784776"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
@@ -504,9 +504,9 @@ dependencies = [
 
 [[package]]
 name = "io-http"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d195f9fce7b6202be9ec43c8f93e057006ddd5c9223258789606839aea62182"
+checksum = "47ae262c265c95e13dc5dd88370d23b74f5e5b307d503ba208e0e6117ddfbd3e"
 dependencies = [
  "anyhow",
  "base64-codec",
@@ -520,9 +520,9 @@ dependencies = [
 
 [[package]]
 name = "io-oauth"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84b1c9414c0d8b0349553c891962d54aa88b2287555d0893fdae95a0729b0dcf"
+checksum = "1a1e90de37723f2e56f2e91aaf42e6bf5c6980ae018de265eb6ad4fb4d88af41"
 dependencies = [
  "anyhow",
  "base64-codec",
@@ -791,8 +791,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "pimalaya-cli"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c6e60dfb1a369c13e8f4bd7fb48603629a7042e2aa087d8c3da985e5fc3cbcc"
+source = "git+https://github.com/pimalaya/cli?rev=0be1b1f08d19ccb9d16ee8e1d4266c27c96e0cdd#0be1b1f08d19ccb9d16ee8e1d4266c27c96e0cdd"
 dependencies = [
  "anyhow",
  "base64-codec",
@@ -813,9 +812,9 @@ dependencies = [
 
 [[package]]
 name = "pimalaya-config"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f317d9d0c52264bab92ce5ccc69155a558e0c82f173e70c6751a1fbf6ae780c0"
+checksum = "10789cb95e1f226e0f85b2f52eed57c75a88fac1008f371e383f4aa05d2311ba"
 dependencies = [
  "anyhow",
  "dirs",
@@ -829,9 +828,9 @@ dependencies = [
 
 [[package]]
 name = "pimalaya-stream"
-version = "0.3.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a863f89f3c3eb4799bb4d6ae33bd8b4c399769bced7d7660d97065bd4163d81"
+checksum = "314599e9b99dbd22c67c45704fafa0010c38ad000bea4c6ce555bd9d7ca05aab"
 dependencies = [
  "anyhow",
  "io-proxy",
@@ -1088,9 +1087,9 @@ checksum = "eec689c0bc40ff2458a5977b6619cb718087084a18e02a131c599b62d05e1a5f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.16"
+version = "0.103.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
+checksum = "e3a0760a887c14823fca5a1c970b01d47c328c696c0c64829d1df50e8f853fd5"
 dependencies = [
  "aws-lc-rs",
  "ring",

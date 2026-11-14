@@ -261,7 +261,8 @@ impl TlsConfig {
         Tls {
             provider,
             rustls: Rustls { crypto, alpn },
-            cert: None,
+            server: None,
+            client: None,
         }
     }
 }

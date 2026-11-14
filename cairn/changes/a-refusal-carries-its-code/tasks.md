@@ -16,13 +16,13 @@ change: a-refusal-carries-its-code
 
 ## Phase 1, the libraries (commit `build: update pimalaya-stream to 0.4 and io-oauth to 0.7`)
 
-- [ ] Cargo.toml: `io-oauth` 0.7, `pimalaya-stream` 0.4; `[patch.crates-io]` pimalaya-cli 0be1b1f08d19ccb9d16ee8e1d4266c27c96e0cdd (no comment; or pimalaya-cli 0.4.1 from crates.io if released, no pin).
-- [ ] `cargo update`; the lock holds pimalaya-config 0.4.1.
-- [ ] src/config.rs:261-265: `server: None, client: None`.
-- [ ] `cargo tree -d --all-features -e normal`: no pimalaya-stream, io-http or io-oauth twice.
-- [ ] Tests pinning the help footer or the manual pages follow pimalaya-cli's wording.
-- [ ] CHANGELOG: the io-oauth entry names 0.7 and pimalaya-stream 0.4; Fixed: a prompting credential command no longer hangs (pimalaya-config 0.4.1).
-- [ ] Phase checks pass.
+- [x] Cargo.toml: `io-oauth` 0.7, `pimalaya-stream` 0.4; `[patch.crates-io]` pimalaya-cli 0be1b1f08d19ccb9d16ee8e1d4266c27c96e0cdd (no comment; or pimalaya-cli 0.4.1 from crates.io if released, no pin).
+- [x] `cargo update`; the lock holds pimalaya-config 0.4.1.
+- [x] src/config.rs:261-265: `server: None, client: None`.
+- [x] `cargo tree -d --all-features -e normal`: no pimalaya-stream, io-http or io-oauth twice.
+- [x] Tests pinning the help footer or the manual pages follow pimalaya-cli's wording.
+- [x] CHANGELOG: the io-oauth entry names 0.7 and pimalaya-stream 0.4; Fixed: a prompting credential command no longer hangs (pimalaya-config 0.4.1).
+- [x] Phase checks pass.
 
 ## Phase 2, the refused line (commit `feat!: print a refused command line as a failure object under --json`)
 
