@@ -134,7 +134,7 @@ impl<'de> Deserialize<'de> for HooksRemovedConfig {
             "The `hooks` table was removed in 3.0.0: chain a command after \
              `storage.write.command`, which receives the token on every issue \
              and refresh, see \
-             https://github.com/pimalaya/ortie/blob/master/CHANGELOG.md",
+             https://github.com/pimalaya/ortie/blob/master/MIGRATION.md",
         ))
     }
 }
@@ -500,7 +500,7 @@ storage.write.command = ["tee", "token.json"]
                 "{extra}: {err}"
             );
             assert!(err.contains("storage.write.command"), "{extra}: {err}");
-            assert!(err.contains("CHANGELOG.md"), "{extra}: {err}");
+            assert!(err.contains("MIGRATION.md"), "{extra}: {err}");
             assert!(!err.contains("unknown field"), "{extra}: {err}");
         }
     }

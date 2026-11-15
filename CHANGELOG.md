@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+MIGRATION.md lists what to act on when upgrading from 2.x.
+
 ### Added
 
 - Added `token revoke`, revoking the stored refresh token, or the access token when none is stored (RFC 7009), at the new `endpoints.revocation`.
@@ -77,7 +79,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   An account starts from config.sample.toml instead: without a configuration, a terminal gets a welcome with the commands creating one, copied from the shipped sample or downloaded, and a script or `--json` an error naming the path. The `ortie-configure` key leaves `json-schema`.
 
 - **BREAKING**: Removed dynamic client registration (RFC 7591), which only the wizard ran; the Fastmail section of config.sample.toml carries a registered client instead.
-- **BREAKING**: Removed the hooks (`hooks.on-issue` and `hooks.on-refresh`) and the `notify` cargo feature; a `hooks` table is now refused by name, the error naming `storage.write.command` and this changelog.
+- **BREAKING**: Removed the hooks (`hooks.on-issue` and `hooks.on-refresh`) and the `notify` cargo feature; a `hooks` table is now refused by name, the error naming `storage.write.command` and MIGRATION.md.
 
   `storage.write.command` receives the token JSON on every issue and refresh, so a command chained after it does what a success hook did.
 
