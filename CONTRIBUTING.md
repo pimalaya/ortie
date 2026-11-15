@@ -22,7 +22,7 @@ The shared clap, printer, first-run welcome, REPL loop and MCP protocol come fro
 
 ## Feature matrix
 
-The binary always ships the full CLI; the only cargo features left are the TLS providers (rustls-ring default, rustls-aws, native-tls) and vendored. Build against a non-default provider to check it still compiles:
+The binary always ships the full CLI; the only cargo features left are the TLS providers (rustls-ring default, rustls-aws, native-tls) and vendored (default). Build against a non-default provider to check it still compiles:
 
 ```sh
 cargo build --no-default-features --features native-tls

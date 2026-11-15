@@ -6,20 +6,23 @@
 //! its key the way the man pages are.
 //!
 //! Every command printing a value carries a key. The REPL carries none of
-//! its own: it dispatches the same `token` and `auth` leaves and prints
-//! their payloads unchanged. The one key naming no command is
-//! `ortie-error`, the failure object any command prints instead of its
-//! payload.
+//! its own: it dispatches the commands of the binary and prints their
+//! payloads unchanged. The one key naming no command is `ortie-error`,
+//! the failure object any command prints instead of its payload.
 //!
 //! Every registered type is Ortie's own, so the machine contract stays a
 //! decision of this repository rather than of the libraries below it.
-//! The failure object is the exception, being the family's shared one,
-//! its `code` typed by Ortie's vocabulary ([`crate::error`]) and
-//! pimalaya-cli's `usage-invalid`.
+//! The family's shared shapes are the exception: the account list and
+//! check, and the failure object, its `code` typed by Ortie's vocabulary
+//! ([`crate::error`]) and pimalaya-cli's `usage-invalid`.
 //!
 //! [`JsonSchemaCommand`]: pimalaya_cli::clap::commands::json_schema::JsonSchemaCommand
 
-use pimalaya_cli::{clap::commands::json_schema::JsonSchemaRegistry, error::ErrorReport};
+use pimalaya_cli::{
+    account::{AccountCheckOutput, AccountListOutput},
+    clap::commands::json_schema::JsonSchemaRegistry,
+    error::ErrorReport,
+};
 
 use crate::{
     auth::get::AuthGetOutput,
@@ -38,6 +41,8 @@ use crate::{
 pub fn registry() -> JsonSchemaRegistry {
     let mut registry = JsonSchemaRegistry::new("ortie", env!("CARGO_PKG_VERSION"));
 
+    registry.insert::<AccountListOutput>("ortie-account-list");
+    registry.insert::<AccountCheckOutput<ErrorCode>>("ortie-account-check");
     registry.insert::<AuthGetOutput<'static>>("ortie-auth-get");
     registry.insert::<TokenIssuedOutput>("ortie-auth-listen");
     registry.insert::<TokenIssuedOutput>("ortie-auth-resume");

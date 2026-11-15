@@ -7,15 +7,13 @@ pub mod get;
 pub mod listen;
 pub mod resume;
 
-use std::path::PathBuf;
-
 use anyhow::Result;
 use clap::Subcommand;
-use pimalaya_cli::{printer::Printer, shell::invocation};
+use pimalaya_cli::printer::Printer;
 
 use crate::{
+    account::Account,
     auth::{get::AuthGetCommand, listen::AuthListenCommand, resume::AuthResumeCommand},
-    cli::take_account,
 };
 
 /// Get a fresh access token by running the account's OAuth grant.
@@ -32,27 +30,18 @@ pub enum AuthCommand {
 }
 
 impl AuthCommand {
-    /// Dispatches the auth leaf, resolving the account it runs against.
+    /// Dispatches the auth leaf on the resolved account, `invocation`
+    /// starting the commands an `auth get` handoff prints.
     pub fn execute(
         self,
         printer: &mut impl Printer,
-        config_paths: &[PathBuf],
-        account_name: Option<&str>,
+        account: &mut Account,
+        invocation: &str,
     ) -> Result<()> {
         match self {
-            Self::Get(cmd) => {
-                let mut account = take_account(config_paths, account_name)?;
-                let invocation = invocation("ortie", config_paths, account_name);
-                cmd.execute(printer, &mut account, &invocation)
-            }
-            Self::Listen(cmd) => {
-                let mut account = take_account(config_paths, account_name)?;
-                cmd.execute(printer, &mut account)
-            }
-            Self::Resume(cmd) => {
-                let mut account = take_account(config_paths, account_name)?;
-                cmd.execute(printer, &mut account)
-            }
+            Self::Get(cmd) => cmd.execute(printer, account, invocation),
+            Self::Listen(cmd) => cmd.execute(printer, account),
+            Self::Resume(cmd) => cmd.execute(printer, account),
         }
     }
 }

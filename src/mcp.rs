@@ -74,11 +74,16 @@ use crate::{
 
 /// What the server tells the agent at initialization.
 const INSTRUCTIONS: &str = "Obtains and renews the OAuth 2.0 token of one \
-account. Call auth_get, then show the user the authorizationUri to open, or \
-the userCode to enter at the verificationUri, and call auth_status until the \
-flow is issued or failed. When redirectCaptured is false, ask the user for \
-the URL their browser was redirected to and pass it to auth_resume. No tool \
-returns the token itself.";
+account. token_inspect shows the metadata of the stored token and \
+auth_status the flow auth_get started. The tools that change the stored \
+token (auth_get, auth_resume, token_refresh) are listed only when the server \
+runs with --allow-write, token_revoke only with --allow-revoke as well. Call \
+auth_get, then show the user the authorizationUri to open, or the userCode to \
+enter at the verificationUri, and call auth_status until the flow is issued \
+or failed. When redirectCaptured is false, ask the user for the URL their \
+browser was redirected to and pass it to auth_resume. A failed call answers \
+isError with an ortie-error object, its `code` naming the failure when it has \
+one. No tool returns the token itself.";
 
 /// The tools, in the order they are listed.
 const TOOLS: &[McpTool] = &[
@@ -91,7 +96,6 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::Registry("ortie-token-inspect"),
         read_only: true,
         destructive: false,
-        open_world: false,
     },
     McpTool {
         name: "auth_get",
@@ -104,7 +108,6 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::AuthGet,
         read_only: false,
         destructive: false,
-        open_world: true,
     },
     McpTool {
         name: "auth_status",
@@ -114,7 +117,6 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::AuthStatus,
         read_only: true,
         destructive: false,
-        open_world: false,
     },
     McpTool {
         name: "auth_resume",
@@ -128,7 +130,6 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::Registry("ortie-auth-resume"),
         read_only: false,
         destructive: false,
-        open_world: true,
     },
     McpTool {
         name: "token_refresh",
@@ -138,7 +139,6 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::Registry("ortie-token-refresh"),
         read_only: false,
         destructive: false,
-        open_world: true,
     },
     McpTool {
         name: "token_revoke",
@@ -149,12 +149,8 @@ const TOOLS: &[McpTool] = &[
         output: McpToolOutput::Registry("ortie-token-revoke"),
         read_only: false,
         destructive: true,
-        open_world: true,
     },
 ];
-
-/// The tool only `--allow-revoke` lists.
-const REVOKE_TOOL: &str = "token_revoke";
 
 /// How long a stopped listener is given to answer.
 const LISTENER_STOP_TIMEOUT: Duration = Duration::from_secs(2);
@@ -166,15 +162,21 @@ const LISTENER_STOP_TIMEOUT: Duration = Duration::from_secs(2);
 /// its end, while the server keeps the state, the PKCE verifier and the
 /// device code to itself and stores the token on consent. No tool
 /// returns the token: applications keep reading it through `ortie token
-/// show`.
+/// show`. Without flags only the tools that read are listed.
 #[derive(Debug, Parser)]
 pub struct McpCommand {
+    /// List the tools that change the stored token too.
+    ///
+    /// Adds `auth_get`, `auth_resume` and `token_refresh`, which replace
+    /// the stored token with a newer one.
+    #[arg(long)]
+    pub allow_write: bool,
     /// List the revocation tool too.
     ///
     /// Revoking leaves the account without a working token until the
     /// next grant, and an agent can be told to by the content it reads,
     /// so it is never on by default.
-    #[arg(long)]
+    #[arg(long, requires = "allow_write")]
     pub allow_revoke: bool,
 }
 
@@ -187,6 +189,7 @@ impl McpCommand {
 
         let mut server = McpServer {
             account,
+            allow_write: self.allow_write,
             allow_revoke: self.allow_revoke,
             events,
             flow: McpFlow::None,
@@ -332,6 +335,7 @@ enum McpDevicePoll {
 /// The server: the account, the gates and the pending flow.
 struct McpServer {
     account: Account,
+    allow_write: bool,
     allow_revoke: bool,
     events: Sender<McpEvent>,
     flow: McpFlow,
@@ -339,12 +343,19 @@ struct McpServer {
 }
 
 impl McpServer {
-    /// The tools the gate lists.
+    /// The tools the gates list: a reading one always, one replacing the
+    /// stored token under `--allow-write`, the revocation under
+    /// `--allow-revoke`.
     fn listed(&self) -> impl Iterator<Item = &'static McpTool> {
-        let allow_revoke = self.allow_revoke;
-        TOOLS
-            .iter()
-            .filter(move |tool| allow_revoke || tool.name != REVOKE_TOOL)
+        let (allow_write, allow_revoke) = (self.allow_write, self.allow_revoke);
+
+        TOOLS.iter().filter(move |tool| {
+            if tool.destructive {
+                allow_revoke
+            } else {
+                tool.read_only || allow_write
+            }
+        })
     }
 
     /// The definitions `tools/list` answers, each output schema the
@@ -383,7 +394,9 @@ impl McpServer {
                     "annotations": {
                         "readOnlyHint": tool.read_only,
                         "destructiveHint": tool.destructive,
-                        "openWorldHint": tool.open_world,
+                        // NOTE: no tool reaches beyond the account's own
+                        // token, the authorization server included.
+                        "openWorldHint": false,
                     },
                 });
 
@@ -758,16 +771,16 @@ struct McpTool {
     /// The one string argument the tool takes, with its description.
     arg: Option<(&'static str, &'static str)>,
     output: McpToolOutput,
+    /// Whether the tool changes nothing, listed without a gate.
     read_only: bool,
+    /// Whether the tool revokes the token, listed under `--allow-revoke`.
     destructive: bool,
-    /// Whether the tool reaches the authorization server, an entity
-    /// outside the server and its account.
-    open_world: bool,
 }
 
 impl McpTool {
     /// The value of the tool's argument in a call whose keys are checked
-    /// already, failing when it is missing or not a string.
+    /// already, failing when it is missing, `null` or not a string, in
+    /// the words pimalaya-cli's grammar refuses an argument with.
     fn argument(&self, arguments: &Map<String, Value>) -> Result<Option<String>> {
         let Some((name, _)) = self.arg else {
             return Ok(None);
@@ -775,8 +788,8 @@ impl McpTool {
 
         let message = match arguments.get(name) {
             Some(Value::String(value)) => return Ok(Some(value.clone())),
+            None | Some(Value::Null) => format!("Missing argument `{name}`"),
             Some(_) => format!("Argument `{name}` must be a string"),
-            None => format!("Missing argument `{name}`"),
         };
 
         Err(CodedError::new(CommonCode::UsageInvalid, message).into())

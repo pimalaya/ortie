@@ -1,7 +1,7 @@
 //! # Command-line interface
 //!
 //! The root clap parser of the `ortie` binary, its subcommand router,
-//! and the account resolution every account-bound command starts from.
+//! and the session every account-bound command takes its account from.
 
 use std::path::{Path, PathBuf};
 
@@ -24,7 +24,7 @@ use pimalaya_cli::{
 use pimalaya_config::toml::{ConfigMissingError, TomlConfig};
 
 use crate::{
-    account::Account,
+    account::{Account, AccountCommand},
     auth::AuthCommand,
     config::Config,
     error::{self, ErrorCode},
@@ -62,8 +62,13 @@ pub struct Cli {
     pub log: LogFlags,
 }
 
-/// Top-level subcommand router.
+/// The top-level commands: the token and grant trees, the sessions, the
+/// accounts, then the standard commands.
+///
+/// The version it carries is what a `-V` or `--version` line of a session
+/// prints, as the command line does.
 #[derive(Subcommand, Debug)]
+#[command(version, long_version = long_version!())]
 pub enum Command {
     #[command(subcommand)]
     Auth(AuthCommand),
@@ -71,38 +76,36 @@ pub enum Command {
     Token(TokenCommand),
     Repl(ReplCommand),
     Mcp(McpCommand),
-    #[command(aliases = ["manuals", "mans"])]
-    Manual(ManualCommand),
+    #[command(subcommand, alias = "accounts")]
+    Account(AccountCommand),
     #[command(alias = "completions")]
     Completion(CompletionCommand),
+    #[command(aliases = ["manuals", "mans"])]
+    Manual(ManualCommand),
     #[command(alias = "json-schemas")]
     JsonSchema(JsonSchemaCommand),
 }
 
 impl Command {
-    /// Dispatches the parsed subcommand, resolving the account for the
-    /// token tree (the auth tree resolves it per leaf).
-    pub fn execute(
-        self,
-        printer: &mut impl Printer,
-        config_paths: &[PathBuf],
-        account_name: Option<&str>,
-    ) -> Result<()> {
+    /// Dispatches the parsed subcommand over `session`, which takes the
+    /// account on first use.
+    pub fn execute(self, printer: &mut impl Printer, session: &mut Session) -> Result<()> {
         match self {
-            Self::Auth(cmd) => cmd.execute(printer, config_paths, account_name),
-            Self::Token(cmd) => {
-                let mut account = take_account(config_paths, account_name)?;
-                cmd.execute(printer, &mut account)
+            Self::Auth(cmd) => {
+                let invocation = session.invocation();
+                cmd.execute(printer, session.account()?, &invocation)
             }
-            Self::Repl(cmd) => {
-                let account = take_account(config_paths, account_name)?;
-                let invocation = invocation("ortie", config_paths, account_name);
-                cmd.execute(&*printer, account, &invocation)
-            }
+            Self::Token(cmd) => cmd.execute(printer, session.account()?),
+            Self::Repl(cmd) => cmd.execute(&*printer, session),
             Self::Mcp(cmd) => {
                 // stdout carries protocol messages only, so a failure goes
                 // to stderr, a person missing a configuration aside.
-                let account = match take_account(config_paths, account_name) {
+                let account = match session.account.take() {
+                    Some(account) => Ok(account),
+                    None => take_account(session.config_paths, session.account_name),
+                };
+
+                let account = match account {
                     Err(err) if err.is::<ConfigMissingError>() && is_wanted(&*printer) => {
                         return Err(err);
                     }
@@ -115,10 +118,41 @@ impl Command {
                 );
                 Ok(())
             }
-            Self::Manual(cmd) => cmd.execute(printer, Cli::command()),
+            Self::Account(cmd) => cmd.execute(printer, session),
             Self::Completion(cmd) => cmd.execute(printer, Cli::command()),
+            Self::Manual(cmd) => cmd.execute(printer, Cli::command()),
             Self::JsonSchema(cmd) => cmd.execute(printer, json_schema::registry()),
         }
+    }
+}
+
+/// What the commands of one run share: the configuration paths, the
+/// account `-a` names, and that account once taken, which a REPL session
+/// keeps across its lines.
+pub struct Session<'a> {
+    /// The configuration paths, `-c` or the default ones.
+    pub config_paths: &'a [PathBuf],
+    /// The account `-a` names, the default one when `None`.
+    pub account_name: Option<&'a str>,
+    /// The account, taken on first use.
+    pub account: Option<Account>,
+}
+
+impl Session<'_> {
+    /// The session's account, taken from the configuration on first use.
+    pub fn account(&mut self) -> Result<&mut Account> {
+        let account = match self.account.take() {
+            Some(account) => account,
+            None => take_account(self.config_paths, self.account_name)?,
+        };
+
+        Ok(self.account.insert(account))
+    }
+
+    /// The binary with the `-c` and `-a` of the session, which `auth get`
+    /// starts the commands of its handoff with.
+    pub fn invocation(&self) -> String {
+        invocation("ortie", self.config_paths, self.account_name)
     }
 }
 
@@ -143,8 +177,8 @@ pub(crate) fn take_account(
     config_paths: &[PathBuf],
     account_name: Option<&str>,
 ) -> Result<Account> {
-    let (_, account) = Config::load(config_paths)?.take_account(account_name)?;
-    Ok(Account::from(account))
+    let (name, account) = Config::load(config_paths)?.take_account(account_name)?;
+    Ok(Account::new(name, account))
 }
 
 /// The welcome a person meets when no configuration exists at `path`:

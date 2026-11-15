@@ -17,8 +17,13 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 - Added `ortie mcp`, a Model Context Protocol server over stdio running the grants of one account for an agent.
 
-  Its tools answer receipts and metadata, never a token: the state, the PKCE verifier and the device code stay in the server, which stores the token once the user consents. `token_revoke` is listed only with `--allow-revoke`.
+  Its tools answer receipts and metadata, never a token: the state, the PKCE verifier and the device code stay in the server, which stores the token once the user consents. Without a flag only the tools that read are listed, `token_inspect` and `auth_status`: `--allow-write` adds `auth_get`, `auth_resume` and `token_refresh`, and `--allow-revoke`, which needs it, `token_revoke`. No tool sets `openWorldHint`, none acting beyond the account's own token.
 
+- Added `account list`, listing the accounts of the configuration, and `account check`, which runs `storage.read.command` and sends each configured endpoint but the redirection a `HEAD` request carrying no credential, printing one row each (`storage`, `endpoints`) and exiting 3 when one fails.
+
+  Both print the shapes every Pimalaya CLI shares, `ortie-account-list` and `ortie-account-check`; `backends` and `notBuilt` of the list are empty, Ortie having no backend.
+
+- Added `tls.cert`, a PEM certificate to trust beside the platform store.
 - Added `resources` to the account configuration, the RFC 8707 resource indicators sent on the authorization request and the code exchange.
 - Added the `ortie-token-revoke`, `ortie-auth-listen` and `ortie-error` schemas to `json-schema`, and those of `completion`, `manual` and `json-schema` itself.
 - Added config.sample.toml to the release archives and the Nix package, as share/doc/ortie/config.sample.toml.
@@ -46,6 +51,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
   A missing account named `default` says so: "Account `default` not found, the configuration holds: a, omit `-a` to take the account marked default".
 
+- **BREAKING**: Changed `tls` to the table every Pimalaya CLI reads, `tls.provider` (`rustls`, `native-tls`) and `tls.rustls.crypto` (`ring`, `aws`); the string `tls = "rustls-ring"` is refused by name, the error giving the keys its value becomes.
 - **BREAKING**: Changed a command line the grammar refuses under `--json` to print on stdout the failure object coded `usage-invalid`, instead of clap's text on stderr; it still exits 2.
 
   Without `--json`, clap's rendering stays on stderr. A refused line of a piped REPL session is coded `usage-invalid` too, and loses its `Error: error:` prefix.
@@ -57,6 +63,12 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
   A line setting `-a`, `-c` or a log flag is refused naming it, the session having fixed them when it started.
 
+- Changed `ortie repl` to take any command of the binary, `account check` and `completion` included, where it took the `token` and `auth` trees alone.
+
+  A `repl` or `mcp` line is refused by pimalaya-cli, "Cannot start a session inside a session", coded `usage-invalid`, and a `-V` or `--version` line prints the version.
+
+- Changed the order of the standard commands to `completion`, `manual`, `json-schema`, and the help of `repl` to the wording every Pimalaya CLI shares.
+- Changed the default cargo features to `rustls-ring` and `vendored`, a build with `native-tls` linking a vendored OpenSSL unless it passes `--no-default-features`.
 - Changed piped `--json` output to print one value per line.
 - Changed every `json-schema` schema to carry an `$id` naming the contract version, and to require the keys a command always prints.
 - Changed the help, usage and logs to carry no colour, and the help to print each paragraph on one line, for the terminal to fold.
@@ -71,7 +83,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 - Changed an OAuth refusal to name its code as the server spelled it, `(code invalid_grant)` instead of `(code InvalidGrant)`; a code io-oauth does not register reads `(unregistered code)`.
 - Changed a token response to take `expires_in` as a numeric string too, and a missing `token_type` as `Bearer`.
 - Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
-- Bumped pimalaya-cli and pimalaya-config to 0.5.
+- Bumped pimalaya-cli to 0.5.2 and pimalaya-config to 0.5.1.
 - Bumped io-oauth to 0.7 and pimalaya-stream to 0.4.
 
   A client secret is still sent as HTTP Basic credentials, the client id and the secret now form-encoded first (RFC 6749 section 2.3.1): one made of letters, digits and `*-._~` is unchanged on the wire.
@@ -83,7 +95,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
   An account starts from config.sample.toml instead: without a configuration, a terminal gets a welcome with the commands creating one, copied from the shipped sample or downloaded, and a script or `--json` an error naming the path. The `ortie-configure` key leaves `json-schema`.
 
 - **BREAKING**: Removed dynamic client registration (RFC 7591), which only the wizard ran; the Fastmail section of config.sample.toml carries a registered client instead.
-- **BREAKING**: Removed the hooks (`hooks.on-issue` and `hooks.on-refresh`) and the `notify` cargo feature; a `hooks` table is now refused by name, the error naming `storage.write.command` and MIGRATION.md.
+- **BREAKING**: Removed the hooks (`hooks.on-issue` and `hooks.on-refresh`) and the `notify` cargo feature; a `hooks` table is now refused by name in the sentence every Pimalaya CLI shares, naming `storage.write.command` and MIGRATION.md.
 
   `storage.write.command` receives the token JSON on every issue and refresh, so a command chained after it does what a success hook did.
 

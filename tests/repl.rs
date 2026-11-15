@@ -301,3 +301,64 @@ fn the_help_goes_to_stderr_in_a_json_session() {
     let usage = "\nUsage: ortie token show [OPTIONS]\n";
     assert!(stdout.contains(usage), "stdout: {stdout}");
 }
+
+/// A line is any command of the binary, the account ones included, run
+/// over the session's account: `account check` reads the storage again.
+#[test]
+fn a_line_takes_the_whole_grammar() {
+    let dir = TempDir::new().unwrap();
+    let (config, _) = write_device_config(dir.path());
+
+    let input = b"account list\naccount check\ncompletion bash\ntoken show\n";
+    let out = ortie_with_input(&config, &["--json", "repl"], input);
+
+    assert!(out.status.success(), "{out:?}");
+
+    let lines = json_lines(&out.stdout);
+    assert_eq!(lines.len(), 4, "{lines:?}");
+    assert_eq!(lines[0]["accounts"][0]["name"], "device", "{lines:?}");
+    assert_eq!(lines[1]["account"], "device", "{lines:?}");
+    assert_eq!(lines[1]["backends"][0]["backend"], "storage", "{lines:?}");
+    assert_eq!(lines[1]["backends"][0]["ok"], true, "{lines:?}");
+    assert_eq!(lines[2]["shell"], "bash", "{lines:?}");
+    let script = lines[2]["script"].as_str().unwrap_or_default();
+    assert!(script.contains("ortie"), "{lines:?}");
+    assert_eq!(lines[3]["accessToken"], "at-test");
+}
+
+/// A session never nests: pimalaya-cli refuses a `repl` or `mcp` line,
+/// coded `usage-invalid`, before Ortie runs anything.
+#[test]
+fn a_nested_session_is_refused_coded() {
+    let dir = TempDir::new().unwrap();
+    let (config, _) = write_device_config(dir.path());
+
+    let input = b"repl\nmcp --allow-write\ntoken show\n";
+    let out = ortie_with_input(&config, &["--json", "repl"], input);
+
+    assert!(out.status.success(), "{out:?}");
+
+    let lines = json_lines(&out.stdout);
+    assert_eq!(lines.len(), 3, "{lines:?}");
+
+    for line in &lines[..2] {
+        assert_eq!(line["code"], "usage-invalid", "{lines:?}");
+        assert_eq!(line["error"], "Cannot start a session inside a session");
+    }
+
+    assert_eq!(lines[2]["accessToken"], "at-test");
+}
+
+/// A `--version` line prints the version the command line prints.
+#[test]
+fn a_version_line_prints_the_version() {
+    let dir = TempDir::new().unwrap();
+    let (config, _) = write_device_config(dir.path());
+
+    let out = ortie_with_input(&config, &["repl"], b"-V\n");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let version = format!("ortie {}\n", env!("CARGO_PKG_VERSION"));
+
+    assert!(out.status.success(), "{out:?}");
+    assert_eq!(stdout, version);
+}

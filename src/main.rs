@@ -19,13 +19,15 @@
 //! Parsing starts in [`cli`], the root clap parser. Bare `ortie` shows
 //! the help, or the welcome when no configuration exists; otherwise it
 //! routes into [`auth`], which obtains tokens by running the account's
-//! grant, and [`token`], which works on the stored one.
+//! grant, [`token`], which works on the stored one, and [`account`],
+//! which lists the accounts and checks one.
 //!
-//! [`repl`] holds those same two trees open against one account, so the
-//! secret store is unlocked once instead of per command, on the shared
-//! REPL loop.
+//! [`repl`] runs the whole command tree over one account held open, so
+//! the secret store is unlocked once instead of per command, on the
+//! shared REPL loop.
 //!
-//! [`mcp`] serves them to an agent as Model Context Protocol tools, the
+//! [`mcp`] serves the grant and token trees to an agent as Model Context
+//! Protocol tools, the
 //! flows running in the server so no secret reaches the agent: the
 //! shared crate answers the protocol, Ortie its tools and their flows.
 //!
@@ -105,7 +107,10 @@ use pimalaya_cli::{
 use pimalaya_config::toml::ConfigMissingError;
 use simd_cpu::SimdCpu;
 
-use crate::{cli::Cli, error::ErrorCode};
+use crate::{
+    cli::{Cli, Session},
+    error::ErrorCode,
+};
 
 fn main() {
     // NOTE: the base64 codecs below read the installed CPU token, the
@@ -120,8 +125,14 @@ fn main() {
     let config_paths = cli.config.paths.as_ref();
     let account_name = cli.account.name.as_deref();
 
+    let mut session = Session {
+        config_paths,
+        account_name,
+        account: None,
+    };
+
     let result = match cli.cmd {
-        Some(cmd) => cmd.execute(&mut printer, config_paths, account_name),
+        Some(cmd) => cmd.execute(&mut printer, &mut session),
         None => cli::meet_bare_invocation(config_paths),
     };
 

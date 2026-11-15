@@ -9,104 +9,49 @@
 //! refresh write, which must persist a rotated refresh token.
 //!
 //! The session is bound to the `-a` or default account like any other
-//! command, and each input line is parsed as a `token` or `auth`
-//! subcommand dispatched against the in-memory account. pimalaya-cli's
-//! [`Repl`] runs the loop: lines split as a shell splits them, the
-//! session flags refused, every answer on stdout.
+//! command, and each input line is any command of the binary, run over
+//! the [`Session`] holding that account. pimalaya-cli's [`Repl`] runs the
+//! loop: lines split as a shell splits them, the session flags refused,
+//! a nested `repl` or `mcp` line refused coded `usage-invalid` before it
+//! reaches this crate, a `--version` line answered with the version
+//! [`Command`] carries, every answer on stdout.
 //!
 //! The stdio pipe is the authorisation boundary, so the token is never
 //! handed to another process the way a shared agent would. On exit the
 //! account drops and its secrets are zeroized.
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use pimalaya_cli::{error::with_code, printer::Printer, repl::Repl};
 
 use crate::{
-    account::Account,
-    auth::{get::AuthGetCommand, listen::AuthListenCommand, resume::AuthResumeCommand},
+    cli::{Command, Session},
     error::{self, ErrorCode},
-    token::TokenCommand,
 };
 
-/// Start a persistent REPL session for one account.
+/// Start a session running commands over one account.
 ///
-/// The account token is read from storage on first use and held in
-/// memory for the session, so the keyring is unlocked once instead of
-/// on every command. Each input line is a `token` or `auth` subcommand
-/// (`token show`, `auth get`); `quit`, or EOF, ends the session.
+/// Each line is a command without the binary name (`token show`, `auth
+/// get`), the account token read from storage on first use and held in
+/// memory, so the keyring is unlocked once instead of on every command.
+/// The account is the session's, and `--json` on a line switches that
+/// line alone to JSON. `quit`, `exit`, or EOF ends it.
 #[derive(Debug, Parser)]
 pub struct ReplCommand;
 
-/// The `token` and `auth` commands, the subset of the CLI tree running
-/// against the in-memory account.
-#[derive(Debug, Subcommand)]
-enum ReplCommandTree {
-    #[command(subcommand)]
-    Token(TokenCommand),
-    #[command(subcommand)]
-    Auth(ReplAuthCommand),
-}
-
-impl ReplCommandTree {
-    /// Dispatches the parsed line against the in-memory account.
-    fn execute(
-        self,
-        printer: &mut impl Printer,
-        account: &mut Account,
-        invocation: &str,
-    ) -> Result<()> {
-        match self {
-            Self::Token(cmd) => cmd.execute(printer, account),
-            Self::Auth(cmd) => cmd.execute(printer, account, invocation),
-        }
-    }
-}
-
-/// Get a fresh access token by running the account's OAuth grant.
-///
-/// The token it issues is the one the next `token` commands of the session
-/// read.
-#[derive(Debug, Subcommand)]
-enum ReplAuthCommand {
-    Get(AuthGetCommand),
-    Listen(AuthListenCommand),
-    #[command(visible_alias = "continue")]
-    Resume(AuthResumeCommand),
-}
-
-impl ReplAuthCommand {
-    fn execute(
-        self,
-        printer: &mut impl Printer,
-        account: &mut Account,
-        invocation: &str,
-    ) -> Result<()> {
-        match self {
-            Self::Get(cmd) => cmd.execute(printer, account, invocation),
-            Self::Listen(cmd) => cmd.execute(printer, account),
-            Self::Resume(cmd) => cmd.execute(printer, account),
-        }
-    }
-}
-
 impl ReplCommand {
-    /// Runs the read-eval-print loop until EOF or a quit command,
-    /// keeping the resolved token in the account across iterations,
-    /// each line printing as `printer` does unless it asks for JSON.
-    ///
-    /// The `invocation` is handed to `auth get`, for the `auth listen` and
-    /// `auth resume` commands it prints when the flow hands off.
-    pub fn execute(
-        self,
-        printer: &impl Printer,
-        mut account: Account,
-        invocation: &str,
-    ) -> Result<()> {
+    /// Runs the read-eval-print loop until EOF or a quit command, keeping
+    /// the session's account across lines, each line printing as
+    /// `printer` does unless it asks for JSON.
+    pub fn execute(self, printer: &impl Printer, session: &mut Session) -> Result<()> {
+        // NOTE: taken up front, so a missing configuration or account
+        // fails the session rather than its first line.
+        session.account()?;
+
         let repl = Repl::new("ortie", printer.is_json());
 
-        repl.run::<ReplCommandTree, ErrorCode>(|printer, cmd| {
-            cmd.execute(printer, &mut account, invocation)
+        repl.run::<Command, ErrorCode>(|printer, cmd| {
+            cmd.execute(printer, session)
                 .map_err(|err| with_code(err, error::code))
         })
     }

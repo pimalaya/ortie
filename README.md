@@ -22,10 +22,11 @@ CLI to manage OAuth tokens
 - **Every common grant**: authorization code, device code, and client credentials by secret or signed JWT.
 - **Token lifecycle**: refresh on demand or when the token is read, inspect, and revoke at the server.
 - **Your own storage**: tokens read and written through your commands, such as `pass` or `secret-tool`.
-- **Persistent session**: `ortie repl` unlocks the secret store once, then answers token commands over stdin.
+- **Persistent session**: `ortie repl` unlocks the secret store once, then answers any command over stdin.
+- **Account check**: `ortie account check` proves the token storage reads and the endpoints answer.
 - **MCP server**: an agent drives the grants through `ortie mcp`, and no tool ever returns a token.
 - **JSON output**: `--json` on every data command, its schema given by `ortie json-schema`.
-- **Full client**: TLS via Rustls (`rustls-ring` default, `rustls-aws`) or Native TLS (`native-tls`).
+- **Full client**: TLS via Rustls (`rustls-ring` default, `rustls-aws`) or Native TLS (`native-tls`), OpenSSL vendored (`vendored`, default).
 
 > [!TIP]
 > Ortie is written in [Rust](https://www.rust-lang.org/) and uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional functionality. The default feature set is declared in [Cargo.toml](./Cargo.toml).
@@ -138,6 +139,7 @@ Every command and flag is documented behind `--help`. A complete flow, from the 
 curl -sSL --create-dirs -o ~/.config/ortie/config.toml https://raw.githubusercontent.com/pimalaya/ortie/master/config.sample.toml
 $EDITOR ~/.config/ortie/config.toml # uncomment your provider, set the storage commands
 ortie auth get                      # sign in, then store the first token
+ortie account check                 # check the stored token reads and the endpoints answer
 ortie token show                    # print the access token, refreshed once expired
 ortie token inspect                 # print its type, scopes and expiry
 ortie token revoke                  # revoke it at the server
@@ -149,7 +151,7 @@ Ortie exits 0 on success. Exit 1 is a failure, which `--json` prints on stdout a
 
 ### REPL
 
-`ortie repl` holds one account in memory and answers `auth` and `token` commands, one per line, until `exit` or EOF. The secret store is read once for the whole session.
+`ortie repl` holds one account in memory and answers any command of the binary, one per line without the binary name, until `quit`, `exit` or EOF. The secret store is read once for the whole session.
 
 Interactively, it chains commands without unlocking the store each time:
 
@@ -165,7 +167,7 @@ Non-interactively, a program spawns `ortie repl --json` and talks to it over std
 
 ### MCP
 
-`ortie mcp` also talks over stdio, but speaks the [Model Context Protocol](https://modelcontextprotocol.io) so an agent can drive the grants. The agent starts one with `auth_get` and follows it with `auth_status`, while Ortie keeps the state, the PKCE verifier and the device code. No tool returns the token, and `token_revoke` needs `--allow-revoke`.
+`ortie mcp` also talks over stdio, but speaks the [Model Context Protocol](https://modelcontextprotocol.io) so an agent can drive the grants. The agent starts one with `auth_get` and follows it with `auth_status`, while Ortie keeps the state, the PKCE verifier and the device code. No tool returns the token. Without a flag only the tools that read are listed: `auth_get`, `auth_resume` and `token_refresh` need `--allow-write`, and `token_revoke` needs `--allow-revoke` as well.
 
 MCP clients start the servers declared in their configuration, most of them under an `mcpServers` object:
 
@@ -174,7 +176,7 @@ MCP clients start the servers declared in their configuration, most of them unde
   "mcpServers": {
     "ortie": {
       "command": "ortie",
-      "args": ["mcp"]
+      "args": ["mcp", "--allow-write"]
     }
   }
 }

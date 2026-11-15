@@ -2,14 +2,14 @@
 
 ## From v2 to v3
 
-v3 brings Ortie onto the standard the Pimalaya CLIs share: no configuration wizard, one configuration path per `-c`, camelCase keys and receipts under `--json`, coded failures, and hooks folded into the storage commands. A v2 configuration loads as it is, unless it holds a `hooks` table, marks several accounts default, or writes a host in Unicode; a script passing `-a default` drops it.
+v3 brings Ortie onto the standard the Pimalaya CLIs share: no configuration wizard, one configuration path per `-c`, camelCase keys and receipts under `--json`, coded failures, and hooks folded into the storage commands. A v2 configuration loads as it is, unless it holds a `hooks` table, sets `tls`, marks several accounts default, or writes a host in Unicode; a script passing `-a default` drops it.
 
 The [CHANGELOG](./CHANGELOG.md) lists every change; these are the ones to act on.
 
 ### Configuration and first run
 
 - **The wizard is gone.** `ortie configure` (alias `wizard`), its `ortie-configure` schema and dynamic client registration (RFC 7591) no longer exist, and bare `ortie` prints the help. Write an account from [config.sample.toml](./config.sample.toml), which releases and packages ship as share/doc/ortie/config.sample.toml: uncomment the section of your provider (Google, Microsoft Graph, Microsoft IMAP and SMTP, Fastmail, or a custom application) and fill its storage commands. Run at a terminal without a configuration, Ortie prints the commands copying it in place. A Fastmail account the wizard registered keeps working; a new one takes the registered client of the sample.
-- **The `hooks` table is refused**, by name: "The `hooks` table was removed in 3.0.0: chain a command after `storage.write.command`, which receives the token on every issue and refresh". `storage.write.command` runs on every token `auth get`, `auth resume`, `auth listen`, `token refresh` and an auto-refreshing `token show` store, so a command chained after it does what a success hook did. The `notify` tables and the `notify` cargo feature went with the hooks: call `notify-send` or any notifier from the command. The variables v2 exported (`ACCESS_TOKEN`, `EXPIRES_IN`, `REFRESH_TOKEN` and so on) are gone; the token JSON on the command's stdin carries the same values, under the OAuth wire names (`access_token`, `expires_in`, `refresh_token`, `scope`).
+- **The `hooks` table is refused**, by name: "The `hooks` table is removed, the storage write command running on every issue and refresh: chain a command after `storage.write.command`, see MIGRATION.md". `storage.write.command` runs on every token `auth get`, `auth resume`, `auth listen`, `token refresh` and an auto-refreshing `token show` store, so a command chained after it does what a success hook did. The `notify` tables and the `notify` cargo feature went with the hooks: call `notify-send` or any notifier from the command. The variables v2 exported (`ACCESS_TOKEN`, `EXPIRES_IN`, `REFRESH_TOKEN` and so on) are gone; the token JSON on the command's stdin carries the same values, under the OAuth wire names (`access_token`, `expires_in`, `refresh_token`, `scope`).
 
   ```toml
   # v2
@@ -58,6 +58,18 @@ The [CHANGELOG](./CHANGELOG.md) lists every change; these are the ones to act on
   ortie token show
   ```
 
+- **`tls` is a table**, as in every Pimalaya CLI: `tls.provider` names the implementation (`rustls` or `native-tls`) and `tls.rustls.crypto` the crypto provider of rustls (`ring` or `aws`), each the first the build carries when omitted, and the new `tls.cert` a PEM certificate to trust. The string v2 read is refused by name, the error giving the keys its value becomes:
+
+  ```toml
+  # v2
+  tls = "rustls-aws"
+  # v3
+  tls.provider = "rustls"
+  tls.rustls.crypto = "aws"
+  ```
+
+  `tls = "native-tls"` becomes `tls.provider = "native-tls"`, `tls = "rustls-ring"` `tls.provider = "rustls"` with `tls.rustls.crypto = "ring"`, and `tls = "auto"` is deleted.
+
 - **A URL takes an ASCII host only**: write an internationalised host in Punycode, in the endpoints, the redirection and the resources.
 
   ```toml
@@ -71,7 +83,7 @@ The [CHANGELOG](./CHANGELOG.md) lists every change; these are the ones to act on
 
 - **`auth get` opens no browser**: it prints the authorization link, or the verification URI and the user code, for you to open; at a terminal it still waits for the redirection and stores the token. A script that relied on the browser opening runs `xdg-open` (or `open`, `start`) on the `authorizationUri` of `auth get --json`, then `auth listen` or `auth resume` as before.
 - **`auth resume --pkce` refuses a verifier** that is not 43 to 128 unreserved characters (RFC 7636 section 4.1), and `--state` an empty state. Pass back the values `auth get` printed, which always pass.
-- **`ortie repl` refuses a line setting `-a`, `-c` or a log flag**, naming it: the session fixes them when it starts, so pass them to `ortie repl` itself. A line is split as a shell does (quotes, escapes, `#` comments), takes subcommand prefixes, and takes `--json` for that line only. The prompt is `ortie> `.
+- **`ortie repl` refuses a line setting `-a`, `-c` or a log flag**, naming it: the session fixes them when it starts, so pass them to `ortie repl` itself. A line is split as a shell does (quotes, escapes, `#` comments), takes subcommand prefixes, and takes `--json` for that line only. The prompt is `ortie> `. A line takes any command of the binary, `account check` and `completion bash` included, a `repl` or `mcp` line being refused coded `usage-invalid` ("Cannot start a session inside a session").
 
 ### Output
 
@@ -107,11 +119,16 @@ ortie token refresh --json | jq -r 'if .error then "failed: \(.code)" else .expi
 [ "$(ortie token refresh --json | jq -r .code)" = grant-invalid ] && ortie auth get
 ```
 
+### Building
+
+- **`vendored` is a default cargo feature**, as in the other Pimalaya CLIs: a build with `--features native-tls` links a vendored OpenSSL. A packager linking the system one builds with `--no-default-features --features native-tls`.
+
 ### New commands
 
 - **`ortie token revoke`** revokes the stored refresh token, or the access token when none is stored (RFC 7009), at the new `endpoints.revocation`.
 - **`ortie auth listen`** catches the redirection of a flow a non-interactive or `--json` `auth get` handed off, then completes it as `auth resume` does.
-- **`ortie mcp`** serves the grants of one account to an agent over the Model Context Protocol; no tool returns a token, and `token_revoke` is listed only under `--allow-revoke`.
+- **`ortie mcp`** serves the grants of one account to an agent over the Model Context Protocol; no tool returns a token. Started without a flag it lists the tools that read alone, `token_inspect` and `auth_status`: an MCP client configuration driving the grants passes `--allow-write` for `auth_get`, `auth_resume` and `token_refresh`, and `--allow-revoke` on top of it for `token_revoke`.
+- **`ortie account list`** lists the accounts of the configuration, and **`ortie account check`** proves the account's storage reads its token and its endpoints answer HTTP, one row each, exiting 3 when one fails.
 
 ## From v1 to v2
 

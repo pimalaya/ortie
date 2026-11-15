@@ -12,7 +12,7 @@ Ortie is a thin, config-driven front-end over io-oauth, the OAuth engine. It shi
 Ortie SHALL build as a binary with no public library API. The lib target and the `cli`/`client` cargo features do not exist; the CHANGELOG redirects the rare library user to io-oauth.
 
 ### Requirement: TLS-only feature set
-The cargo features SHALL be the TLS providers (`rustls-ring` by default, `rustls-aws`, `native-tls`) and `vendored`, and no other.
+The cargo features SHALL be the TLS providers (`rustls-ring`, `rustls-aws`, `native-tls`) and `vendored`, and no other, the default set being `rustls-ring` and `vendored`, as in the other Pimalaya CLIs.
 
 ### Requirement: No version switch
 Ortie SHALL NOT expose a `version` config option for OAuth 2.0 versus 2.1. 2.1 is a constraint profile of 2.0 with identical wire messages; Ortie adopts 2.1-compatible defaults (S256 PKCE, exact redirect matching, refresh rotation) with explicit 2.0 escape hatches (`pkce = false`, `pkce = "plain"`). A hard-strict mode, if ever needed, would land later as a single `strict = true` flag.
@@ -36,3 +36,11 @@ Every dependency SHALL be declared with `default-features = false` and the featu
 
 ### Requirement: Live provider suites
 The binary SHALL carry one ignored integration suite per provider under tests/ (google.rs, microsoft.rs, fastmail.rs), run with `--ignored` and sharing tests/common.rs with the mock suites. Each SHALL hold an `anonymous` module that runs on public or made-up clients and touches no account, its accounts taken from the provider sections of config.sample.toml where one fits so a provider drifting from the sample fails it, and MAY hold a `credentialed` module reading `ORTIE_`-prefixed variables, which CI runs in the upstream repository only. A client secret SHALL reach the binary through a secret command and a key or certificate through a file only its owner reads, never argv nor the configuration, and no assertion SHALL print a token or secret. CI SHALL run each suite in its own job at `RUST_LOG=debug` at most.
+
+### Requirement: The command tree follows the family
+The top-level commands SHALL be `auth`, `token`, `repl`, `mcp` and `account`, then the standard commands in the family's order, `completion`, `manual`, `json-schema`, with pimalaya-cli's abouts. The help of `repl` SHALL open with "Start a session running commands over one account" and name "`quit`, `exit`, or EOF" as its end.
+
+#### Scenario: The help
+- GIVEN any configuration
+- WHEN `ortie --help` runs
+- THEN its commands read `auth`, `token`, `repl`, `mcp`, `account`, `completion`, `manual`, `json-schema`, `help`

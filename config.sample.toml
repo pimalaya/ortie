@@ -14,10 +14,11 @@ grant = "authorization-code"		# sign in through a browser redirection
 pkce = "s256"				# PKCE with the SHA-256 challenge
 #pkce = "plain"				# PKCE with the plain challenge
 
-tls = "auto"				# the TLS the binary was built with
-#tls = "native-tls"			# the platform's TLS
-#tls = "rustls-aws"			# rustls on aws-lc-rs
-#tls = "rustls-ring"			# rustls on ring
+#tls.provider = "rustls"		# rustls; omitted, the first TLS the build carries
+#tls.provider = "native-tls"		# the platform's TLS
+#tls.rustls.crypto = "ring"		# rustls on ring; omitted, the first the build carries
+#tls.rustls.crypto = "aws"		# rustls on aws-lc-rs
+#tls.cert = "/path/to/cert.pem"		# a PEM certificate to trust beside the platform's
 
 storage.read.command = "exit 127"	# prints the stored token JSON
 storage.write.command = "exit 127"	# receives the token JSON on stdin

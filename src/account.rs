@@ -1,11 +1,15 @@
 //! # Account
 //!
-//! The flat runtime account, built from the nested
-//! [`crate::config::AccountConfig`] by flattening every
+//! The `account` subcommand tree, listing the accounts a configuration
+//! declares and checking one, and the flat runtime account, built from
+//! the nested [`crate::config::AccountConfig`] by flattening every
 //! `storage.*.command` into a field.
 //!
 //! Commands consume it and call its driver methods rather than walking
 //! the config tree, so token storage has one entry point.
+
+pub mod check;
+pub mod list;
 
 use std::{
     borrow::Cow,
@@ -13,19 +17,23 @@ use std::{
     io::Write,
     net::TcpListener,
     path::PathBuf,
-    process::{Command, Stdio},
+    process::Stdio,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, anyhow, bail};
-use pimalaya_config::secret::Secret;
+use clap::Subcommand;
+use pimalaya_cli::printer::Printer;
+use pimalaya_config::{command::CommandConfig, secret::Secret};
 use pimalaya_stream::tls::Tls;
 use url::{Host, Url};
 
 use io_oauth::rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams;
 
 use crate::{
+    account::{check::AccountCheckCommand, list::AccountListCommand},
     auth::get::is_loopback_redirect,
+    cli::Session,
     config::{
         AccountConfig, EndpointsConfig, GrantConfig, PkceConfig, StorageConfig, StoragesConfig,
     },
@@ -35,9 +43,35 @@ use crate::{
 /// The redirection bound when the account configures none.
 pub const DEFAULT_REDIRECTION: &str = "http://127.0.0.1";
 
+/// Manage accounts defined in the TOML configuration file.
+///
+/// An account is an OAuth 2.0 client, its endpoints and the commands
+/// storing its token. These subcommands list the accounts and check one;
+/// creating one means adding an `[accounts.<name>]` table, as
+/// config.sample.toml shows.
+#[derive(Debug, Subcommand)]
+pub enum AccountCommand {
+    #[command(visible_alias = "ls")]
+    List(AccountListCommand),
+    Check(AccountCheckCommand),
+}
+
+impl AccountCommand {
+    /// Dispatches the account leaf: the list reads the configuration, the
+    /// check runs over the session's account.
+    pub fn execute(self, printer: &mut impl Printer, session: &mut Session) -> Result<()> {
+        match self {
+            Self::List(cmd) => cmd.execute(printer, session.config_paths),
+            Self::Check(cmd) => cmd.execute(printer, session.account()?),
+        }
+    }
+}
+
 /// Flat, command-ready view of one OAuth 2.0 account.
 #[derive(Debug)]
 pub struct Account {
+    /// The name of its `[accounts.<name>]` block.
+    pub name: String,
     /// OAuth 2.0 client identifier.
     pub client_id: String,
     /// Optional OAuth 2.0 client secret.
@@ -73,15 +107,16 @@ pub struct Account {
     /// Redirection endpoint registered with the provider.
     pub redirection_endpoint: Option<Url>,
     /// Command printing the stored token JSON on its stdout.
-    pub read_storage_command: Command,
+    pub read_storage_command: CommandConfig,
     /// Command receiving the token JSON on its stdin.
-    pub write_storage_command: Command,
+    pub write_storage_command: CommandConfig,
     /// Token resolved from storage, memoized for the session.
     pub token: Option<Oauth20AccessTokenSuccessParams>,
 }
 
-impl From<AccountConfig> for Account {
-    fn from(cfg: AccountConfig) -> Self {
+impl Account {
+    /// Flattens the configuration `cfg` of the account `name`.
+    pub fn new(name: String, cfg: AccountConfig) -> Self {
         let AccountConfig {
             client_id,
             client_secret,
@@ -114,6 +149,7 @@ impl From<AccountConfig> for Account {
         } = storage;
 
         Self {
+            name,
             client_id,
             client_secret,
             client_key,
@@ -135,9 +171,7 @@ impl From<AccountConfig> for Account {
             token: None,
         }
     }
-}
 
-impl Account {
     /// Resolves the redirection URI, binding an ephemeral port for
     /// `http://127.0.0.1` when none is configured, or for a configured
     /// http loopback URI naming no port.
@@ -169,11 +203,11 @@ impl Account {
     }
 
     /// Runs the read storage command and parses its stdout as the token
-    /// response JSON.
-    fn read_storage(&mut self) -> Result<Oauth20AccessTokenSuccessParams> {
-        let cmd = &mut self.read_storage_command;
-
-        let output = cmd
+    /// response JSON, memoizing nothing.
+    pub fn read_storage(&self) -> Result<Oauth20AccessTokenSuccessParams> {
+        let output = self
+            .read_storage_command
+            .to_command()
             .output()
             .context("Spawn command to read OAuth 2.0 access token")?;
 
@@ -214,10 +248,11 @@ impl Account {
         res.issued_at = Some(now_secs());
         self.token = Some(res.clone());
 
-        let cmd = &mut self.write_storage_command;
         let json = String::try_from(&res)?.into_bytes();
 
-        let mut child = cmd
+        let mut child = self
+            .write_storage_command
+            .to_command()
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

@@ -254,8 +254,26 @@ fn form(body: &str, key: &str) -> Option<String> {
         .map(|(_, v)| v.into_owned())
 }
 
+/// The tools a server started with `flags` lists, by name.
+fn listed(config: &Path, flags: &[&str]) -> Vec<Value> {
+    let mut server = Server::start(config, flags);
+    let tools = server.request("tools/list", json!({}))["result"]["tools"].clone();
+    server.finish();
+    tools.as_array().unwrap().clone()
+}
+
+fn names(tools: &[Value]) -> Vec<&str> {
+    tools
+        .iter()
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect()
+}
+
+/// Without a flag only the tools that read are listed, `--allow-write`
+/// adds the ones replacing the stored token, and `--allow-revoke` the
+/// revocation on top; the hints of a tool are the same whatever the gates.
 #[test]
-fn tools_are_listed_with_their_schemas_and_revocation_is_opt_in() {
+fn the_gates_list_what_a_tool_may_do() {
     let dir = TempDir::new().unwrap();
     let (addr, _) = start_mock(0);
     let (config, _) = write_mcp_config(dir.path(), addr, "");
@@ -264,42 +282,69 @@ fn tools_are_listed_with_their_schemas_and_revocation_is_opt_in() {
     let init = server.request("initialize", json!({}));
     assert_eq!(init["result"]["protocolVersion"], "2025-06-18");
 
-    let tools = server.request("tools/list", json!({}))["result"]["tools"].clone();
-    let names: Vec<&str> = tools
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|tool| tool["name"].as_str().unwrap())
-        .collect();
-    assert_eq!(
-        names,
-        [
-            "token_inspect",
-            "auth_get",
-            "auth_status",
-            "auth_resume",
-            "token_refresh"
-        ]
-    );
+    let instructions = init["result"]["instructions"].as_str().unwrap();
+    for words in ["--allow-write", "--allow-revoke", "ortie-error"] {
+        assert!(instructions.contains(words), "{words}: {instructions}");
+    }
 
-    for tool in tools.as_array().unwrap() {
+    let unlisted = server.request("tools/call", json!({ "name": "auth_get", "arguments": {} }));
+    assert_eq!(unlisted["error"]["code"], -32602, "{unlisted}");
+    server.finish();
+
+    let read = listed(&config, &[]);
+    assert_eq!(names(&read), ["token_inspect", "auth_status"]);
+
+    let write = listed(&config, &["--allow-write"]);
+    let expected = [
+        "token_inspect",
+        "auth_get",
+        "auth_status",
+        "auth_resume",
+        "token_refresh",
+    ];
+    assert_eq!(names(&write), expected);
+
+    let revoke = listed(&config, &["--allow-write", "--allow-revoke"]);
+    assert_eq!(names(&revoke).last(), Some(&"token_revoke"));
+    assert_eq!(revoke.len(), expected.len() + 1);
+
+    for tool in &revoke {
+        let name = tool["name"].as_str().unwrap();
+        let hints = &tool["annotations"];
+        let read_only = ["token_inspect", "auth_status"].contains(&name);
+
+        assert_eq!(hints["readOnlyHint"], read_only, "{tool}");
+        assert_eq!(hints["destructiveHint"], name == "token_revoke", "{tool}");
+        assert_eq!(hints["openWorldHint"], false, "{tool}");
         assert_eq!(tool["inputSchema"]["additionalProperties"], false, "{tool}");
         assert_eq!(tool["outputSchema"]["type"], "object", "{tool}");
-    }
-    server.finish();
 
-    let mut server = Server::start(&config, &["--allow-revoke"]);
-    let tools = server.request("tools/list", json!({}))["result"]["tools"].clone();
-    assert!(
-        tools
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "token_revoke")
-    );
-    let unknown = server.call("token_revoke", json!({}));
-    assert_eq!(unknown["isError"], true, "{unknown}");
+        for fewer in [&read, &write] {
+            if let Some(same) = fewer.iter().find(|t| t["name"] == name) {
+                assert_eq!(same, tool, "{name}");
+            }
+        }
+    }
+
+    let mut server = Server::start(&config, &["--allow-write", "--allow-revoke"]);
+    let revoked = server.call("token_revoke", json!({}));
+    assert_eq!(revoked["isError"], true, "{revoked}");
     server.finish();
+}
+
+/// The revocation is a narrower write, so its gate needs the write one.
+#[test]
+fn allow_revoke_alone_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock(0);
+    let (config, _) = write_mcp_config(dir.path(), addr, "");
+
+    let out = ortie(&config, &["mcp", "--allow-revoke"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+
+    assert_eq!(out.status.code(), Some(2), "{stderr}");
+    assert!(out.stdout.is_empty());
+    assert!(stderr.contains("--allow-write"), "{stderr}");
 }
 
 #[test]
@@ -308,7 +353,7 @@ fn a_code_flow_is_captured_exchanged_and_stored() {
     let (addr, bodies) = start_mock(0);
     let (config, token) = write_mcp_config(dir.path(), addr, "");
 
-    let mut server = Server::start(&config, &[]);
+    let mut server = Server::start(&config, &["--allow-write"]);
     assert_eq!(server.settle()["status"], "none");
 
     let get = server.call("auth_get", json!({}))["structuredContent"].clone();
@@ -352,7 +397,7 @@ fn a_redirect_no_listener_catches_is_resumed_from_its_uri() {
         r#"endpoints.redirection = "org.example.app:/cb""#,
     );
 
-    let mut server = Server::start(&config, &[]);
+    let mut server = Server::start(&config, &["--allow-write"]);
 
     let get = server.call("auth_get", json!({}))["structuredContent"].clone();
     assert_eq!(get["redirectCaptured"], false, "{get}");
@@ -380,7 +425,7 @@ fn a_device_flow_is_polled_to_the_token() {
     let (addr, bodies) = start_mock(1);
     let (config, _) = write_mcp_config(dir.path(), addr, r#"grant = "device""#);
 
-    let mut server = Server::start(&config, &[]);
+    let mut server = Server::start(&config, &["--allow-write"]);
 
     let get = server.call("auth_get", json!({}))["structuredContent"].clone();
     assert_eq!(get["kind"], "device", "{get}");
@@ -407,7 +452,7 @@ fn a_device_flow_bounds_the_lifetime_and_the_interval_of_the_server() {
     let (addr, bodies) = start_mock_with(1, timing);
     let (config, _) = write_mcp_config(dir.path(), addr, r#"grant = "device""#);
 
-    let mut server = Server::start(&config, &[]);
+    let mut server = Server::start(&config, &["--allow-write"]);
     let start = Instant::now();
 
     let get = server.call("auth_get", json!({}))["structuredContent"].clone();
@@ -433,7 +478,7 @@ fn a_device_flow_past_its_deadline_is_coded_device_code_expired() {
     let (addr, _) = start_mock_with(usize::MAX, r#""expires_in":1,"interval":1"#);
     let (config, _) = write_mcp_config(dir.path(), addr, r#"grant = "device""#);
 
-    let mut server = Server::start(&config, &[]);
+    let mut server = Server::start(&config, &["--allow-write"]);
 
     let get = server.call("auth_get", json!({}))["structuredContent"].clone();
     assert_eq!(get["kind"], "device", "{get}");
@@ -451,7 +496,7 @@ fn a_request_not_echoing_the_state_does_not_end_the_flow() {
     let (addr, bodies) = start_mock(0);
     let (config, _) = write_mcp_config(dir.path(), addr, "");
 
-    let mut server = Server::start(&config, &[]);
+    let mut server = Server::start(&config, &["--allow-write"]);
 
     let get = server.call("auth_get", json!({}))["structuredContent"].clone();
     let uri = Url::parse(get["authorizationUri"].as_str().unwrap()).unwrap();
@@ -480,7 +525,7 @@ fn a_new_flow_stops_the_listener_of_the_old_one() {
     let (addr, _) = start_mock(0);
     let (config, _) = write_mcp_config(dir.path(), addr, "");
 
-    let mut server = Server::start(&config, &[]);
+    let mut server = Server::start(&config, &["--allow-write"]);
 
     let first = server.call("auth_get", json!({}))["structuredContent"].clone();
     let first = Url::parse(first["authorizationUri"].as_str().unwrap()).unwrap();
@@ -512,7 +557,7 @@ fn a_new_flow_binds_the_configured_port_again() {
     let redirection = format!(r#"endpoints.redirection = "http://127.0.0.1:{port}/cb""#);
     let (config, _) = write_mcp_config(dir.path(), addr, &redirection);
 
-    let mut server = Server::start(&config, &[]);
+    let mut server = Server::start(&config, &["--allow-write"]);
 
     for _ in 0..3 {
         let get = server.call("auth_get", json!({}));
@@ -528,7 +573,7 @@ fn an_unknown_argument_or_tool_is_refused() {
     let (addr, _) = start_mock(0);
     let (config, _) = write_mcp_config(dir.path(), addr, "");
 
-    let mut server = Server::start(&config, &[]);
+    let mut server = Server::start(&config, &["--allow-write"]);
 
     let resume = failure(&server.call("auth_resume", json!({ "url": "x" })));
     assert_eq!(resume["code"], "usage-invalid", "{resume}");
@@ -562,11 +607,13 @@ fn a_missing_or_mistyped_argument_is_refused_as_usage() {
     let (addr, _) = start_mock(0);
     let (config, _) = write_mcp_config(dir.path(), addr, "");
 
-    let mut server = Server::start(&config, &[]);
+    let mut server = Server::start(&config, &["--allow-write"]);
 
-    let missing = failure(&server.call("auth_resume", json!({})));
-    assert_eq!(missing["code"], "usage-invalid", "{missing}");
-    assert_eq!(missing["error"], "Missing argument `uri`", "{missing}");
+    for arguments in [json!({}), json!({ "uri": null })] {
+        let missing = failure(&server.call("auth_resume", arguments));
+        assert_eq!(missing["code"], "usage-invalid", "{missing}");
+        assert_eq!(missing["error"], "Missing argument `uri`", "{missing}");
+    }
 
     let mistyped = failure(&server.call("auth_resume", json!({ "uri": 1 })));
     assert_eq!(mistyped["code"], "usage-invalid", "{mistyped}");
