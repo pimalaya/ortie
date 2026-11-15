@@ -43,4 +43,4 @@ When auto-refresh triggers, Ortie SHALL exchange the refresh token where one exi
 - THEN the text reads `Expires: unknown` and the JSON `"expiresAt": null`
 
 ### Requirement: Revoke command
-`token revoke` SHALL revoke the stored refresh token when present, else the access token, against `endpoints.revocation` with the matching `token_type_hint` (RFC 7009), and print the kind it revoked (`{revoked}`, `refreshToken` or `accessToken`). A rejection SHALL fail with the server's error code. Storage SHALL be left as it is.
+`token revoke` SHALL revoke the stored refresh token when present, else the access token, against `endpoints.revocation` with the matching `token_type_hint` (RFC 7009), and print the kind it revoked (`{revoked}`, `refresh-token` or `access-token`). A rejection SHALL fail with the server's error code. Storage SHALL be left as it is.

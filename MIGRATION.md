@@ -130,7 +130,7 @@ ortie token refresh --json | jq -r 'if .error then "failed: \(.code)" else .expi
 
 ### New commands
 
-- **`ortie token revoke`** revokes the stored refresh token, or the access token when none is stored (RFC 7009), at the new `endpoints.revocation`.
+- **`ortie token revoke`** revokes the stored refresh token, or the access token when none is stored (RFC 7009), at the new `endpoints.revocation`, and under `--json` prints which one went, `{"revoked": "refresh-token"}` or `{"revoked": "access-token"}`.
 - **`ortie auth listen`** catches the redirection of a flow a non-interactive or `--json` `auth get` handed off, then completes it as `auth resume` does.
 - **`ortie mcp`** serves the grants of one account to an agent over the Model Context Protocol; no tool returns a token. Started without a flag it lists the tools that read alone, `token_inspect` and `auth_status`: an MCP client configuration driving the grants passes `--allow-write` for `auth_get`, `auth_resume` and `token_refresh`, and `--allow-revoke` on top of it for `token_revoke`.
 - **`ortie account list`** lists the accounts of the configuration, and **`ortie account check`** proves the account's storage reads its token and its endpoints answer HTTP, one row each, exiting 3 when one fails.

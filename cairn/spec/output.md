@@ -47,7 +47,12 @@ Every write to stdout that is not the printer's SHALL be guarded by the JSON mod
 Every output type Ortie prints SHALL serialize its keys as camelCase, so each key stays reachable by dot access in jq and JavaScript and so the family reads as one surface to a script. A field carrying a provider spelling verbatim SHALL keep its explicit `#[serde(rename)]`. Configuration types SHALL stay kebab-case: what the loader reads is not what the printer emits.
 
 ### Requirement: Shared shapes and spellings
-`token inspect` SHALL print `issuedAt` and `expiresAt` as RFC 3339 instants in UTC with `Z`, `null` when unknown, and no output type SHALL print an epoch number.
+Values Ortie defines (`revoked`, the MCP `kind` and `status`, the codes) SHALL be kebab-case; values a protocol defines (the token type, the scope, the OAuth codes) SHALL keep its spelling. `token inspect` SHALL print `issuedAt` and `expiresAt` as RFC 3339 instants in UTC with `Z`, `null` when unknown, and no output type SHALL print an epoch number.
+
+#### Scenario: The kind of a revoked token
+- GIVEN a store holding a refresh token and a revocation endpoint accepting it
+- WHEN `ortie token revoke --json` runs
+- THEN it prints `{"revoked": "refresh-token"}`
 
 ### Requirement: Text output ends with a newline
 Every command's text rendering SHALL end with a newline, `token show` included, so the shell prompt starts on a line of its own. The REPL SHALL add none of its own: interactive, its prompt `ortie> ` follows the output on a line of its own; piped, results follow each other line after line.

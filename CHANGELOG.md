@@ -10,7 +10,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 ### Added
 
-- Added `token revoke`, revoking the stored refresh token, or the access token when none is stored (RFC 7009), at the new `endpoints.revocation`.
+- Added `token revoke`, revoking the stored refresh token, or the access token when none is stored (RFC 7009), at the new `endpoints.revocation`; `--json` prints `{"revoked": "refresh-token"}` or `{"revoked": "access-token"}`.
 - Added `auth listen`, catching the redirection of a flow a non-interactive or `--json` `auth get` handed off, then completing it as `auth resume` does.
 
   The `auth get` handoff object gains `redirectUri`.

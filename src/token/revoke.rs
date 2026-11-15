@@ -81,7 +81,7 @@ pub struct TokenRevokeOutput {
 
 /// The kind of a stored token.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 pub enum TokenKind {
     /// The access token, revoked when no refresh token is stored.
     AccessToken,

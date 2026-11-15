@@ -101,7 +101,7 @@ fn the_refresh_token_is_revoked_and_storage_kept() {
     assert!(output.status.success(), "{output:?}");
 
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(json, serde_json::json!({ "revoked": "refreshToken" }));
+    assert_eq!(json, serde_json::json!({ "revoked": "refresh-token" }));
 
     let bodies = bodies.lock().unwrap();
     assert_eq!(
@@ -126,7 +126,7 @@ fn without_a_refresh_token_the_access_token_is_revoked() {
     assert!(output.status.success(), "{output:?}");
 
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(json["revoked"], "accessToken");
+    assert_eq!(json["revoked"], "access-token");
     assert_eq!(
         bodies.lock().unwrap().as_slice(),
         ["token=at&token_type_hint=access_token&client_id=app-id"]

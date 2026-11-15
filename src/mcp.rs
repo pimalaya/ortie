@@ -832,7 +832,7 @@ pub struct McpAuthGetOutput {
 
 /// The kind of flow `auth_get` started.
 #[derive(Debug, Default, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 pub enum McpAuthGetKind {
     /// An authorization code flow: the user opens the authorization URI.
     #[default]
@@ -869,7 +869,7 @@ impl McpAuthStatusOutput {
 
 /// Where the flow `auth_get` started stands.
 #[derive(Debug, JsonSchema, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 pub enum McpAuthStatusKind {
     /// No flow was started.
     None,
