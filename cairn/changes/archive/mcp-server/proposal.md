@@ -55,4 +55,4 @@ Several accounts per server (several servers in the client's configuration). An 
 - The shared code (item 8) is copied from himalaya into src/mcp.rs; moving it into pimalaya-cli is left for when himalaya and ortie both adopt it, so this release waits on no pimalaya-cli release.
 - The `auth_get` and `auth_status` schemas (item 7) come from their types (`McpAuthGetOutput`, `McpAuthStatusOutput`), not from the json-schema registry, which keys commands only.
 - `auth_get` answers `redirectCaptured`, telling the agent whether to ask the user for the redirected URL; `initialize` carries instructions naming the tool order.
-- cairn/changes/auth-listen is not a dependency: the server holds the redirect URI itself.
+- cairn/changes/archive/auth-listen is not a dependency: the server holds the redirect URI itself.

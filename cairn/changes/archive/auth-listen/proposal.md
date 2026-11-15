@@ -40,4 +40,4 @@ The MCP server itself (a change of its own, over this command and the REPL). A t
 - A loopback redirect URI is refused only when it is not http(s) on a loopback host; a missing port takes the scheme's default, as `auth get`'s own listener does.
 - `auth listen` prints "Wait for redirection on …" only to a person at a terminal; piped or under `--json` it prints the receipt alone. `ortie-auth-listen` joins `json-schema`, the receipt's schema.
 - The printed commands start with `invocation` (src/auth/get.rs, formerly `resume_invocation`), the `ortie -c … -a …` prefix both commands share.
-- ortie's MCP server (cairn/changes/mcp-server) landed first and needs none of this: it holds the redirect URI and binds before answering.
+- ortie's MCP server (cairn/changes/archive/mcp-server) landed first and needs none of this: it holds the redirect URI and binds before answering.

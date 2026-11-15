@@ -86,7 +86,8 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 - Changed an OAuth refusal to name its code as the server spelled it, `(code invalid_grant)` instead of `(code InvalidGrant)`; a code io-oauth does not register reads `(unregistered code)`.
 - Changed a token response to take `expires_in` as a numeric string too, and a missing `token_type` as `Bearer`.
 - Replaced the base64 crate with [base64-codec](https://crates.io/crates/base64-codec), on the SIMD features of the CPU detected at startup.
-- Bumped pimalaya-cli to 0.5.2 and pimalaya-config to 0.5.1.
+- Bumped pimalaya-cli to 0.5.2.
+- Bumped pimalaya-config to 0.5.2: an unknown key's error lists no removed key.
 - Bumped io-oauth to 0.7 and pimalaya-stream to 0.4.
 
   A client secret is still sent as HTTP Basic credentials, the client id and the secret now form-encoded first (RFC 6749 section 2.3.1): one made of letters, digits and `*-._~` is unchanged on the wire.

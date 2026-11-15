@@ -28,7 +28,7 @@ panic = "abort"
 pimalaya-cli = { version = "0.5.2", default-features = false, features = ["build"] }
 
 [dev-dependencies]
-pimalaya-config = { version = "0.5.1", default-features = false, features = ["sample"] }
+pimalaya-config = { version = "0.5.2", default-features = false, features = ["sample"] }
 tempfile = { version = "3", default-features = false }
 
 [dependencies]
@@ -40,7 +40,7 @@ idna_adapter = { version = "=1.0.0", default-features = false }
 io-oauth = { version = "0.7.0", default-features = false, features = ["client", "jwt-bearer"] }
 log = { version = "0.4", default-features = false }
 pimalaya-cli = { version = "0.5.2", default-features = false, features = ["mcp", "repl", "terminal"] }
-pimalaya-config = { version = "0.5.1", default-features = false, features = ["toml", "secret"] }
+pimalaya-config = { version = "0.5.2", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.4", default-features = false, features = ["std"] }
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }
 secrecy = { version = "0.10", default-features = false, features = ["serde"] }
