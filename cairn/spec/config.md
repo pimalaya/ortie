@@ -38,12 +38,19 @@ An account SHALL define read and write storage as external shell commands. The r
 Every v1.x config file SHALL parse and run unchanged, the `hooks` table aside, refused by name ("The configuration refuses every key it does not read"): `grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, and `pkce = true`/`false` are still accepted. The behaviours an existing account can notice are PKCE by default and `token show` refreshing an expired token, unless it sets `auto-refresh = false`.
 
 ### Requirement: Account resolution failures name what is missing
-Each of the four ways account resolution fails SHALL name what is missing or wrong and what to do about it: a missing configuration names the path it looked for and points at config.sample.toml, a missing named account lists the accounts the configuration does hold, sorted, a missing default names both ways of picking one, and several accounts marked `default = true`, none named, are refused naming them, sorted, rather than one taken.
+An absent or empty `-a` SHALL take the account marked `default = true`; any other name SHALL take the account of that name, `default` included, which is a name like any other.
+
+Each of the four ways account resolution fails SHALL name what is missing or wrong and what to do about it: a missing configuration names the path it looked for and points at config.sample.toml, a missing named account lists the accounts the configuration does hold, sorted, a missing account named `default` adds "omit `-a` to take the account marked default", a missing default names both ways of picking one, and several accounts marked `default = true`, none named, are refused naming them, sorted, rather than one taken.
 
 #### Scenario: Two default accounts
 - GIVEN a configuration whose accounts `a` and `b` both set `default = true`
 - WHEN `ortie token show` runs without `-a`
 - THEN it fails with "Several accounts are marked default (a, b), keep `default = true` on one, or name one with `-a <NAME>`", and `ortie -a b token show` runs on `b`
+
+#### Scenario: `default` is a name
+- GIVEN a configuration whose one account `a` sets `default = true`
+- WHEN `ortie -a default token show` runs
+- THEN it fails with "Account `default` not found, the configuration holds: a, omit `-a` to take the account marked default", coded `account-missing` under `--json`
 
 ### Requirement: The configuration path comes from `-c` only
 The configuration path SHALL be overridden by `-c` only, repeatable, the first path the base and the next ones merged on top in order. Each occurrence SHALL be one path, never split on a delimiter, and no environment variable SHALL be read for it.

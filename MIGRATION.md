@@ -2,7 +2,7 @@
 
 ## From v2 to v3
 
-v3 brings Ortie onto the standard the Pimalaya CLIs share: no configuration wizard, one configuration path per `-c`, camelCase keys and receipts under `--json`, coded failures, and hooks folded into the storage commands. A v2 configuration loads as it is, unless it holds a `hooks` table, marks several accounts default, or writes a host in Unicode.
+v3 brings Ortie onto the standard the Pimalaya CLIs share: no configuration wizard, one configuration path per `-c`, camelCase keys and receipts under `--json`, coded failures, and hooks folded into the storage commands. A v2 configuration loads as it is, unless it holds a `hooks` table, marks several accounts default, or writes a host in Unicode; a script passing `-a default` drops it.
 
 The [CHANGELOG](./CHANGELOG.md) lists every change; these are the ones to act on.
 
@@ -49,6 +49,15 @@ The [CHANGELOG](./CHANGELOG.md) lists every change; these are the ones to act on
 - **`ORTIE_CONFIG` is no longer read**: left in the environment, it is ignored and the default paths are read. Pass `-c "$ORTIE_CONFIG"` for one path, and one `-c` per path for what was a `:`-separated list, in a script or a systemd unit.
 - **Every default path is read, as layers.** $XDG_CONFIG_HOME/ortie/config.toml, $HOME/.config/ortie/config.toml and $HOME/.ortierc are each deep-merged on top of the ones before, where v2 read the first one found. An rc file left beside a config.toml now overrides it: delete the one you do not use.
 - **Several `default = true` accounts are refused**, naming them ("Several accounts are marked default (a, b), keep `default = true` on one, or name one with `-a <NAME>`"), where v2 picked one at random. Keep it on one account.
+- **`-a default` names the account called `default`**, where v2 read it as the account marked `default = true`. Omit `-a` to take the marked one, in scripts, aliases and systemd units; an account actually named `default` is now reachable. Without one, the run fails coded `account-missing` (see Output), with the hint "omit `-a` to take the account marked default".
+
+  ```sh
+  # v2
+  ortie -a default token show
+  # v3
+  ortie token show
+  ```
+
 - **A URL takes an ASCII host only**: write an internationalised host in Punycode, in the endpoints, the redirection and the resources.
 
   ```toml
@@ -77,7 +86,7 @@ The [CHANGELOG](./CHANGELOG.md) lists every change; these are the ones to act on
 
 - **`token inspect --json` prints `issuedAt` as an RFC 3339 instant** in UTC (`2026-11-15T09:00:00Z`), where v2 printed `issued_at` as epoch seconds.
 - **A stored token prints a receipt.** `token refresh`, `auth resume`, and an `auth get` that issues the token (a client credentials grant, or an interactive one it completed) print `{"expiresIn": 3599, "withRefreshToken": true}` under `--json`, where v2 printed `{"message": "Access token successfully refreshed (expires in 1h)"}`. A script checking the sentence checks the exit status instead, 0 on success. The text form keeps its sentence.
-- **A failure carries a stable `code`** in the failure object under `--json`, beside `error`, `sources` and `backtrace`: `permission-denied`, `rate-limited`, `grant-invalid`, `client-invalid`, `client-unauthorized`, `scope-invalid`, `device-code-expired`, `state-mismatch`, `token-missing`, `endpoint-missing` or `usage-invalid`, `null` for any other failure. Match on `code` rather than on the wording of `error`. An empty token storage now fails coded `token-missing`, where v2 failed with a JSON parse error.
+- **A failure carries a stable `code`** in the failure object under `--json`, beside `error`, `sources` and `backtrace`: `permission-denied`, `rate-limited`, `grant-invalid`, `client-invalid`, `client-unauthorized`, `scope-invalid`, `device-code-expired`, `state-mismatch`, `token-missing`, `endpoint-missing`, `account-missing`, `account-default-missing`, `account-default-several` or `usage-invalid`, `null` for any other failure. Match on `code` rather than on the wording of `error`. An empty token storage now fails coded `token-missing`, where v2 failed with a JSON parse error.
 - **An OAuth refusal names its code as the server spelled it**, `Refresh access token error (code invalid_grant)` where v2 printed `(code InvalidGrant)`, and `(unregistered code)` for a code Ortie does not know. A script grepping the text moves to `code` under `--json` (`invalid_grant` is `grant-invalid`).
 - **A refused command line is a failure object under `--json`**: an unknown flag or command, a missing argument or a bad value prints the failure object coded `usage-invalid` on stdout and exits 2, where v2 printed clap's text on stderr. Without `--json` clap's text stays on stderr, and the exit status is 2 either way.
 - **`ortie repl` prints its errors on stdout**, interactive or piped, as `ortie-error` objects under `--json`, where v2 wrote them on stderr: a piped session reads one JSON value per line on stdout, payload or failure, each failure carrying its `code` (`usage-invalid` for a line that does not parse). At a terminal, a line that does not parse keeps clap's text on stderr, and a `--json` session prints help on stderr.
@@ -103,3 +112,77 @@ ortie token refresh --json | jq -r 'if .error then "failed: \(.code)" else .expi
 - **`ortie token revoke`** revokes the stored refresh token, or the access token when none is stored (RFC 7009), at the new `endpoints.revocation`.
 - **`ortie auth listen`** catches the redirection of a flow a non-interactive or `--json` `auth get` handed off, then completes it as `auth resume` does.
 - **`ortie mcp`** serves the grants of one account to an agent over the Model Context Protocol; no tool returns a token, and `token_revoke` is listed only under `--allow-revoke`.
+
+## From v1 to v2
+
+v2 rewrote Ortie as a pure CLI over io-oauth, with a wizard, the device and client credentials grants and PKCE by default. A v1 configuration loads as it is, unless it uses the keyring storage or a notification hook, but the token v1 stored no longer parses: run `auth get` once after upgrading.
+
+This section was built from the CHANGELOG and the tagged sources of v1.1.0 and v2.0.0, and the last v2 release (2.3.0) where a 2.x release changed a v1 behaviour again; the stored-token item was reproduced with the current (v3) binary, which reads `issued_at` the same way, the others were read from the sources and not run.
+
+- **Run `ortie auth get` once after upgrading.** v1 stored the token with an `issued_at` object (`{"secs_since_epoch": …, "nanos_since_epoch": …}`), which v2 reads as epoch seconds, so `token show` fails with "Parse access token from command error" and "invalid type: map, expected u64". A new `auth get` stores a token v2 reads. To keep the stored refresh token instead, drop the field through your store, then run `ortie token refresh`, since a token without `issued_at` counts as unexpired and `token show` would not refresh it:
+
+  ```sh
+  pass show ortie/example | jq -c 'del(.issued_at)' | pass insert -m -f ortie/example
+  ortie token refresh
+  ```
+
+- **The keyring storage is gone** (since 1.1.0): `storage.read.keyring`, `storage.write.keyring` and `client-secret.keyring` are refused. Use a command reading and writing your keyring, such as `secret-tool`, `security` or `pass`:
+
+  ```toml
+  # v1.0
+  client-secret.keyring = "example"
+  storage.read.keyring = "ortie-example"
+  storage.write.keyring = "ortie-example"
+
+  # v2
+  client-secret.command = "secret-tool lookup service ortie-example-secret"
+  storage.read.command = "secret-tool lookup service ortie-example"
+  storage.write.command = "secret-tool store --label ortie-example service ortie-example"
+  ```
+
+- **PKCE is on by default** (S256), where v1 defaulted `pkce` to false. A server refusing the PKCE parameters needs `pkce = false`; `pkce = true` and `false` keep their meaning, and `"s256"` or `"plain"` name the method.
+- **A string command runs through the shell** (`/bin/sh -c` on Unix, `cmd /C` on Windows), where v1 split it on whitespace and ran it directly. Quotes, `$VAR`, `~`, pipes and `;` in a string are now the shell's; an exec-style array still runs directly. A hook relying on `$EXPIRES_IN` and the other hook variables being expanded inside an array switches to a string:
+
+  ```toml
+  # v1
+  hooks.on-refresh.success.command = ["logger", "ortie refreshed, expires in $EXPIRES_IN"]
+  # v2
+  hooks.on-refresh.success.command = "logger \"ortie refreshed, expires in $EXPIRES_IN\""
+  ```
+
+- **A hook's `notify` table needs the `notify` cargo feature**, which v1 built by default and v2 does not: a default v2 build, which the v2 README says the pre-built binaries are, refuses it as an unknown field. Rebuild with `--features notify`, or call `notify-send` from the hook's `command`. v3 removes the hooks altogether (see From v2 to v3).
+- **`--debug` and `--trace` are `--log-level debug` and `--log-level trace`**, beside a new `--log-file <PATH>`; `--quiet` (alias `--silent`) is gone, logs being off unless `--log-level` or `RUST_LOG` asks for them.
+
+  ```sh
+  # v1
+  ortie token show --debug 2>/tmp/ortie.log
+  # v2
+  ortie token show --log-level debug --log-file /tmp/ortie.log
+  ```
+
+- **`-c` splits its value on `:`** in v2, so a Windows path such as `C:\Users\me\config.toml` breaks; repeat `-c` instead. v3 stops splitting.
+- **`manuals` and `completions` are `manual` and `completion`** (since 2.3.0, the plural kept as a hidden alias), and print to stdout: `ortie manuals ./man` is `ortie manual --dir ./man`, and `ortie completions bash`, which v1 wrote to ./, is `ortie completion bash > ortie.bash`.
+- **`token inspect --json` prints `issued_at` as epoch seconds** (`null` when unknown) where v1 printed the `issued_at` object, and since 2.3.0 no longer prints `access_token` nor `refresh_token`, `with_refresh_token` telling whether one is stored. Read the token from `token show`. v3 renames these keys again (see From v2 to v3).
+- **The library target is gone**: a Rust program depending on the `ortie` crate moves to [io-oauth](https://github.com/pimalaya/io-oauth).
+- **The cargo features `command` and `keyring` are gone** (storage commands always build), and `notify` leaves the default set; the default TLS provider stays `rustls-ring`. A packager passing `--features command` drops it.
+
+## From v0.1 to v1
+
+v1 grouped the hooks under one `hooks` table. This section was built from the CHANGELOG and the tagged sources of v0.1.0 and v1.0.0, read and not run.
+
+- **`on-issue-access-token` is `hooks.on-issue`, and `on-refresh-access-token` is `hooks.on-refresh`.** v1 refuses the old keys as unknown fields; the `success` and `error` tables under them, and their `command` and `notify`, keep their shape.
+
+  ```toml
+  # v0.1
+  on-issue-access-token.success.command = ["notify-send", "Ortie", "Token issued"]
+  on-refresh-access-token.error.notify.summary = "Ortie"
+  on-refresh-access-token.error.notify.body = "[$ERROR] Refresh access token error"
+
+  # v1
+  hooks.on-issue.success.command = ["notify-send", "Ortie", "Token issued"]
+  hooks.on-refresh.error.notify.summary = "Ortie"
+  hooks.on-refresh.error.notify.body = "[$ERROR] Refresh access token error"
+  ```
+
+- **An account without `endpoints.redirection` listens on a random port** of 127.0.0.1 and sends it as the redirect URI, where v0.1 sent none and listened on port 80. A provider registration expecting the bare loopback keeps working when it follows RFC 8252 (any port); otherwise set `endpoints.redirection` to the registered URI.
+- **The default cargo features changed** from `command` and `rustls-ring` to `command`, `native-tls`, `keyring` and `notify`, and back to `rustls-ring` in 1.1.0 (see From v1 to v2). A build from source wanting a given TLS provider names it.

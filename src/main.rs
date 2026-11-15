@@ -97,7 +97,7 @@ use std::process;
 
 use pimalaya_cli::{
     clap::parse,
-    error::ErrorReport,
+    error::{ErrorReport, with_code},
     log::Logger,
     printer::StdoutPrinter,
     welcome::{is_wanted, shipped_sample},
@@ -137,5 +137,8 @@ fn main() {
         process::exit(1);
     }
 
-    ErrorReport::<ErrorCode>::eval_coded(&mut printer, result.map_err(error::with_code))
+    ErrorReport::<ErrorCode>::eval_coded(
+        &mut printer,
+        result.map_err(|err| with_code(err, error::code)),
+    )
 }

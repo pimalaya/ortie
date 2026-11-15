@@ -41,7 +41,7 @@ use io_oauth::{
 };
 use pimalaya_cli::{
     clap::commands::json_schema::output_schema,
-    error::{CodedError, CommonCode, ErrorReport},
+    error::{CodedError, CommonCode, ErrorReport, with_code},
     mcp::{
         Input, ServerInfo, ToolCall, ToolResult, answer, error_object, send, spawn_stdin_reader,
         tool_output_schema,
@@ -427,7 +427,7 @@ impl McpServer {
     ) -> ToolResult {
         let mut printer = CapturePrinter::default();
         let result = cmd(&mut printer, &mut self.account);
-        ToolResult::printed::<ErrorCode>(printer, result.map_err(error::with_code))
+        ToolResult::printed::<ErrorCode>(printer, result.map_err(|err| with_code(err, error::code)))
     }
 
     /// Runs one command over the account, answering the single value it
@@ -900,11 +900,11 @@ fn to_value(data: impl Serialize) -> Result<Value> {
 fn tool_result(outcome: Result<Value>) -> ToolResult {
     match outcome {
         Ok(value) => ToolResult::success(value),
-        Err(err) => ToolResult::error::<ErrorCode>(error::with_code(err)),
+        Err(err) => ToolResult::error::<ErrorCode>(with_code(err, error::code)),
     }
 }
 
 /// The `ortie-error` object of `err`, with its code.
 fn failure_object(err: anyhow::Error) -> Value {
-    error_object::<ErrorCode>(error::with_code(err))
+    error_object::<ErrorCode>(with_code(err, error::code))
 }

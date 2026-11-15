@@ -4,14 +4,15 @@
 //! to act on, printed as `code` beside the message under `--json`. The
 //! message stays for humans and may be reworded at any time; the code is
 //! the contract. A failure with no code prints `"code": null`. The
-//! mechanism (`CodedError`, `code_of`, the report) lives in
-//! `pimalaya_cli::error`; only the vocabulary is Ortie's.
+//! mechanism (`CodedError`, `code_of`, `with_code`, the report) lives in
+//! `pimalaya_cli::error`; only the vocabulary and [`code`] are Ortie's.
 //!
 //! The shared vocabulary names a refusal by the HTTP status alone:
 //! `permission-denied` for a 403 and `rate-limited` for a 429, read from
 //! io-oauth's typed client error. Ortie's own codes name the OAuth
 //! refusals, each by what the caller does next: run `auth get` again,
-//! fix the client configuration, or nothing.
+//! fix the client configuration, or nothing. The account codes are read
+//! from pimalaya-config's `AccountError`.
 //!
 //! io-oauth's OAuth error bodies are no `std::error::Error`, so they are
 //! coded where Ortie turns them into a failure ([`oauth_error`]), its
@@ -37,6 +38,7 @@ use io_oauth::{
     rfc8628::{auth::Oauth20DeviceAuthRequestError, token::Oauth20DeviceAccessTokenRequestError},
 };
 use pimalaya_cli::error::{CodedError, code_of};
+use pimalaya_config::toml::AccountError;
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -74,6 +76,12 @@ pub enum ErrorCode {
     /// The account configures no endpoint the grant needs: token, device
     /// authorization, authorization or revocation.
     EndpointMissing,
+    /// No account has the name `-a` gave.
+    AccountMissing,
+    /// No account is marked default, and `-a` named none.
+    AccountDefaultMissing,
+    /// Several accounts are marked default, and `-a` named none.
+    AccountDefaultSeveral,
 }
 
 /// An OAuth error code of a server's answer: its wire spelling and the
@@ -187,8 +195,21 @@ pub fn oauth_error(
         (Some(desc), Some(uri)) => Some(format!("{desc}: {uri}")),
     };
 
-    let messages = [Some(top), detail, hint.map(String::from)];
-    chained(error.code(), messages.into_iter().flatten().collect())
+    // NOTE: the innermost message carries the code, the others wrap it.
+    let mut messages: Vec<_> = [Some(top), detail, hint.map(String::from)]
+        .into_iter()
+        .flatten()
+        .collect();
+    let innermost = messages.pop().unwrap_or_default();
+    let err = match error.code() {
+        Some(code) => coded(code, innermost),
+        None => Error::msg(innermost),
+    };
+
+    messages
+        .into_iter()
+        .rev()
+        .fold(err, |err, message| err.context(message))
 }
 
 /// A failure carrying `code`, with its own message.
@@ -204,39 +225,12 @@ pub fn endpoint_missing(key: &str) -> Error {
 }
 
 /// The code of `err`: the one a coded error in its chain carries, else
-/// the one io-oauth's typed client error names.
+/// the one io-oauth's typed client error or pimalaya-config's account
+/// resolution error names. pimalaya-cli's `with_code` hands it to the
+/// failure object.
 pub fn code(err: &Error) -> Option<ErrorCode> {
-    code_of(err).or_else(|| err.chain().find_map(client_code))
-}
-
-/// The failure as it is reported: `err` itself when the report reads its
-/// code already, else its messages over a coded innermost one, so the
-/// code io-oauth's typed client error names reaches the failure object.
-pub fn with_code(err: Error) -> Error {
-    if code_of::<ErrorCode>(&err).is_some() {
-        return err;
-    }
-
-    let Some(code) = code(&err) else {
-        return err;
-    };
-
-    chained(Some(code), err.chain().map(ToString::to_string).collect())
-}
-
-/// The failure reading `messages`, outermost first, its innermost one
-/// carrying `code`.
-fn chained(code: Option<ErrorCode>, mut messages: Vec<String>) -> Error {
-    let innermost = messages.pop().unwrap_or_default();
-    let err = match code {
-        Some(code) => coded(code, innermost),
-        None => Error::msg(innermost),
-    };
-
-    messages
-        .into_iter()
-        .rev()
-        .fold(err, |err, message| err.context(message))
+    let typed = |cause| client_code(cause).or_else(|| account_code(cause));
+    code_of(err).or_else(|| err.chain().find_map(typed))
 }
 
 /// The code io-oauth's typed client error `cause` names: an expired
@@ -267,8 +261,18 @@ fn client_code(cause: &(dyn StdError + 'static)) -> Option<ErrorCode> {
     }
 }
 
+/// The code of pimalaya-config's account resolution error `cause`.
+fn account_code(cause: &(dyn StdError + 'static)) -> Option<ErrorCode> {
+    Some(match cause.downcast_ref::<AccountError>()? {
+        AccountError::Missing { .. } => ErrorCode::AccountMissing,
+        AccountError::NoDefault => ErrorCode::AccountDefaultMissing,
+        AccountError::SeveralDefaults(_) => ErrorCode::AccountDefaultSeveral,
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use pimalaya_cli::error::with_code;
     use serde::de::DeserializeOwned;
 
     use super::*;
@@ -355,7 +359,7 @@ mod tests {
         assert_eq!(code_of::<ErrorCode>(&err), None);
         assert_eq!(code(&err), Some(ErrorCode::RateLimited));
 
-        let err = with_code(err);
+        let err = with_code(err, code);
         assert_eq!(code_of::<ErrorCode>(&err), Some(ErrorCode::RateLimited));
         assert_eq!(
             err.chain().map(ToString::to_string).collect::<Vec<_>>(),
@@ -369,6 +373,6 @@ mod tests {
         let err = Error::from(Oauth20ClientStdError::from(status));
 
         assert_eq!(code(&err), None);
-        assert_eq!(code_of::<ErrorCode>(&with_code(err)), None);
+        assert_eq!(code_of::<ErrorCode>(&with_code(err, code)), None);
     }
 }

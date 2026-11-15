@@ -14,6 +14,7 @@ use pimalaya_cli::{
             completion::CompletionCommand, json_schema::JsonSchemaCommand, manual::ManualCommand,
         },
     },
+    error::with_code,
     footer, long_version,
     mcp::exit_on_failure,
     printer::Printer,
@@ -108,7 +109,10 @@ impl Command {
                     account => exit_on_failure::<ErrorCode, _>(account),
                 };
 
-                exit_on_failure::<ErrorCode, _>(cmd.execute(account).map_err(error::with_code));
+                exit_on_failure::<ErrorCode, _>(
+                    cmd.execute(account)
+                        .map_err(|err| with_code(err, error::code)),
+                );
                 Ok(())
             }
             Self::Manual(cmd) => cmd.execute(printer, Cli::command()),

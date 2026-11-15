@@ -63,7 +63,7 @@ The command line SHALL be parsed through pimalaya-cli's `clap::parse`: help and 
 - THEN it prints one failure object coded `usage-invalid`, its `error` naming `--nope`, on stdout and exits 2
 
 ### Requirement: A failure carries a stable code
-A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`, found anywhere in the error chain or read from io-oauth's typed client error. A failure with no code SHALL print `"code": null`; the text output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording. An OAuth refusal SHALL name its code in its message as the server spelled it (`invalid_grant`), a code io-oauth does not register reading `unregistered code`.
+A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`, found anywhere in the error chain or read from io-oauth's typed client error or pimalaya-config's account resolution error. A failure with no code SHALL print `"code": null`; the text output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording. An OAuth refusal SHALL name its code in its message as the server spelled it (`invalid_grant`), a code io-oauth does not register reading `unregistered code`.
 
 | Code | Raised when |
 |---|---|
@@ -78,6 +78,9 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `state-mismatch` | the authorization redirect carries no `state`, or another than the request sent |
 | `token-missing` | the account stores no token (its read command prints nothing, exiting 0, or non-zero without a word), or no refresh token where a refresh needs one; run `auth get` |
 | `endpoint-missing` | the account configures no endpoint the grant needs (authorization, token, device authorization, revocation) |
+| `account-missing` | no account has the name `-a` gave, `default` included |
+| `account-default-missing` | no account is marked `default = true`, and `-a` named none |
+| `account-default-several` | several accounts are marked `default = true`, and `-a` named none |
 
 Any other OAuth error code (`invalid_request`, `unsupported_grant_type`, `unsupported_token_type`, `invalid_target`, `server_error`, `temporarily_unavailable`, an unknown one) SHALL carry no code.
 

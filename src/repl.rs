@@ -20,7 +20,7 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use pimalaya_cli::{printer::Printer, repl::Repl};
+use pimalaya_cli::{error::with_code, printer::Printer, repl::Repl};
 
 use crate::{
     account::Account,
@@ -107,7 +107,7 @@ impl ReplCommand {
 
         repl.run::<ReplCommandTree, ErrorCode>(|printer, cmd| {
             cmd.execute(printer, &mut account, invocation)
-                .map_err(error::with_code)
+                .map_err(|err| with_code(err, error::code))
         })
     }
 }

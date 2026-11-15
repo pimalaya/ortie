@@ -84,7 +84,12 @@ mod tests {
         let schemas = registry().schemas;
         let schema = schemas["ortie-error"].to_string();
 
-        for code in ["grant-invalid", "permission-denied", "usage-invalid"] {
+        for code in [
+            "grant-invalid",
+            "permission-denied",
+            "account-default-several",
+            "usage-invalid",
+        ] {
             assert!(schema.contains(&format!("\"{code}\"")), "{code}: {schema}");
         }
     }

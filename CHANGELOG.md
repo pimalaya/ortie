@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-MIGRATION.md lists what to act on when upgrading from 2.x.
+MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier major.
 
 ### Added
 
@@ -22,7 +22,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x.
 - Added `resources` to the account configuration, the RFC 8707 resource indicators sent on the authorization request and the code exchange.
 - Added the `ortie-token-revoke`, `ortie-auth-listen` and `ortie-error` schemas to `json-schema`, and those of `completion`, `manual` and `json-schema` itself.
 - Added config.sample.toml to the release archives and the Nix package, as share/doc/ortie/config.sample.toml.
-- Added a stable `code` to the failure object `--json` prints, for the failures a caller acts on: `permission-denied` (`access_denied`, `authorization_declined`, a bare 403), `rate-limited` (a bare 429), `grant-invalid` (`invalid_grant`), `client-invalid` (`invalid_client`), `client-unauthorized` (`unauthorized_client`), `scope-invalid` (`invalid_scope`), `device-code-expired`, `state-mismatch`, `token-missing`, `endpoint-missing` and `usage-invalid`.
+- Added a stable `code` to the failure object `--json` prints, for the failures a caller acts on: `permission-denied` (`access_denied`, `authorization_declined`, a bare 403), `rate-limited` (a bare 429), `grant-invalid` (`invalid_grant`), `client-invalid` (`invalid_client`), `client-unauthorized` (`unauthorized_client`), `scope-invalid` (`invalid_scope`), `device-code-expired`, `state-mismatch`, `token-missing`, `endpoint-missing`, `account-missing` (no account of the name `-a` gave), `account-default-missing` (none marked default, none named), `account-default-several` (several marked default, none named) and `usage-invalid`.
 
   Any other failure prints `"code": null`. The `ortie-error` schema, the MCP failures and the `error` `auth_status` answers carry the code too.
 
@@ -42,6 +42,10 @@ MIGRATION.md lists what to act on when upgrading from 2.x.
 
 - **BREAKING**: Changed the configuration loading to read every existing default path as a layer, each deep-merged on top of the ones before, so $HOME/.ortierc overrides $HOME/.config/ortie/config.toml where only the first file found was read.
 - **BREAKING**: Changed every configured URL to take an ASCII host only, an internationalised one written in Punycode (`https://xn--bcher-kva.example` for `bücher.example`), which saves 130 KB of binary.
+- **BREAKING**: Changed `-a default` to take the account named `default`, where it took the account marked `default = true`; omit `-a` to take that one.
+
+  A missing account named `default` says so: "Account `default` not found, the configuration holds: a, omit `-a` to take the account marked default".
+
 - **BREAKING**: Changed a command line the grammar refuses under `--json` to print on stdout the failure object coded `usage-invalid`, instead of clap's text on stderr; it still exits 2.
 
   Without `--json`, clap's rendering stays on stderr. A refused line of a piped REPL session is coded `usage-invalid` too, and loses its `Error: error:` prefix.
