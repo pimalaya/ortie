@@ -27,3 +27,7 @@ The binary always ships the full CLI; the only cargo features left are the TLS p
 ```sh
 cargo build --no-default-features --features native-tls
 ```
+
+## Live provider suites
+
+The ignored suites tests/google.rs, tests/microsoft.rs and tests/fastmail.rs run the binary against the real providers: `cargo test --test google -- --ignored anonymous::` uses public or made-up clients and touches no account, `credentialed::` mints Microsoft client-credentials tokens on the test tenant and needs its secrets. CI runs them weekly, Mondays at 02:00 UTC, and by hand with `gh workflow run tests.yml`, never on a push: a push storm would hit the providers' throttling. A release runs them by hand on the commit it tags.
