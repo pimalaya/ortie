@@ -30,7 +30,17 @@ On refresh, Ortie SHALL persist the new token to storage as soon as the server a
 When auto-refresh triggers, Ortie SHALL exchange the refresh token where one exists and SHALL silently re-acquire (re-run the configured grant) on the client credentials kinds, which issue no refresh token. `token refresh` SHALL follow the same decision. On an auto-refreshing client credentials account, a stored token that is missing or unreadable SHALL re-acquire instead of failing, so `token show --auto-refresh` transparently produces a valid token for every grant.
 
 ### Requirement: Token inspect reports metadata, not secrets
-`token inspect` SHALL emit, in both renderings, the metadata of the stored token and not the token itself: the token type, when it was issued, what remains of its lifetime, whether a refresh token is held, and the granted scope. The access token and the refresh token SHALL NOT be serialized. The raw access token stays available from `token show`.
+`token inspect` SHALL emit, in both renderings, the metadata of the stored token and not the token itself: the token type, when it was issued, when it expires, whether a refresh token is held, and the granted scope. The expiry SHALL be the stored issue time plus the stored lifetime, unknown when either is absent. The text SHALL render it against the wall clock, `in <duration>` while it lies ahead, `expired` once passed, `unknown` when unknown; the JSON SHALL print it as the instant `expiresAt`, `null` when unknown, an instant past the year 9999 clamped to `9999-12-31T23:59:59Z`. The access token and the refresh token SHALL NOT be serialized. The raw access token stays available from `token show`.
+
+#### Scenario: An expired token
+- GIVEN a store holding a token issued at 1000 (Unix seconds) for 3600 seconds
+- WHEN `ortie token inspect` runs, then `ortie token inspect --json`
+- THEN the text reads `Expires: expired`, and the JSON `"issuedAt": "1970-01-01T00:16:40Z"` and `"expiresAt": "1970-01-01T01:16:40Z"`, with no `expiresIn`
+
+#### Scenario: A token stored without its issue time
+- GIVEN a store holding a token with a lifetime and no `issued_at`
+- WHEN `ortie token inspect` runs, then `ortie token inspect --json`
+- THEN the text reads `Expires: unknown` and the JSON `"expiresAt": null`
 
 ### Requirement: Revoke command
 `token revoke` SHALL revoke the stored refresh token when present, else the access token, against `endpoints.revocation` with the matching `token_type_hint` (RFC 7009), and print the kind it revoked (`{revoked}`, `refreshToken` or `accessToken`). A rejection SHALL fail with the server's error code. Storage SHALL be left as it is.

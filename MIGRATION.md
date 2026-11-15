@@ -92,11 +92,12 @@ The [CHANGELOG](./CHANGELOG.md) lists every change; these are the ones to act on
   | Command | v2 | v3 |
   |---------|----|----|
   | `token show` | `access_token` | `accessToken` |
-  | `token inspect` | `token_type`, `issued_at`, `expires_in`, `with_refresh_token` | `tokenType`, `issuedAt`, `expiresIn`, `withRefreshToken` |
+  | `token inspect` | `token_type`, `issued_at`, `with_refresh_token` | `tokenType`, `issuedAt`, `withRefreshToken`, and `expiresAt` for `expires_in` (below) |
   | `auth get` (authorization code) | `authorization_uri`, `pkce_code_verifier` | `authorizationUri`, `pkceCodeVerifier`, and the new `redirectUri` |
   | `auth get` (device) | `device_code`, `user_code`, `verification_uri`, `verification_uri_complete`, `expires_in` | `deviceCode`, `userCode`, `verificationUri`, `verificationUriComplete`, `expiresIn` |
 
 - **`token inspect --json` prints `issuedAt` as an RFC 3339 instant** in UTC (`2026-11-15T09:00:00Z`), where v2 printed `issued_at` as epoch seconds.
+- **`token inspect --json` prints when the token expires, `expiresAt`**, where v2 printed `expires_in`, the lifetime granted at issue, unchanged however long ago that was: v2 printed `"expires_in": 3600` for a token issued at 09:00 and read at 09:50, v3 prints `"expiresAt": "2026-11-15T10:00:00Z"`, an instant in the past once the token expired. `expiresAt` is `null` when the store holds no issue time or no lifetime, and the text then reads `Expires: unknown` where it read `in 1h`. A script wanting the seconds left subtracts the current time, one wanting the v2 lifetime subtracts `issuedAt` (jq lines below).
 - **A stored token prints a receipt.** `token refresh`, `auth resume`, and an `auth get` that issues the token (a client credentials grant, or an interactive one it completed) print `{"expiresIn": 3599, "withRefreshToken": true}` under `--json`, where v2 printed `{"message": "Access token successfully refreshed (expires in 1h)"}`. A script checking the sentence checks the exit status instead, 0 on success. The text form keeps its sentence.
 - **A failure carries a stable `code`** in the failure object under `--json`, beside `error`, `sources` and `backtrace`: `permission-denied`, `rate-limited`, `grant-invalid`, `client-invalid`, `client-unauthorized`, `scope-invalid`, `device-code-expired`, `state-mismatch`, `token-missing`, `endpoint-missing`, `account-missing`, `account-default-missing`, `account-default-several` or `usage-invalid`, `null` for any other failure. Match on `code` rather than on the wording of `error`. An empty token storage now fails coded `token-missing`, where v2 failed with a JSON parse error.
 - **An OAuth refusal names its code as the server spelled it**, `Refresh access token error (code invalid_grant)` where v2 printed `(code InvalidGrant)`, and `(unregistered code)` for a code Ortie does not know. A script grepping the text moves to `code` under `--json` (`invalid_grant` is `grant-invalid`).
@@ -113,6 +114,10 @@ Reading the new output with jq:
 ortie token show --json | jq -r .accessToken
 # when the token was issued, as the epoch seconds v2 printed
 ortie token inspect --json | jq '.issuedAt | if . then fromdateiso8601 else null end'
+# the seconds left before the token expires, negative once it expired
+ortie token inspect --json | jq '.expiresAt | if . then fromdateiso8601 - now | floor else null end'
+# the lifetime granted at issue, the expires_in v2 printed
+ortie token inspect --json | jq 'if .expiresAt and .issuedAt then (.expiresAt | fromdateiso8601) - (.issuedAt | fromdateiso8601) else null end'
 # the seconds the refreshed token lives, or why the refresh failed
 ortie token refresh --json | jq -r 'if .error then "failed: \(.code)" else .expiresIn end'
 # start a new flow when the refresh token was refused

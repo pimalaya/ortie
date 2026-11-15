@@ -50,19 +50,27 @@ pub struct TokenInspectOutput {
     #[serde(serialize_with = "serialize_rfc3339")]
     #[schemars(with = "Option<String>")]
     pub issued_at: Option<u64>,
-    /// The lifetime granted at issuance, in seconds, when known.
-    pub expires_in: Option<u64>,
+    /// When the token expires, its issue time plus the lifetime the server
+    /// granted, an RFC 3339 instant in UTC, in the past once expired, `null`
+    /// when either is unknown.
+    #[serde(serialize_with = "serialize_rfc3339")]
+    #[schemars(with = "Option<String>")]
+    pub expires_at: Option<u64>,
     /// Whether a refresh token was stored alongside the access token.
     pub with_refresh_token: bool,
     /// The granted scope, when the server reported one.
     pub scope: Option<String>,
 }
 
-/// Serializes Unix epoch seconds as an RFC 3339 instant in UTC.
+/// The last second an RFC 3339 instant can write, 9999-12-31T23:59:59Z.
+const RFC3339_MAX_SECS: u64 = 253_402_300_799;
+
+/// Serializes Unix epoch seconds as an RFC 3339 instant in UTC, an instant
+/// past the year 9999 clamped to its last second.
 fn serialize_rfc3339<S: Serializer>(secs: &Option<u64>, s: S) -> Result<S::Ok, S::Error> {
     match secs {
         Some(secs) => {
-            let instant = UNIX_EPOCH + Duration::from_secs(*secs);
+            let instant = UNIX_EPOCH + Duration::from_secs((*secs).min(RFC3339_MAX_SECS));
             s.collect_str(&format_rfc3339_seconds(instant))
         }
         None => s.serialize_none(),
@@ -71,10 +79,15 @@ fn serialize_rfc3339<S: Serializer>(secs: &Option<u64>, s: S) -> Result<S::Ok, S
 
 impl From<Oauth20AccessTokenSuccessParams> for TokenInspectOutput {
     fn from(res: Oauth20AccessTokenSuccessParams) -> Self {
+        let expires_at = match (res.issued_at, res.expires_in) {
+            (Some(issued_at), Some(lifetime)) => Some(issued_at.saturating_add(lifetime)),
+            _ => None,
+        };
+
         Self {
             token_type: res.token_type,
             issued_at: res.issued_at,
-            expires_in: res.expires_in,
+            expires_at,
             with_refresh_token: res.refresh_token.is_some(),
             scope: res.scope,
         }
@@ -96,21 +109,13 @@ impl fmt::Display for TokenInspectOutput {
             fields.push("Issued", format!("{} ago", format_duration(elapsed)));
         }
 
-        let expires = match self.expires_in {
-            None => String::from("unknown"),
-            Some(exp) => {
-                let remaining = match (self.issued_at, now_epoch) {
-                    (Some(issued_at), Some(now)) => {
-                        issued_at.saturating_add(exp).saturating_sub(now)
-                    }
-                    _ => exp,
-                };
-
-                match remaining {
-                    0 => String::from("expired"),
-                    secs => format!("in {}", format_duration(Duration::from_secs(secs))),
-                }
+        let expires = match (self.expires_at, now_epoch) {
+            (Some(expires_at), Some(now)) if expires_at > now => {
+                let remaining = Duration::from_secs(expires_at - now);
+                format!("in {}", format_duration(remaining))
             }
+            (Some(_), Some(_)) => String::from("expired"),
+            _ => String::from("unknown"),
         };
 
         fields.push("Expires", expires);
@@ -151,5 +156,23 @@ mod tests {
         assert!(json.contains("\"withRefreshToken\":true"));
         assert!(json.contains("\"tokenType\":\"Bearer\""));
         assert!(json.contains("\"issuedAt\":\"2023-11-14T22:13:20Z\""));
+        assert!(json.contains("\"expiresAt\":\"2023-11-14T23:13:20Z\""));
+    }
+
+    /// A lifetime the server states is not bounded, an instant is.
+    #[test]
+    fn a_lifetime_past_the_year_9999_expires_at_its_last_second() {
+        let output = TokenInspectOutput::from(Oauth20AccessTokenSuccessParams {
+            access_token: SecretString::from("at"),
+            token_type: String::from("Bearer"),
+            expires_in: Some(u64::MAX),
+            refresh_token: None,
+            scope: None,
+            issued_at: Some(1_700_000_000),
+        });
+
+        let json = serde_json::to_value(&output).unwrap();
+
+        assert_eq!(json["expiresAt"], "9999-12-31T23:59:59Z");
     }
 }

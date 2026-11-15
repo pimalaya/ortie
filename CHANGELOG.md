@@ -35,7 +35,10 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 - **BREAKING**: Changed `--json` keys to camelCase; the configuration keeps its kebab-case keys.
 - **BREAKING**: Changed `token refresh`, `auth resume` and a token-issuing `auth get` to print the receipt `{expiresIn, withRefreshToken}` under `--json`, instead of a `{"message": …}` sentence.
-- **BREAKING**: Changed `token inspect --json` to print `issuedAt` as an RFC 3339 instant in UTC.
+- **BREAKING**: Changed `token inspect --json` to print `issuedAt` as an RFC 3339 instant in UTC, and `expiresAt`, the instant the token expires, in place of `expires_in`, the lifetime granted at issue whatever time had passed since.
+
+  `expiresAt` lies in the past once the token expired, and is `null` when the store holds no issue time, a token whose text now reads `Expires: unknown` where it read `in <lifetime>`.
+
 - **BREAKING**: Changed `ortie repl` to print its errors on stdout, interactive or piped, as `ortie-error` objects under `--json`.
 
   On a terminal, a line that does not parse keeps clap's message on stderr. In a `--json` session the help goes to stderr, so stdout carries one JSON value per line. The prompt `ortie> ` no longer opens with a blank line. A command's help names the binary (`Usage: ortie token show [OPTIONS]`), and a text error hints to restart the session with `--log-level`, which a line cannot set.
