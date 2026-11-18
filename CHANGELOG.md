@@ -108,6 +108,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 ### Fixed
 
+- Fixed install.sh saving an HTTP error page as the archive and letting `tar` fail on it: it downloads with `curl -fsSLo` and stops on the error.
 - **BREAKING**: Fixed several accounts marked `default = true` taking one at random: they are refused, naming them, with both ways of picking one.
 - Fixed a configured `http` loopback redirection naming no port, such as `http://localhost`, binding port 80: it binds an ephemeral port, so `auth get` and the MCP server catch the redirection.
 - Fixed the `auth resume` command printed by `auth get` dropping a generated redirect URI, and its `-a` and `-c` ([#16](https://github.com/pimalaya/ortie/issues/16)).
