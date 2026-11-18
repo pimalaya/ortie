@@ -108,6 +108,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 ### Fixed
 
+- Fixed, through pimalaya-cli 0.6.1 and pimalaya-config 0.6.0, the text error report writing the control characters of its causes raw to the terminal (each line is sanitized, the suggestions naming `--json` when a character was replaced), `--log-file` creating the file under the umask and following a symbolic link (it is created at 0600 and a link is refused), the manual pages printing `vv<version>`, a TOML parse error of the configuration printing its source line, and a refused secret echoing its value. A secret command that fails names the command and says to run it yourself, never printing its output.
 - Fixed install.sh saving an HTTP error page as the archive and letting `tar` fail on it: it downloads with `curl -fsSLo` and stops on the error.
 - **BREAKING**: Fixed several accounts marked `default = true` taking one at random: they are refused, naming them, with both ways of picking one.
 - Fixed a configured `http` loopback redirection naming no port, such as `http://localhost`, binding port 80: it binds an ephemeral port, so `auth get` and the MCP server catch the redirection.
