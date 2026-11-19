@@ -58,10 +58,11 @@ rustPlatform.buildRustPackage (finalAttrs: {
           lib.getExe buildPackages.${finalAttrs.pname};
     in
     ''
-      mkdir -p $out/share/{completions,man}
+      mkdir -p $out/share/{completions,man,schemas}
       install -Dm644 config.sample.toml "$out"/share/doc/${finalAttrs.pname}/config.sample.toml
-      ${exe} manuals -d "$out"/share/man
-      ${exe} completions -d "$out"/share/completions bash elvish fish powershell zsh
+      ${exe} manual -d "$out"/share/man
+      ${exe} completion -d "$out"/share/completions bash elvish fish powershell zsh
+      ${exe} json-schema -d "$out"/share/schemas
     ''
     + lib.optionalString installManPages ''
       installManPage "$out"/share/man/*
@@ -80,7 +81,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
     description = "CLI to manage OAuth 2.0 tokens";
     mainProgram = finalAttrs.pname;
     homepage = "https://github.com/pimalaya/${finalAttrs.pname}";
-    changelog = "https://github.com/pimalaya/${finalAttrs.pname}/releases/${finalAttrs.src.tag}";
+    changelog = "https://github.com/pimalaya/${finalAttrs.pname}/releases/tag/${finalAttrs.src.tag}";
     license = with lib.licenses; [
       asl20
       mit

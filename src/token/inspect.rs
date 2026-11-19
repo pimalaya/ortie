@@ -10,14 +10,14 @@ use std::{
 
 use anyhow::Result;
 use clap::Parser;
-use humantime::{format_duration, format_rfc3339_seconds};
-use pimalaya_cli::{fields::Fields, printer::Printer};
+use jiff::{SignedDuration, civil};
+use pimalaya_cli::{fields::Fields, printer::Printer, sanitize};
 use schemars::JsonSchema;
-use serde::{Serialize, Serializer};
+use serde::{Serialize, Serializer, ser::Error as _};
 
 use io_oauth::rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams;
 
-use crate::account::Account;
+use crate::{account::Account, duration::HumanDuration};
 
 /// Inspect metadata associated to the access token.
 ///
@@ -70,8 +70,13 @@ const RFC3339_MAX_SECS: u64 = 253_402_300_799;
 fn serialize_rfc3339<S: Serializer>(secs: &Option<u64>, s: S) -> Result<S::Ok, S::Error> {
     match secs {
         Some(secs) => {
-            let instant = UNIX_EPOCH + Duration::from_secs((*secs).min(RFC3339_MAX_SECS));
-            s.collect_str(&format_rfc3339_seconds(instant))
+            let secs = (*secs).min(RFC3339_MAX_SECS) as i64;
+            let epoch = civil::date(1970, 1, 1).at(0, 0, 0, 0);
+            let instant = epoch
+                .checked_add(SignedDuration::from_secs(secs))
+                .map_err(S::Error::custom)?;
+
+            s.collect_str(&format_args!("{instant}Z"))
         }
         None => s.serialize_none(),
     }
@@ -102,17 +107,17 @@ impl fmt::Display for TokenInspectOutput {
             .ok();
 
         let mut fields = Fields::default();
-        fields.push("Type", &self.token_type);
+        fields.push("Type", sanitize::text(&self.token_type));
 
         if let (Some(issued_at), Some(now)) = (self.issued_at, now_epoch) {
             let elapsed = Duration::from_secs(now.saturating_sub(issued_at));
-            fields.push("Issued", format!("{} ago", format_duration(elapsed)));
+            fields.push("Issued", format!("{} ago", HumanDuration(elapsed)));
         }
 
         let expires = match (self.expires_at, now_epoch) {
             (Some(expires_at), Some(now)) if expires_at > now => {
                 let remaining = Duration::from_secs(expires_at - now);
-                format!("in {}", format_duration(remaining))
+                format!("in {}", HumanDuration(remaining))
             }
             (Some(_), Some(_)) => String::from("expired"),
             _ => String::from("unknown"),
@@ -124,7 +129,7 @@ impl fmt::Display for TokenInspectOutput {
         fields.push("Refresh token", refresh_token);
 
         if let Some(scope) = &self.scope {
-            let scopes: Vec<&str> = scope.split_whitespace().collect();
+            let scopes: Vec<_> = scope.split_whitespace().map(sanitize::text).collect();
             fields.push("Scopes", scopes.join("\n"));
         }
 
@@ -174,5 +179,24 @@ mod tests {
         let json = serde_json::to_value(&output).unwrap();
 
         assert_eq!(json["expiresAt"], "9999-12-31T23:59:59Z");
+    }
+
+    /// The type and the scopes are the server's words, printed defused.
+    #[test]
+    fn the_text_defuses_what_the_server_wrote() {
+        let output = TokenInspectOutput::from(Oauth20AccessTokenSuccessParams {
+            access_token: SecretString::from("at"),
+            token_type: String::from("Bearer\x1b]52;c;cGF5bG9hZA==\x07"),
+            expires_in: None,
+            refresh_token: None,
+            scope: Some(String::from("mail \u{202e}fdp.exe")),
+            issued_at: None,
+        });
+
+        let text = output.to_string();
+
+        assert!(!text.contains('\x1b'), "{text:?}");
+        assert!(!text.contains('\u{202e}'), "{text:?}");
+        assert!(text.contains("Scopes:         mail\n"), "{text:?}");
     }
 }

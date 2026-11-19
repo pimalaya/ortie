@@ -5,15 +5,16 @@
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use log::info;
 use pimalaya_cli::printer::Printer;
-use secrecy::SecretBox;
+use secrecy::{ExposeSecret, SecretBox};
 
 use pimalaya_config::secret::Secret;
 
 use io_oauth::{
     client::Oauth20ClientStd,
     rfc6749::{
-        issue_access_token::Oauth20AccessTokenSuccessParams,
+        issue_access_token::{Oauth20AccessTokenErrorCode, Oauth20AccessTokenSuccessParams},
         refresh_access_token::Oauth20AccessTokenRefreshParams,
     },
 };
@@ -90,6 +91,8 @@ impl TokenRefreshCommand {
     /// The JWT kind mints a fresh assertion on every run, and nothing
     /// but the token response is ever stored.
     pub fn reacquire(account: &mut Account) -> Result<Oauth20AccessTokenSuccessParams> {
+        info!("re-running the client credentials grant");
+
         match request_client_credentials_token(account)? {
             Ok(res) => account.write_to_storage(res),
             Err(res) => Err(client_credentials_error(
@@ -113,10 +116,14 @@ impl TokenRefreshCommand {
             return Err(error::endpoint_missing("endpoints.token"));
         };
 
+        info!("refreshing access token at {token_endpoint}");
+
         let client_secret = account.client_secret.clone().map(Secret::get).transpose()?;
+        let sent = refresh_token.clone();
 
         let mut client =
-            Oauth20ClientStd::connect(token_endpoint, &account.tls, account.client_id.clone())?;
+            Oauth20ClientStd::connect(token_endpoint, &account.tls, account.client_id.clone())
+                .context("Refresh access token error")?;
         client.client_secret = client_secret;
 
         let res = client.refresh_access_token(Oauth20AccessTokenRefreshParams {
@@ -139,6 +146,19 @@ impl TokenRefreshCommand {
                     "Store refreshed access token error, run `auth get` if the next refresh fails",
                 )
             }
+            Err(res) if res.error == Oauth20AccessTokenErrorCode::InvalidGrant => {
+                if let Some(stored) = rotated_elsewhere(account, &sent) {
+                    return Ok(stored);
+                }
+
+                Err(error::oauth_error(
+                    "Refresh access token error",
+                    &res.error,
+                    res.error_description,
+                    res.error_uri,
+                    None,
+                ))
+            }
             Err(res) => Err(error::oauth_error(
                 "Refresh access token error",
                 &res.error,
@@ -148,6 +168,28 @@ impl TokenRefreshCommand {
             )),
         }
     }
+}
+
+/// The token another process stored since `sent` was read, when the
+/// storage now holds a refresh token other than `sent`.
+///
+/// A server refusing `sent` as `invalid_grant` may have rotated it for a
+/// concurrent refresh of the same account, whose result is then taken,
+/// and kept for the session, rather than reported as a lost grant.
+fn rotated_elsewhere(
+    account: &mut Account,
+    sent: &SecretBox<str>,
+) -> Option<Oauth20AccessTokenSuccessParams> {
+    let stored = account.read_storage().ok()?;
+    let stored_refresh = stored.refresh_token.as_ref().map(|t| t.expose_secret());
+
+    if stored_refresh == Some(sent.expose_secret()) {
+        return None;
+    }
+
+    info!("refresh token rotated by another process, taking the stored token");
+    account.token = Some(stored.clone());
+    Some(stored)
 }
 
 #[cfg(test)]

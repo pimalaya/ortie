@@ -33,6 +33,7 @@ use clap::Parser;
 use io_oauth::{
     client::{Oauth20ClientStd, Oauth20ClientStdError, await_redirect_on},
     rfc6749::{
+        auth_response::{Oauth20AuthParams, Oauth20AuthParamsValidationError},
         issue_access_token::{Oauth20AccessTokenErrorCode, Oauth20AccessTokenResponse},
         state::Oauth20State,
     },
@@ -483,7 +484,7 @@ impl McpServer {
         }
 
         if self.account.grant.is_client_credentials() {
-            let receipt = self.capture(|p, a| AuthGetCommand.execute(p, a, ""))?;
+            let receipt = self.capture(|p, a| AuthGetCommand.execute(p, a, "", false))?;
             self.flow = McpFlow::Issued(receipt.clone());
 
             let output = McpAuthGetOutput {
@@ -582,11 +583,33 @@ impl McpServer {
 
     /// Completes the pending code flow from a redirected URI the
     /// listener did not catch.
+    ///
+    /// A URI that does not parse or does not echo the state of the flow
+    /// is refused before the flow is taken, which stays pending for the
+    /// right one.
     fn auth_resume(&mut self, uri: String) -> ToolResult {
-        let McpFlow::Code { .. } = self.flow else {
+        let McpFlow::Code { state, .. } = &self.flow else {
             let err = anyhow!("No authorization code flow is pending, call auth_get first");
             return tool_result(Err(err));
         };
+
+        let redirected = match Url::parse(uri.trim()) {
+            Ok(redirected) => redirected,
+            Err(err) => {
+                let err = anyhow!("Invalid redirected URI: {err}, the flow is still pending");
+                return tool_result(Err(err));
+            }
+        };
+
+        if let Err(
+            Oauth20AuthParamsValidationError::StateMissing
+            | Oauth20AuthParamsValidationError::StateMismatch,
+        ) = Oauth20AuthParams::from(&redirected).validate(Some(state), None)
+        {
+            let message = "Redirected URI does not carry the state of the pending flow, \
+                           which is still pending";
+            return tool_result(Err(error::coded(ErrorCode::StateMismatch, message)));
+        }
 
         let McpFlow::Code {
             state,
@@ -662,6 +685,7 @@ impl McpServer {
             state: Some(state),
             pkce,
             redirect_uri: Some(redirect_uri),
+            handoff: None,
         };
 
         self.capture(|p, a| cmd.execute(p, a))

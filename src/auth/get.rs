@@ -11,15 +11,23 @@ use std::{
     borrow::Cow,
     collections::BTreeSet,
     fmt, fs,
-    io::{IsTerminal, stdout},
+    io::{IsTerminal, Write, stdout},
+    process,
+    sync::mpsc::{self, RecvTimeoutError},
+    thread,
     time::Duration,
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use base64_codec::codec::{Base64Alphabet, Base64Codec};
 use clap::Parser;
-use humantime::format_duration;
-use pimalaya_cli::{fields::Fields, printer::Printer, shell::quote};
+use pimalaya_cli::{
+    fields::Fields,
+    printer::Printer,
+    sanitize,
+    shell::quote,
+    signal::{EXIT_SIGNALED, Shutdown},
+};
 use schemars::JsonSchema;
 use secrecy::ExposeSecret;
 use serde::{Serialize, Serializer};
@@ -28,7 +36,7 @@ use url::{Host, Url};
 use pimalaya_config::secret::Secret;
 
 use io_oauth::{
-    client::{Oauth20ClientStd, await_redirect},
+    client::{Oauth20ClientStd, await_redirect_on},
     rfc6749::{
         auth_request::Oauth20AuthRequestParams,
         client_credentials::Oauth20ClientCredentialsRequestParams,
@@ -49,12 +57,17 @@ use io_oauth::{
 };
 
 use crate::{
-    account::Account,
+    account::{Account, bind_loopback},
     auth::resume::AuthResumeCommand,
     config::{GrantConfig, PkceConfig},
+    duration::HumanDuration,
     error,
     token::issued::TokenIssuedOutput,
 };
+
+/// How often the interactive wait for the redirection checks whether a
+/// termination signal asked it to stop.
+const SHUTDOWN_POLL: Duration = Duration::from_millis(100);
 
 /// Initiate a new OAuth 2.0 grant from scratch.
 ///
@@ -74,6 +87,10 @@ impl AuthGetCommand {
     /// The `invocation` starts the `auth listen` and `auth resume`
     /// commands printed when the flow hands off, the binary with the `-c`
     /// and `-a` it ran with (see [`invocation`]).
+    /// An interactive wait for the redirection interrupted by a termination
+    /// signal prints the `auth resume` handoff and exits 130 when
+    /// `interrupt_handoff` is set; otherwise the signal ends the process as
+    /// it would without Ortie.
     ///
     /// [`invocation`]: pimalaya_cli::shell::invocation
     pub fn execute(
@@ -81,6 +98,7 @@ impl AuthGetCommand {
         printer: &mut impl Printer,
         account: &mut Account,
         invocation: &str,
+        interrupt_handoff: bool,
     ) -> Result<()> {
         if account.grant == GrantConfig::Device {
             return execute_device(printer, account, invocation);
@@ -92,7 +110,7 @@ impl AuthGetCommand {
 
         let interactive = stdout().is_terminal();
 
-        let redirect_uri = account.redirection()?;
+        let (redirect_uri, listener) = account.redirection()?;
 
         let AuthorizationRequest {
             uri: auth_uri,
@@ -154,7 +172,51 @@ impl AuthGetCommand {
 
         println!("Wait for redirection…");
 
-        let redirected_uri = match await_redirect(&redirect_uri, Some(&state)) {
+        let listener = match listener {
+            Some(listener) => Ok(listener),
+            None => bind_loopback(&redirect_uri).map(|(_, listener)| listener),
+        };
+
+        let redirected = listener.and_then(|listener| {
+            if !interrupt_handoff {
+                return Ok(await_redirect_on(&listener, &redirect_uri, Some(&state))?);
+            }
+
+            let shutdown = Shutdown::install()?;
+            let (sender, receiver) = mpsc::channel();
+            let uri = redirect_uri.clone().into_owned();
+            let expected = state.clone();
+
+            thread::spawn(move || {
+                let _ = sender.send(await_redirect_on(&listener, &uri, Some(&expected)));
+            });
+
+            loop {
+                match receiver.recv_timeout(SHUTDOWN_POLL) {
+                    Ok(redirected) => break Ok(redirected?),
+                    Err(RecvTimeoutError::Timeout) if !shutdown.is_requested() => continue,
+                    Err(RecvTimeoutError::Timeout) => {
+                        println!();
+                        println!("Interrupted before the redirection arrived.");
+                        print_handoff(
+                            invocation,
+                            &state,
+                            pkce_code_challenge.as_ref().map(|c| &c.verifier),
+                            &redirect_uri,
+                            false,
+                        );
+
+                        let _ = stdout().flush();
+                        process::exit(EXIT_SIGNALED);
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
+                        break Err(anyhow!("The redirection listener stopped"));
+                    }
+                }
+            }
+        });
+
+        let redirected_uri = match redirected {
             Ok(redirected_uri) => redirected_uri,
             // NOTE: the listener could not bind or accept, so fall back
             // to the manual flow instead of aborting the whole grant.
@@ -178,6 +240,7 @@ impl AuthGetCommand {
             state: Some(state),
             pkce: pkce_code_challenge.map(|pkce| pkce.verifier),
             redirect_uri: Some(redirect_uri.into_owned()),
+            handoff: None,
         };
 
         cmd.execute(printer, account)
@@ -283,12 +346,13 @@ fn print_handoff(
 }
 
 /// Whether the local listener can service the redirection, which means
-/// an http(s) URL on a loopback host.
+/// an http URL on a loopback host.
 ///
-/// Anything else, a remote host or a private-use scheme, dead-ends in
-/// the browser, so the flow finishes by hand through `auth resume`.
+/// Anything else, an https URL the plain HTTP listener cannot serve, a
+/// remote host or a private-use scheme, dead-ends in the browser, so the
+/// flow finishes by hand through `auth resume`.
 pub(crate) fn is_loopback_redirect(uri: &Url) -> bool {
-    let http_scheme = matches!(uri.scheme(), "http" | "https");
+    let http_scheme = uri.scheme() == "http";
     let loopback_host = match uri.host() {
         Some(Host::Domain(domain)) => domain == "localhost",
         Some(Host::Ipv4(ip)) => ip.is_loopback(),
@@ -373,10 +437,13 @@ pub fn serialize_pkce_code_verifier<S: Serializer>(
 impl fmt::Display for AuthorizationUri<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut fields = Fields::default();
-        fields.push("State", String::from_utf8_lossy(self.state.expose()));
 
-        if let Some(verifier) = &self.pkce_code_verifier {
-            fields.push("PKCE verifier", String::from_utf8_lossy(verifier.expose()));
+        if !self.interactive {
+            fields.push("State", String::from_utf8_lossy(self.state.expose()));
+
+            if let Some(verifier) = &self.pkce_code_verifier {
+                fields.push("PKCE verifier", String::from_utf8_lossy(verifier.expose()));
+            }
         }
 
         fields.push("Redirect URI", self.redirect_uri);
@@ -414,7 +481,7 @@ fn execute_device(
             println!();
             println!("Once authorized, run:");
             println!();
-            println!("  {invocation} auth resume {}", quote(&view.device_code));
+            println!("  {invocation} auth resume -- {}", quote(&view.device_code));
         }
         return Ok(());
     }
@@ -705,11 +772,18 @@ pub struct DeviceAuthorization {
 impl fmt::Display for DeviceAuthorization {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut fields = Fields::default();
-        fields.push("User code", &self.user_code);
-        fields.push("Verification URI", &self.verification_uri);
+        let code = sanitize::text(&self.user_code);
+        let uri = sanitize::text(&self.verification_uri);
+        let complete = self
+            .verification_uri_complete
+            .as_deref()
+            .map(sanitize::text);
 
-        if let Some(uri) = &self.verification_uri_complete {
-            fields.push("Complete URI", uri);
+        fields.push("User code", &code);
+        fields.push("Verification URI", &uri);
+
+        if let Some(complete) = &complete {
+            fields.push("Complete URI", complete);
         }
 
         // NOTE: an interactive session polls in-process, so the device
@@ -719,19 +793,14 @@ impl fmt::Display for DeviceAuthorization {
         }
 
         let expires_in = Duration::from_secs(self.expires_in);
-        fields.push("Expires in", format_duration(expires_in));
+        fields.push("Expires in", HumanDuration(expires_in));
         fields.push("Polling interval", format!("{}s", self.interval));
 
         writeln!(f, "{fields}")?;
 
-        let code = &self.user_code;
-
-        match &self.verification_uri_complete {
+        match complete {
             Some(uri) => writeln!(f, "Open the link and check the code {code}:\n\n  {uri}"),
-            None => {
-                let uri = &self.verification_uri;
-                writeln!(f, "Open the link and enter the code {code}:\n\n  {uri}")
-            }
+            None => writeln!(f, "Open the link and enter the code {code}:\n\n  {uri}"),
         }
     }
 }

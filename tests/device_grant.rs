@@ -184,3 +184,22 @@ fn an_expired_device_code_is_coded_device_code_expired() {
     let message = "Issue access token error (code expired_token)";
     assert_eq!(failure["error"], message, "{failure}");
 }
+
+/// The printed resume ends its options with `--`, so a device code
+/// beginning with `-` is still read as the code.
+#[test]
+fn the_printed_resume_takes_a_code_beginning_with_a_dash() {
+    let (addr, _polls, _h) = start_mock();
+    let dir = TempDir::new().unwrap();
+    let (config, token) = write_device_config(dir.path(), addr);
+
+    let get = ortie(&config, &["auth", "get"]);
+    assert!(get.status.success(), "{get:?}");
+    let stdout = String::from_utf8_lossy(&get.stdout);
+    let line = stdout.lines().find(|l| l.contains("auth resume")).unwrap();
+    assert!(line.ends_with(" auth resume -- 'dc-test'"), "{line}");
+
+    let resume = ortie(&config, &["auth", "resume", "--", "-dc-test"]);
+    assert!(resume.status.success(), "{resume:?}");
+    assert_eq!(stored(&token)["access_token"], "at-test");
+}

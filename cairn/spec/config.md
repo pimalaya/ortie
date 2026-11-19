@@ -34,6 +34,8 @@ An account MAY carry `resources`, a list of RFC 8707 resource indicator URLs, se
 ### Requirement: Storage commands
 An account SHALL define read and write storage as external shell commands, each keyed `command`, `cmd` its alias, as a shell line or a program and its arguments (pimalaya-config's `CommandConfig`). The read command prints the token response JSON on stdout; the write command receives it on stdin. Ortie never persists tokens itself.
 
+A storage command exiting non-zero SHALL be reported by its trimmed stderr, or by its program and exit status when it wrote none, never by its stdout, which holds the token or echoes it: in the failure object, the `storage` row of `account check` and the MCP tools alike. A failing read command's report SHALL end with ", run `<command>` yourself to see why", the command written as configured.
+
 ### Requirement: v1 config compatibility
 Every v1.x config file SHALL parse and run unchanged, the `hooks` table and the `tls` string aside, refused by name ("The configuration refuses every key it does not read"): `grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, and `pkce = true`/`false` are still accepted. The behaviours an existing account can notice are PKCE by default and `token show` refreshing an expired token, unless it sets `auto-refresh = false`.
 

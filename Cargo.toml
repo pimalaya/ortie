@@ -35,11 +35,11 @@ tempfile = { version = "3", default-features = false }
 anyhow = { version = "1", default-features = false, features = ["std"] }
 base64-codec = { version = "0.1", default-features = false, features = ["alloc"] }
 clap = { version = "4.4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage"] }
-humantime = { version = "2.2", default-features = false }
 idna_adapter = { version = "=1.0.0", default-features = false }
 io-oauth = { version = "0.7.0", default-features = false, features = ["client", "jwt-bearer"] }
+jiff = { version = "1", default-features = false, features = ["std"] }
 log = { version = "0.4", default-features = false }
-pimalaya-cli = { version = "0.6.1", default-features = false, features = ["mcp", "repl", "terminal"] }
+pimalaya-cli = { version = "0.6.1", default-features = false, features = ["mcp", "repl", "signal", "terminal"] }
 pimalaya-config = { version = "0.6.0", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.4", default-features = false, features = ["std"] }
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }

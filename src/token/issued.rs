@@ -6,11 +6,12 @@
 
 use std::{fmt, time::Duration};
 
-use humantime::format_duration;
 use schemars::JsonSchema;
 use serde::Serialize;
 
 use io_oauth::rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams;
+
+use crate::duration::HumanDuration;
 
 /// The access token a grant or a refresh just stored.
 ///
@@ -63,7 +64,7 @@ impl fmt::Display for TokenIssuedOutput {
             None => writeln!(f, " (unknown expiry)"),
             Some(exp) => {
                 let exp = Duration::from_secs(exp.saturating_add(1));
-                writeln!(f, " (expires in {})", format_duration(exp))
+                writeln!(f, " (expires in {})", HumanDuration(exp))
             }
         }
     }

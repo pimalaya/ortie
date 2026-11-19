@@ -259,3 +259,40 @@ fn the_tls_string_is_refused_by_name() {
                     and `tls.rustls.crypto = \\\"ring\\\"`, see MIGRATION.md";
     assert!(json.contains(sentence), "{json}");
 }
+
+/// A storage command failing after it printed the token is reported by
+/// its stderr, or by its program and exit status when it wrote none,
+/// never by its stdout, which holds the token.
+#[test]
+fn a_failing_read_command_never_reports_its_stdout() {
+    let home = TempDir::new().unwrap();
+    let token = home.path().join("token.json");
+    fs::write(
+        &token,
+        r#"{"access_token":"at-leak","refresh_token":"rt-leak"}"#,
+    )
+    .unwrap();
+    let token = token.display();
+
+    for (read, reason) in [
+        (format!("cat {token}; exit 1"), "failed with exit status: 1"),
+        (format!("cat {token}; echo locked >&2; exit 1"), "locked"),
+    ] {
+        let toml = format!(
+            "[accounts.a]\ndefault = true\nclient-id = \"c\"\n\
+             storage.read.command = \"{read}\"\nstorage.write.command = \"true\"\n"
+        );
+
+        let inspect = run(home.path(), &toml, &["--json", "token", "inspect"]);
+        let check = run(home.path(), &toml, &["--json", "account", "check"]);
+
+        for output in [inspect, check] {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(stdout.contains(reason), "{stdout}");
+
+            for secret in ["at-leak", "rt-leak"] {
+                assert!(!stdout.contains(secret), "{secret} printed: {stdout}");
+            }
+        }
+    }
+}

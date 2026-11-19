@@ -80,3 +80,42 @@ fn help_under_json_is_no_failure() {
     assert_eq!(output.status.code(), Some(0), "{stdout}");
     assert!(stdout.contains("Usage: ortie token show"), "{stdout}");
 }
+
+/// A refused PKCE verifier is a secret of the flow, so the refusal names
+/// its length and the flag, never its value.
+#[test]
+fn a_refused_pkce_verifier_is_not_echoed() {
+    let home = TempDir::new().unwrap();
+    let secret = "pkce-secret-value-too-short";
+
+    let output = run(home.path(), &["auth", "resume", "--pkce", secret, "x"]);
+    let stderr = text(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(stderr.contains("length 27"), "{stderr}");
+    assert!(!stderr.contains(secret), "{stderr}");
+
+    let output = run(home.path(), &["--json", "auth", "listen", "--pkce", secret]);
+    let stdout = text(&output.stdout);
+    assert_eq!(output.status.code(), Some(2), "{stdout}");
+    assert!(stdout.contains("usage-invalid"), "{stdout}");
+    assert!(!stdout.contains(secret), "{stdout}");
+}
+
+/// A log file Ortie cannot open fails the command as any other failure,
+/// with the failure object and exit 1, instead of a panic.
+#[test]
+fn a_log_file_that_cannot_be_opened_is_a_failure_object() {
+    let home = TempDir::new().unwrap();
+    let path = home.path().join("missing").join("ortie.log");
+    let path = path.to_str().unwrap();
+
+    let output = run(
+        home.path(),
+        &["--json", "--log-file", path, "account", "list"],
+    );
+    let stdout = text(&output.stdout);
+    assert_eq!(output.status.code(), Some(1), "{stdout}");
+
+    let failure: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(failure["error"], format!("Cannot open log file {path}"));
+}

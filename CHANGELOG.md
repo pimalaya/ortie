@@ -25,6 +25,8 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 - Added `tls.cert`, a PEM certificate to trust beside the platform store.
 - Added `resources` to the account configuration, the RFC 8707 resource indicators sent on the authorization request and the code exchange.
+- Added `--handoff <PATH>` to `auth listen` and `auth resume`: the object `auth get --json` prints, read from a file or, for `-`, from stdin (`ortie --json auth get > flow.json`, then `ortie auth listen --handoff flow.json`), in place of `--state` and `--pkce`, whose values other local users can read on the command line. It conflicts with both flags, serves the authorization-code grant alone, and `--handoff -` is refused in a REPL session. Without it, stdin is never read.
+- Added the handoff of an interrupted wait: SIGINT, SIGTERM or SIGHUP reaching an interactive `auth get` while it waits for the redirection prints the `auth resume` command, state and verifier included, then exits 130. A REPL session keeps its behaviour: the signal ends it with 130, no handoff.
 - Added the `ortie-token-revoke`, `ortie-auth-listen` and `ortie-error` schemas to `json-schema`, and those of `completion`, `manual` and `json-schema` itself.
 - Added config.sample.toml to the release archives and the Nix package, as share/doc/ortie/config.sample.toml.
 - Added a stable `code` to the failure object `--json` prints, for the failures a caller acts on: `permission-denied` (`access_denied`, `authorization_declined`, a bare 403), `rate-limited` (a bare 429), `grant-invalid` (`invalid_grant`), `client-invalid` (`invalid_client`), `client-unauthorized` (`unauthorized_client`), `scope-invalid` (`invalid_scope`), `device-code-expired`, `state-mismatch`, `token-missing`, `endpoint-missing`, `account-missing` (no account of the name `-a` gave), `account-default-missing` (none marked default, none named), `account-default-several` (several marked default, none named) and `usage-invalid`.
@@ -33,6 +35,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 ### Changed
 
+- Changed the time formatting from humantime, unmaintained (RUSTSEC-2026-0542), to jiff; the instants and durations print as before.
 - **BREAKING**: Changed `--json` keys to camelCase; the configuration keeps its kebab-case keys.
 - **BREAKING**: Changed `token refresh`, `auth resume` and a token-issuing `auth get` to print the receipt `{expiresIn, withRefreshToken}` under `--json`, instead of a `{"message": …}` sentence.
 - **BREAKING**: Changed `token inspect --json` to print `issuedAt` as an RFC 3339 instant in UTC, and `expiresAt`, the instant the token expires, in place of `expires_in`, the lifetime granted at issue whatever time had passed since.
@@ -110,6 +113,16 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 - Fixed, through pimalaya-cli 0.6.1 and pimalaya-config 0.6.0, the text error report writing the control characters of its causes raw to the terminal (each line is sanitized, the suggestions naming `--json` when a character was replaced), `--log-file` creating the file under the umask and following a symbolic link (it is created at 0600 and a link is refused), the manual pages printing `vv<version>`, a TOML parse error of the configuration printing its source line, and a refused secret echoing its value. A secret command that fails names the command and says to run it yourself, never printing its output.
 - Fixed install.sh saving an HTTP error page as the archive and letting `tar` fail on it: it downloads with `curl -fsSLo` and stops on the error.
+- Fixed a failing storage command reporting its stdout, where the token is: `token inspect`, `account check` and the MCP tool `token_inspect` printed the token a read command wrote before exiting non-zero, and a write command echoing its input did the same. Both are reported by their stderr, or their program and exit status, the read command with a hint to run it yourself.
+- Fixed a refresh refused `invalid_grant` because another process of the same account refreshed first, on a server rotating refresh tokens: Ortie reads the storage once more and takes the token stored meanwhile. A REPL or MCP session holding an old refresh token recovers the same way.
+- Fixed an `https` loopback redirection counted as captured, though the listener speaks plain HTTP: `auth get` and `auth listen` waited for ever and MCP `auth_get` answered `redirectCaptured: true`. It is finished through `auth resume`, `auth listen` refusing it.
+- Fixed MCP `auth_resume` dropping the pending flow on a URI that does not parse or does not echo its state: the flow stays pending for the right URI, the refusal coded `state-mismatch` for a state.
+- Fixed a refused `--pkce` verifier echoed in clap's message, and the device `auth resume` command `auth get` prints not running on a device code starting with `-`: it puts `--` before the code.
+- Fixed an interactive `auth get` freeing the ephemeral redirect port between building the request and waiting for the redirect, and printing the state and the PKCE verifier of a flow it finishes itself.
+- Fixed a `--log-file` Ortie cannot open panicking with exit 101: the failure object is printed and the exit status is 1.
+- Fixed a refresh `token show` makes on its own failing with a bare connection error: it reads "Refresh access token error", the connection error as its cause.
+- Fixed the text output printing the token type, the scopes, the user code and the verification URIs as the server wrote them, control and bidi characters included.
+- Fixed the Nix package calling the hidden `manuals` and `completions` aliases, shipping no JSON Schemas and linking a changelog page that does not exist.
 - **BREAKING**: Fixed several accounts marked `default = true` taking one at random: they are refused, naming them, with both ways of picking one.
 - Fixed a configured `http` loopback redirection naming no port, such as `http://localhost`, binding port 80: it binds an ephemeral port, so `auth get` and the MCP server catch the redirection.
 - Fixed the `auth resume` command printed by `auth get` dropping a generated redirect URI, and its `-a` and `-c` ([#16](https://github.com/pimalaya/ortie/issues/16)).

@@ -3,10 +3,10 @@
 //! The `auth resume` subcommand, completing an OAuth 2.0 grant flow
 //! [`crate::auth::get`] started but could not finish itself.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, ffi::OsStr};
 
 use anyhow::{Result, anyhow, bail};
-use clap::Parser;
+use clap::{Arg, Command, Parser, builder::TypedValueParser, error::ErrorKind};
 use pimalaya_cli::printer::Printer;
 use secrecy::SecretString;
 use url::Url;
@@ -40,6 +40,9 @@ use crate::{
 /// The authorization-code-only flags (`--state`, `--pkce`,
 /// `--redirect-uri`) are rejected on a device account, and the client
 /// credentials grants have nothing to resume at all.
+///
+/// On the authorization-code grant, --handoff reads the object `auth get
+/// --json` printed, from a file or stdin, in place of --state and --pkce.
 #[derive(Debug, Parser)]
 pub struct AuthResumeCommand {
     /// Redirected URI, or device code on the device grant.
@@ -61,7 +64,7 @@ pub struct AuthResumeCommand {
     ///
     /// Authorization-code grant only. The verifier generated during
     /// auth get must be given here when PKCE was enabled.
-    #[arg(long, short, value_parser = pkce_code_verifier_parser)]
+    #[arg(long, short, value_parser = PkceCodeVerifierParser)]
     #[arg(value_name = "CODE")]
     pub pkce: Option<Oauth20PkceCodeVerifier>,
     /// The redirect URI used during the initiation.
@@ -70,6 +73,14 @@ pub struct AuthResumeCommand {
     /// auth get must match here.
     #[arg(long, short, value_parser = uri_parser)]
     pub redirect_uri: Option<Url>,
+    /// The flow `auth get --json` printed, a path or `-` for stdin.
+    ///
+    /// Gives the state, the PKCE verifier and, unless --redirect-uri is
+    /// given, the redirect URI, keeping them off the command line, where
+    /// --state and --pkce are visible to other local users while the
+    /// command runs. Authorization-code grant only.
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["state", "pkce"])]
+    pub handoff: Option<String>,
 }
 
 impl AuthResumeCommand {
@@ -206,25 +217,50 @@ pub fn state_parser(state: &str) -> Result<Oauth20State, String> {
 }
 
 /// Clap value parser for the PKCE code verifier argument.
-pub fn pkce_code_verifier_parser(verifier: &str) -> Result<Oauth20PkceCodeVerifier, String> {
-    // NOTE: the error names a length or a byte, never the verifier body,
-    // clap surfacing this string in its parse error.
-    Oauth20PkceCodeVerifier::try_from(verifier.as_bytes()).map_err(|err| err.to_string())
+///
+/// Its refusal names a length or a byte and the flag, never the value,
+/// which clap's own refusal of a parser's error would echo.
+#[derive(Clone, Copy, Debug)]
+pub struct PkceCodeVerifierParser;
+
+impl TypedValueParser for PkceCodeVerifierParser {
+    type Value = Oauth20PkceCodeVerifier;
+
+    fn parse_ref(
+        &self,
+        cmd: &Command,
+        arg: Option<&Arg>,
+        value: &OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        Oauth20PkceCodeVerifier::try_from(value.as_encoded_bytes()).map_err(|err| {
+            let arg = arg.map(ToString::to_string).unwrap_or_default();
+            let message = format!("invalid value for '{arg}': {err}\n");
+            clap::Error::raw(ErrorKind::ValueValidation, message).with_cmd(cmd)
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::ffi::OsStr;
+
+    use clap::{Command, builder::TypedValueParser};
+
+    use crate::auth::resume::PkceCodeVerifierParser;
 
     #[test]
-    fn pkce_code_verifier_parser_error_omits_verifier_body() {
+    fn a_refused_verifier_is_not_echoed() {
+        let cmd = Command::new("ortie");
+
         let secret = "pkce-secret-value-with space-over-43-characters";
-        let err = pkce_code_verifier_parser(secret).unwrap_err();
+        let err = PkceCodeVerifierParser.parse_ref(&cmd, None, OsStr::new(secret));
+        let err = err.unwrap_err().to_string();
         assert!(!err.contains(secret), "{err}");
         assert!(err.contains("byte 0x20"), "{err}");
 
         let secret = "pkce-secret-value-too-short";
-        let err = pkce_code_verifier_parser(secret).unwrap_err();
+        let err = PkceCodeVerifierParser.parse_ref(&cmd, None, OsStr::new(secret));
+        let err = err.unwrap_err().to_string();
         assert!(!err.contains(secret), "{err}");
         assert!(err.contains("length 27"), "{err}");
     }

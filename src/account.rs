@@ -17,12 +17,13 @@ use std::{
     io::Write,
     net::TcpListener,
     path::PathBuf,
-    process::Stdio,
+    process::{Output, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Subcommand;
+use log::debug;
 use pimalaya_cli::printer::Printer;
 use pimalaya_config::{command::CommandConfig, secret::Secret};
 use pimalaya_stream::tls::Tls;
@@ -175,19 +176,22 @@ impl Account {
     /// Resolves the redirection URI, binding an ephemeral port for
     /// `http://127.0.0.1` when none is configured, or for a configured
     /// http loopback URI naming no port.
-    pub fn redirection(&self) -> Result<Cow<'_, Url>> {
+    ///
+    /// The listener bound for the ephemeral port is returned with the URI,
+    /// so a caller waiting for the redirect keeps the port it announces.
+    pub fn redirection(&self) -> Result<(Cow<'_, Url>, Option<TcpListener>)> {
         let url = match self.redirection_endpoint.as_ref() {
             Some(url) if url.scheme() != "http" || url.port().is_some() => {
-                return Ok(Cow::Borrowed(url));
+                return Ok((Cow::Borrowed(url), None));
             }
-            Some(url) if !is_loopback_redirect(url) => return Ok(Cow::Borrowed(url)),
+            Some(url) if !is_loopback_redirect(url) => return Ok((Cow::Borrowed(url), None)),
             Some(url) => url.clone(),
             None => DEFAULT_REDIRECTION.parse()?,
         };
 
-        let (url, _) = bind_loopback(&url)?;
+        let (url, listener) = bind_loopback(&url)?;
 
-        Ok(Cow::Owned(url))
+        Ok((Cow::Owned(url), Some(listener)))
     }
 
     /// Resolves the account token, memoizing it so the read storage
@@ -205,6 +209,8 @@ impl Account {
     /// Runs the read storage command and parses its stdout as the token
     /// response JSON, memoizing nothing.
     pub fn read_storage(&self) -> Result<Oauth20AccessTokenSuccessParams> {
+        debug!("reading access token from storage");
+
         let output = self
             .read_storage_command
             .to_command()
@@ -220,12 +226,9 @@ impl Account {
         }
 
         if !output.status.success() {
-            let bytes = if output.stdout.is_empty() {
-                output.stderr
-            } else {
-                output.stdout
-            };
-            let err = anyhow!("{}", String::from_utf8_lossy(&bytes));
+            let reason = failure_reason(&self.read_storage_command, &output);
+            let command = &self.read_storage_command;
+            let err = anyhow!("{reason}, run `{command}` yourself to see why");
             return Err(err.context("Read access token via command error"));
         }
 
@@ -245,6 +248,8 @@ impl Account {
         &mut self,
         mut res: Oauth20AccessTokenSuccessParams,
     ) -> Result<Oauth20AccessTokenSuccessParams> {
+        debug!("writing access token to storage");
+
         res.issued_at = Some(now_secs());
         self.token = Some(res.clone());
 
@@ -270,20 +275,9 @@ impl Account {
             .context("Wait for save command to finish")?;
 
         if !output.status.success() {
-            let err = "Write access token via command error";
-
-            let data = if output.stdout.is_empty() {
-                output.stderr
-            } else {
-                output.stdout
-            };
-
-            if data.is_empty() {
-                bail!(err);
-            }
-
-            let err2 = anyhow!("{}", String::from_utf8_lossy(&data));
-            return Err(err2.context(err));
+            let reason = failure_reason(&self.write_storage_command, &output);
+            let err = anyhow!("{reason}");
+            return Err(err.context("Write access token via command error"));
         }
 
         Ok(res)
@@ -320,6 +314,22 @@ pub fn bind_loopback(uri: &Url) -> Result<(Url, TcpListener)> {
     }
 
     Ok((uri, listener))
+}
+
+/// Why the storage `command` failed: its trimmed stderr, or its program
+/// and exit status when it wrote none, never its stdout, which holds the
+/// token or echoes it.
+fn failure_reason(command: &CommandConfig, output: &Output) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    match stderr.trim() {
+        "" => {
+            let command = command.to_command();
+            let program = command.get_program().to_string_lossy();
+            format!("{program} failed with {}", output.status)
+        }
+        err => err.to_owned(),
+    }
 }
 
 /// Current Unix epoch seconds, stamped as the local token issuance time.

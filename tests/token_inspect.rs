@@ -8,10 +8,10 @@ mod common;
 
 use std::{
     process::Output,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
-use humantime::format_rfc3339_seconds;
+use jiff::Timestamp;
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -70,8 +70,8 @@ fn a_live_token_expires_its_lifetime_after_its_issue() {
 
     assert!(expires_field(&text).starts_with("in 49m"), "{text:?}");
 
-    let expires_at = UNIX_EPOCH + Duration::from_secs(issued_at + 3600);
-    let expires_at = format_rfc3339_seconds(expires_at).to_string();
+    let expires_at = Timestamp::from_second(issued_at as i64 + 3600).unwrap();
+    let expires_at = expires_at.to_string();
     assert_eq!(payload(&json)["expiresAt"], expires_at);
 }
 

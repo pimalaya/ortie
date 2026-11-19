@@ -44,3 +44,6 @@ The top-level commands SHALL be `auth`, `token`, `repl`, `mcp` and `account`, th
 - GIVEN any configuration
 - WHEN `ortie --help` runs
 - THEN its commands read `auth`, `token`, `repl`, `mcp`, `account`, `completion`, `manual`, `json-schema`, `help`
+
+### Requirement: The Nix package installs what the binary generates
+package.nix SHALL generate the manual pages, the shell completions and the JSON Schemas through the standard commands under their official names (`manual`, `completion`, `json-schema`), never a hidden alias, into share/man, share/completions and share/schemas, beside share/doc/ortie/config.sample.toml. Its `meta.changelog` SHALL link the GitHub release of the tag it builds (`releases/tag/<tag>`).

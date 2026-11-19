@@ -89,6 +89,7 @@ mod account;
 mod auth;
 mod cli;
 mod config;
+mod duration;
 mod error;
 mod json_schema;
 mod mcp;
@@ -119,7 +120,6 @@ fn main() {
 
     let cli = parse::<Cli>();
 
-    Logger::try_init(&cli.log).expect("init logger");
     let mut printer = StdoutPrinter::new(&cli.json);
 
     let config_paths = cli.config.paths.as_ref();
@@ -129,12 +129,14 @@ fn main() {
         config_paths,
         account_name,
         account: None,
+        stdin_handoff: true,
+        interrupt_handoff: true,
     };
 
-    let result = match cli.cmd {
+    let result = Logger::try_init(&cli.log).and_then(|()| match cli.cmd {
         Some(cmd) => cmd.execute(&mut printer, &mut session),
         None => cli::meet_bare_invocation(config_paths),
-    };
+    });
 
     // NOTE: a person missing a configuration meets the welcome, a script
     // or a JSON caller the error.

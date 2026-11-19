@@ -624,3 +624,87 @@ fn a_missing_or_mistyped_argument_is_refused_as_usage() {
 
     server.finish();
 }
+
+/// An https loopback redirect is not one the plain HTTP listener can
+/// serve, so the server does not claim to capture it.
+#[test]
+fn an_https_loopback_redirect_is_not_captured() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock(0);
+    let redirection = r#"endpoints.redirection = "https://127.0.0.1:1/cb""#;
+    let (config, _) = write_mcp_config(dir.path(), addr, redirection);
+
+    let mut server = Server::start(&config, &["--allow-write"]);
+    let get = server.call("auth_get", json!({}))["structuredContent"].clone();
+    assert_eq!(get["redirectCaptured"], false, "{get}");
+
+    server.finish();
+}
+
+/// A mis-pasted URI, one that does not parse or does not echo the state,
+/// leaves the flow pending, and the right URI then completes it.
+#[test]
+fn a_mis_pasted_uri_leaves_the_flow_pending() {
+    let dir = TempDir::new().unwrap();
+    let (addr, bodies) = start_mock(0);
+    let (config, _) = write_mcp_config(
+        dir.path(),
+        addr,
+        r#"endpoints.redirection = "org.example.app:/cb""#,
+    );
+
+    let mut server = Server::start(&config, &["--allow-write"]);
+
+    let get = server.call("auth_get", json!({}))["structuredContent"].clone();
+    let uri = Url::parse(get["authorizationUri"].as_str().unwrap()).unwrap();
+
+    let garbled = failure(&server.call("auth_resume", json!({ "uri": "not a uri" })));
+    assert!(garbled.to_string().contains("still pending"), "{garbled}");
+
+    let other = "org.example.app:/cb?code=c1&state=another-state";
+    let other = failure(&server.call("auth_resume", json!({ "uri": other })));
+    assert_eq!(other["code"], "state-mismatch", "{other}");
+    let status = server.call("auth_status", json!({}))["structuredContent"].clone();
+    assert_eq!(status["status"], "pending", "{status}");
+
+    let redirected = format!("org.example.app:/cb?code=c2&state={}", query(&uri, "state"));
+    let resume = server.call("auth_resume", json!({ "uri": redirected }));
+    assert_eq!(
+        resume["structuredContent"]["withRefreshToken"], true,
+        "{resume}"
+    );
+
+    server.finish();
+    assert_eq!(bodies.lock().unwrap().len(), 1);
+}
+
+/// The MCP tool reading the token reports a failing read command as the
+/// command line does, never by the token it printed.
+#[test]
+fn token_inspect_never_reports_a_failing_read_command_stdout() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock(0);
+    let (config, token) = write_mcp_config(dir.path(), addr, "");
+    std::fs::write(&token, TOKEN).unwrap();
+
+    let toml = std::fs::read_to_string(&config).unwrap();
+    let read = format!("storage.read.command = \"cat {}; exit 1\"", token.display());
+    let toml = toml
+        .lines()
+        .map(|line| match line.starts_with("storage.read.command") {
+            true => read.as_str(),
+            false => line,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&config, toml).unwrap();
+
+    let mut server = Server::start(&config, &[]);
+    let inspect = failure(&server.call("token_inspect", json!({})));
+    assert!(inspect.to_string().contains("exit status: 1"), "{inspect}");
+
+    let printed = server.finish();
+    for secret in ["at-test", "rt-test"] {
+        assert!(!printed.contains(secret), "{secret} printed: {printed}");
+    }
+}

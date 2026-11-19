@@ -58,7 +58,7 @@ Values Ortie defines (`revoked`, the MCP `kind` and `status`, the codes) SHALL b
 Every command's text rendering SHALL end with a newline, `token show` included, so the shell prompt starts on a line of its own. The REPL SHALL add none of its own: interactive, its prompt `ortie> ` follows the output on a line of its own; piped, results follow each other line after line.
 
 ### Requirement: A text record prints as aligned fields
-A text rendering holding a record, `token inspect` and the `auth get` authorization and device requests, SHALL print it through pimalaya-cli's `fields::Fields`: one `Label: value` line per field, values aligned two spaces past the longest label's colon, a list such as the scopes one item per line under the first. A link or a command for the user to copy SHALL follow its sentence after a blank line, indented two spaces, as the welcome and clap's usage lines are.
+A text rendering holding a record, `token inspect` and the `auth get` authorization and device requests, SHALL print it through pimalaya-cli's `fields::Fields`: one `Label: value` line per field, values aligned two spaces past the longest label's colon, a list such as the scopes one item per line under the first. A link or a command for the user to copy SHALL follow its sentence after a blank line, indented two spaces, as the welcome and clap's usage lines are. A value a server wrote, the token type, a scope, the user code and the verification URIs, SHALL be defused by pimalaya-cli's `sanitize::text` first.
 
 ### Requirement: A refused command line exits 2
 The command line SHALL be parsed through pimalaya-cli's `clap::parse`: help and version print as clap prints them, and a command line the grammar refuses (an unknown flag or command, a missing argument, a bad value) SHALL exit 2 before any configuration is read. With a `--json` word before any `--`, it SHALL print on stdout the failure object coded `usage-invalid`, its `error` clap's message without its `error: ` prefix nor styles, `sources` empty and `backtrace` null, and nothing on stderr; otherwise clap's rendering on stderr and nothing on stdout. Exit 1 stays a failure object.
@@ -66,6 +66,9 @@ The command line SHALL be parsed through pimalaya-cli's `clap::parse`: help and 
 #### Scenario: An unknown flag under JSON
 - WHEN `ortie --json token show --nope` runs
 - THEN it prints one failure object coded `usage-invalid`, its `error` naming `--nope`, on stdout and exits 2
+
+### Requirement: A log file that cannot be opened fails the command
+A `--log-file` Ortie cannot open or create SHALL fail the command before it runs, as any other failure: the failure object on stdout, naming the path, and exit 1, never a panic.
 
 ### Requirement: A failure carries a stable code
 A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`, found anywhere in the error chain or read from io-oauth's typed client error or pimalaya-config's account resolution error. A failure with no code SHALL print `"code": null`; the text output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording. An OAuth refusal SHALL name its code in its message as the server spelled it (`invalid_grant`), a code io-oauth does not register reading `unregistered code`.

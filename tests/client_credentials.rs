@@ -352,3 +352,34 @@ fn invalid_client_is_coded_client_invalid() {
     assert_eq!(failure["error"], message, "{failure}");
     assert!(std::fs::read_to_string(token).unwrap().is_empty());
 }
+
+/// A write command echoing the token it was handed before it fails is
+/// reported by its program and exit status, never by that echo.
+#[test]
+fn a_failing_write_command_never_reports_its_stdout() {
+    let (addr, _requests) = start_mock(200, TOKEN_RESPONSE);
+    let dir = TempDir::new().unwrap();
+    let (config, _) = write_cc_config(
+        dir.path(),
+        addr,
+        "grant = \"client-credentials\"\nclient-secret.raw = \"s3cret\"",
+    );
+
+    let toml = std::fs::read_to_string(&config).unwrap();
+    let toml = toml
+        .lines()
+        .map(|line| match line.starts_with("storage.write.command") {
+            true => "storage.write.command = \"cat; exit 1\"",
+            false => line,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&config, toml).unwrap();
+
+    let out = ortie(&config, &["--json", "auth", "get"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+
+    assert_eq!(out.status.code(), Some(1), "{stdout}");
+    assert!(stdout.contains("failed with exit status: 1"), "{stdout}");
+    assert!(!stdout.contains("at-fresh"), "token printed: {stdout}");
+}

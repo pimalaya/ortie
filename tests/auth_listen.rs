@@ -230,3 +230,325 @@ fn listen_is_refused_without_a_loopback_redirect_or_on_a_device_account() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("device grant"), "{stdout}");
 }
+
+/// The listener speaks plain HTTP, so an https loopback redirect is one
+/// it cannot serve: listening on it is refused, and the handoff offers
+/// the resume alone, where the wait would never end.
+#[test]
+fn an_https_loopback_redirect_is_not_listened_for() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock();
+    let redirection = r#"endpoints.redirection = "https://127.0.0.1:1/cb""#;
+    let (config, _) = write_code_config(dir.path(), addr, redirection);
+
+    let output = ortie(&config, &["auth", "listen"]);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("not an http URI"), "{stdout}");
+
+    let output = ortie(&config, &["auth", "get"]);
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains(" auth listen "), "{stdout}");
+    assert!(stdout.contains(" auth resume "), "{stdout}");
+}
+
+/// Runs the binary over `config` with `args`, `input` on its stdin.
+fn ortie_fed(config: &Path, args: &[&str], input: &[u8]) -> std::process::Child {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_ortie"))
+        .arg("-c")
+        .arg(config)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    child.stdin.take().unwrap().write_all(input).unwrap();
+    child
+}
+
+/// The `auth get --json` handoff piped into `auth listen --handoff -`, no
+/// flow value on its command line, completes the flow with the handoff's state,
+/// verifier and redirect URI.
+#[test]
+fn a_handoff_on_stdin_is_listened_for_and_stored() {
+    let dir = TempDir::new().unwrap();
+    let (addr, bodies) = start_mock();
+    let (config, token) = write_code_config(dir.path(), addr, "");
+
+    let output = ortie(&config, &["--json", "auth", "get"]);
+    assert!(output.status.success(), "{output:?}");
+
+    let handoff: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let state = handoff["state"].as_str().unwrap().to_owned();
+    let verifier = handoff["pkceCodeVerifier"].as_str().unwrap().to_owned();
+    let redirect_uri = handoff["redirectUri"].as_str().unwrap().to_owned();
+
+    let args = ["--json", "auth", "listen", "--handoff", "-"];
+    let listen = ortie_fed(&config, &args, &output.stdout);
+
+    let target = Url::parse(&redirect_uri).unwrap();
+    let target = (
+        target.host_str().unwrap().to_owned(),
+        target.port().unwrap(),
+    );
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut browser = loop {
+        match TcpStream::connect((target.0.as_str(), target.1)) {
+            Ok(stream) => break stream,
+            Err(_) if Instant::now() < deadline => thread::sleep(Duration::from_millis(20)),
+            Err(err) => panic!("the listener never bound: {err}"),
+        }
+    };
+
+    write!(
+        browser,
+        "GET /?code=the-code&state={state} HTTP/1.1\r\nHost: x\r\n\r\n"
+    )
+    .unwrap();
+    let mut page = String::new();
+    let _ = browser.read_to_string(&mut page);
+    assert!(page.starts_with("HTTP/1.0 200 OK"), "{page}");
+
+    let output = listen.wait_with_output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+
+    let bodies = bodies.lock().unwrap();
+    assert_eq!(form(&bodies[0], "code").as_deref(), Some("the-code"));
+    assert_eq!(form(&bodies[0], "redirect_uri"), Some(redirect_uri));
+    assert_eq!(form(&bodies[0], "code_verifier"), Some(verifier));
+
+    assert!(std::fs::read_to_string(token).unwrap().contains("at-test"));
+}
+
+/// The handoff `auth resume --handoff` reads, from stdin or a file, gives
+/// the state the
+/// redirected URI is checked against, and the verifier and redirect URI
+/// of the exchange.
+#[test]
+fn a_handoff_on_stdin_is_resumed() {
+    let dir = TempDir::new().unwrap();
+    let (addr, bodies) = start_mock();
+    let (config, _) = write_code_config(dir.path(), addr, "");
+
+    let output = ortie(&config, &["--json", "auth", "get"]);
+    let handoff: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let state = handoff["state"].as_str().unwrap().to_owned();
+    let verifier = handoff["pkceCodeVerifier"].as_str().unwrap().to_owned();
+    let redirect_uri = handoff["redirectUri"].as_str().unwrap().to_owned();
+
+    let forged = "http://127.0.0.1:1/?code=forged&state=forged-state";
+    let resume = ortie_fed(
+        &config,
+        &["--json", "auth", "resume", "--handoff", "-", forged],
+        &output.stdout,
+    );
+    let refused = resume.wait_with_output().unwrap();
+    let failure: Value = serde_json::from_slice(&refused.stdout).unwrap();
+    assert_eq!(failure["code"], "state-mismatch", "{failure}");
+
+    let redirected = format!("{redirect_uri}?code=the-code&state={state}");
+    let flow = dir.path().join("flow.json");
+    std::fs::write(&flow, &output.stdout).unwrap();
+    let flow = flow.to_str().unwrap();
+    let output = ortie(&config, &["auth", "resume", "--handoff", flow, &redirected]);
+    assert!(output.status.success(), "{output:?}");
+
+    let bodies = bodies.lock().unwrap();
+    assert_eq!(bodies.len(), 1, "{bodies:?}");
+    assert_eq!(form(&bodies[0], "redirect_uri"), Some(redirect_uri));
+    assert_eq!(form(&bodies[0], "code_verifier"), Some(verifier));
+}
+
+/// A REPL session reads its lines from stdin, so `auth resume` there
+/// takes no handoff from it and the next line still runs.
+#[test]
+fn a_repl_resume_takes_no_handoff_from_its_lines() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock();
+    let (config, _) = write_code_config(dir.path(), addr, "");
+
+    let input = b"auth resume http://127.0.0.1:1/?code=c&state=s\naccount list\n";
+    let repl = ortie_fed(&config, &["repl"], input);
+    let output = repl.wait_with_output().unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.lines().any(|l| l.starts_with("code ")), "{stdout}");
+}
+
+/// An interactive `auth get` interrupted while it waits for the
+/// redirection prints the `auth resume` command it hid, then exits 130.
+///
+/// The binary runs in a terminal util-linux's `script` allocates.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_interrupted_interactive_wait_prints_the_resume() {
+    use std::io::BufRead;
+
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock();
+    let (config, _) = write_code_config(dir.path(), addr, "");
+
+    let line = format!(
+        "{} -c {} auth get",
+        env!("CARGO_BIN_EXE_ortie"),
+        config.display()
+    );
+    let mut script = Command::new("script")
+        .args(["-qec", &line, "/dev/null"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let mut stdout = std::io::BufReader::new(script.stdout.take().unwrap());
+    let mut printed = String::new();
+
+    while !printed.contains("Wait for redirection") {
+        let mut line = String::new();
+        assert_ne!(stdout.read_line(&mut line).unwrap(), 0, "{printed}");
+        assert!(!line.contains("State:"), "{line}");
+        printed.push_str(&line);
+    }
+
+    let pid = script.id();
+    let children = format!("/proc/{pid}/task/{pid}/children");
+    let ortie = std::fs::read_to_string(children).unwrap();
+    let ortie = ortie.split_whitespace().next().unwrap().to_owned();
+    let killed = Command::new("kill")
+        .args(["-INT", &ortie])
+        .status()
+        .unwrap();
+    assert!(killed.success());
+
+    stdout.read_to_string(&mut printed).unwrap();
+    let status = script.wait().unwrap();
+
+    let resume = printed.lines().find(|l| l.contains(" auth resume "));
+    let resume = resume.unwrap_or_else(|| panic!("{printed}"));
+    assert!(resume.contains("--state="), "{resume}");
+    assert!(resume.contains("--pkce="), "{resume}");
+    assert!(resume.contains("--redirect-uri="), "{resume}");
+    assert_eq!(status.code(), Some(130), "{printed}");
+}
+
+/// In a REPL session, an interrupted interactive wait ends the session as
+/// a signal does, with 130 and no handoff, and installs no handler that
+/// would swallow a later Ctrl-C at the prompt.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_interrupted_repl_wait_ends_the_session() {
+    use std::io::BufRead;
+
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock();
+    let (config, _) = write_code_config(dir.path(), addr, "");
+
+    let line = format!(
+        "{} -c {} repl",
+        env!("CARGO_BIN_EXE_ortie"),
+        config.display()
+    );
+    let mut script = Command::new("script")
+        .args(["-qec", &line, "/dev/null"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let mut stdin = script.stdin.take().unwrap();
+    stdin.write_all(b"auth get\n").unwrap();
+
+    let mut stdout = std::io::BufReader::new(script.stdout.take().unwrap());
+    let mut printed = String::new();
+
+    while !printed.contains("Wait for redirection") {
+        let mut line = String::new();
+        assert_ne!(stdout.read_line(&mut line).unwrap(), 0, "{printed}");
+        printed.push_str(&line);
+    }
+
+    let pid = script.id();
+    let children = format!("/proc/{pid}/task/{pid}/children");
+    let ortie = std::fs::read_to_string(children).unwrap();
+    let ortie = ortie.split_whitespace().next().unwrap().to_owned();
+    let killed = Command::new("kill")
+        .args(["-INT", &ortie])
+        .status()
+        .unwrap();
+    assert!(killed.success());
+
+    stdout.read_to_string(&mut printed).unwrap();
+    let status = script.wait().unwrap();
+    drop(stdin);
+
+    assert!(!printed.contains(" auth resume "), "{printed}");
+    assert_eq!(status.code(), Some(130), "{printed}");
+}
+
+/// Without `--handoff` the commands never read stdin, so a script whose
+/// stdin stays open does not wait on it.
+#[test]
+fn without_the_handoff_flag_an_open_stdin_is_left_alone() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock();
+    let (config, token) = write_code_config(dir.path(), addr, "");
+
+    let mut resume = Command::new(env!("CARGO_BIN_EXE_ortie"))
+        .arg("-c")
+        .arg(&config)
+        .args(["auth", "resume", "http://127.0.0.1:1/?code=c&state=s"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let stdin = resume.stdin.take().unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let status = loop {
+        if let Some(status) = resume.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() > deadline {
+            resume.kill().unwrap();
+            panic!("auth resume waited on its open stdin");
+        }
+        thread::sleep(Duration::from_millis(20));
+    };
+    drop(stdin);
+
+    assert!(status.success(), "{status:?}");
+    assert!(std::fs::read_to_string(token).unwrap().contains("at-test"));
+}
+
+/// The handoff gives the state and the verifier, so `--handoff` beside
+/// `--state` or `--pkce` is a command line the grammar refuses.
+#[test]
+fn the_handoff_flag_refuses_the_state_and_pkce_flags() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock();
+    let (config, _) = write_code_config(dir.path(), addr, "");
+
+    for args in [
+        ["--json", "auth", "listen", "--handoff=-", "--state=s"].as_slice(),
+        &[
+            "--json",
+            "auth",
+            "resume",
+            "--handoff=-",
+            &format!("--pkce={}", "v".repeat(43)),
+            "x",
+        ],
+    ] {
+        let output = ortie(&config, args);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(output.status.code(), Some(2), "{stdout}");
+        assert!(stdout.contains("usage-invalid"), "{stdout}");
+        assert!(stdout.contains("cannot be used with"), "{stdout}");
+    }
+}

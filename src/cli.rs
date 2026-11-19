@@ -93,7 +93,8 @@ impl Command {
         match self {
             Self::Auth(cmd) => {
                 let invocation = session.invocation();
-                cmd.execute(printer, session.account()?, &invocation)
+                let handoffs = (session.stdin_handoff, session.interrupt_handoff);
+                cmd.execute(printer, session.account()?, &invocation, handoffs)
             }
             Self::Token(cmd) => cmd.execute(printer, session.account()?),
             Self::Repl(cmd) => cmd.execute(&*printer, session),
@@ -136,6 +137,12 @@ pub struct Session<'a> {
     pub account_name: Option<&'a str>,
     /// The account, taken on first use.
     pub account: Option<Account>,
+    /// Whether `auth listen` and `auth resume` may read a handoff on stdin,
+    /// which a REPL session reads its lines from.
+    pub stdin_handoff: bool,
+    /// Whether an interactive `auth get` interrupted while it waits prints
+    /// its handoff, which a REPL session leaves to the default signal end.
+    pub interrupt_handoff: bool,
 }
 
 impl Session<'_> {

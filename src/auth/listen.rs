@@ -19,7 +19,7 @@ use crate::{
     account::Account,
     auth::{
         get::is_loopback_redirect,
-        resume::{AuthResumeCommand, pkce_code_verifier_parser, state_parser, uri_parser},
+        resume::{AuthResumeCommand, PkceCodeVerifierParser, state_parser, uri_parser},
     },
     config::GrantConfig,
 };
@@ -32,7 +32,8 @@ use crate::{
 /// authorizing: a redirection arriving first fails in the browser, and
 /// auth resume with the copied URL still finishes the flow.
 ///
-/// Authorization-code grant only.
+/// Authorization-code grant only. --handoff reads the object `auth get
+/// --json` printed, from a file or stdin, in place of --state and --pkce.
 #[derive(Debug, Parser)]
 pub struct AuthListenCommand {
     /// The state generated during the authorization flow initiation.
@@ -45,15 +46,23 @@ pub struct AuthListenCommand {
     /// The PKCE code verifier generated during the initiation.
     ///
     /// Must be given when PKCE was enabled.
-    #[arg(long, short, value_parser = pkce_code_verifier_parser)]
+    #[arg(long, short, value_parser = PkceCodeVerifierParser)]
     #[arg(value_name = "CODE")]
     pub pkce: Option<Oauth20PkceCodeVerifier>,
     /// The redirect URI used during the initiation, the one bound.
     ///
-    /// Falls back to `endpoints.redirection`. Must be an http(s) URI on a
+    /// Falls back to `endpoints.redirection`. Must be an http URI on a
     /// loopback host.
     #[arg(long, short, value_parser = uri_parser)]
     pub redirect_uri: Option<Url>,
+    /// The flow `auth get --json` printed, a path or `-` for stdin.
+    ///
+    /// Gives the state, the PKCE verifier and, unless --redirect-uri is
+    /// given, the redirect URI, keeping them off the command line, where
+    /// --state and --pkce are visible to other local users while the
+    /// command runs. Authorization-code grant only.
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["state", "pkce"])]
+    pub handoff: Option<String>,
 }
 
 impl AuthListenCommand {
@@ -79,7 +88,7 @@ impl AuthListenCommand {
 
         if !is_loopback_redirect(&redirect_uri) {
             bail!(
-                "Cannot listen on {redirect_uri}, an http(s) URI on a loopback host, \
+                "Cannot listen on {redirect_uri}, not an http URI on a loopback host, \
                  run auth resume with the redirected URI instead"
             );
         }
@@ -99,6 +108,7 @@ impl AuthListenCommand {
             state: self.state,
             pkce: self.pkce,
             redirect_uri: Some(redirect_uri),
+            handoff: None,
         };
 
         cmd.execute(printer, account)
