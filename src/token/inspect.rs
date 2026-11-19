@@ -11,13 +11,13 @@ use std::{
 use anyhow::Result;
 use clap::Parser;
 use jiff::{SignedDuration, civil};
-use pimalaya_cli::{fields::Fields, printer::Printer, sanitize};
+use pimalaya_cli::{duration::friendly, fields::Fields, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::{Serialize, Serializer, ser::Error as _};
 
 use io_oauth::rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams;
 
-use crate::{account::Account, token::issued::friendly};
+use crate::account::Account;
 
 /// Inspect metadata associated to the access token.
 ///

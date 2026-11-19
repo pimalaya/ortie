@@ -35,7 +35,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 ### Changed
 
-- Changed the pimalaya-cli dependency to 0.7.0.
+- Changed the pimalaya-cli dependency to 0.7.1.
 - Changed the time formatting from humantime, unmaintained (RUSTSEC-2026-0542), to jiff; the instants print as before.
 - **BREAKING**: Changed the durations of the text output (`token inspect`, the issued-token receipt, the `auth get` device request) to jiff's friendly form, balanced up to days of 24 hours: `2d 4h` where `2days 4h` was printed, and `400d` where `1year 1month 4days 7h 26m 24s` was. The JSON is unchanged.
 - **BREAKING**: Changed `--json` keys to camelCase; the configuration keeps its kebab-case keys.

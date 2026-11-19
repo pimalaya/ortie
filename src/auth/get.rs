@@ -22,6 +22,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use base64_codec::codec::{Base64Alphabet, Base64Codec};
 use clap::Parser;
 use pimalaya_cli::{
+    duration::friendly,
     fields::Fields,
     printer::Printer,
     sanitize,
@@ -61,7 +62,7 @@ use crate::{
     auth::resume::AuthResumeCommand,
     config::{GrantConfig, PkceConfig},
     error,
-    token::issued::{TokenIssuedOutput, friendly},
+    token::issued::TokenIssuedOutput,
 };
 
 /// How often the interactive wait for the redirection checks whether a
