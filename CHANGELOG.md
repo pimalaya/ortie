@@ -35,7 +35,8 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 ### Changed
 
-- Changed the time formatting from humantime, unmaintained (RUSTSEC-2026-0542), to jiff; the instants and durations print as before.
+- Changed the time formatting from humantime, unmaintained (RUSTSEC-2026-0542), to jiff; the instants print as before.
+- **BREAKING**: Changed the durations of the text output (`token inspect`, the issued-token receipt, the `auth get` device request) to jiff's friendly form, balanced up to days of 24 hours: `2d 4h` where `2days 4h` was printed, and `400d` where `1year 1month 4days 7h 26m 24s` was. The JSON is unchanged.
 - **BREAKING**: Changed `--json` keys to camelCase; the configuration keeps its kebab-case keys.
 - **BREAKING**: Changed `token refresh`, `auth resume` and a token-issuing `auth get` to print the receipt `{expiresIn, withRefreshToken}` under `--json`, instead of a `{"message": …}` sentence.
 - **BREAKING**: Changed `token inspect --json` to print `issuedAt` as an RFC 3339 instant in UTC, and `expiresAt`, the instant the token expires, in place of `expires_in`, the lifetime granted at issue whatever time had passed since.

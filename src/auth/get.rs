@@ -60,9 +60,8 @@ use crate::{
     account::{Account, bind_loopback},
     auth::resume::AuthResumeCommand,
     config::{GrantConfig, PkceConfig},
-    duration::HumanDuration,
     error,
-    token::issued::TokenIssuedOutput,
+    token::issued::{TokenIssuedOutput, friendly},
 };
 
 /// How often the interactive wait for the redirection checks whether a
@@ -792,8 +791,7 @@ impl fmt::Display for DeviceAuthorization {
             fields.push("Device code", &self.device_code);
         }
 
-        let expires_in = Duration::from_secs(self.expires_in);
-        fields.push("Expires in", HumanDuration(expires_in));
+        fields.push("Expires in", friendly(self.expires_in));
         fields.push("Polling interval", format!("{}s", self.interval));
 
         writeln!(f, "{fields}")?;

@@ -105,6 +105,7 @@ The [CHANGELOG](./CHANGELOG.md) lists every change; these are the ones to act on
 - **`ortie repl` prints its errors on stdout**, interactive or piped, as `ortie-error` objects under `--json`, where v2 wrote them on stderr: a piped session reads one JSON value per line on stdout, payload or failure, each failure carrying its `code` (`usage-invalid` for a line that does not parse). At a terminal, a line that does not parse keeps clap's text on stderr, and a `--json` session prints help on stderr.
 - **Piped `--json` output is one value per line**, and every text output ends with a newline, `token show` included: `$(ortie token show)` strips it, as do the secret commands of the Pimalaya tools.
 - **The text of `token inspect` and `auth get` changed** to aligned `Label: value` fields, one scope per line. A script parsing it moves to `--json`.
+- **Durations print in jiff's friendly form** in the text output, up to days: `2d 4h 30m` where v2 printed `2days 4h 30m`, never years nor months. The JSON carries seconds and instants, unchanged.
 - **`json-schema` stamps an `$id`** naming the contract version on each schema and requires the keys a command always prints. `ortie-configure` is gone; `ortie-token-refresh`, `ortie-auth-resume`, `ortie-token-revoke`, `ortie-auth-listen` and `ortie-error` are new.
 
 Reading the new output with jq:

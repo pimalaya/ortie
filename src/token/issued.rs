@@ -6,12 +6,11 @@
 
 use std::{fmt, time::Duration};
 
+use jiff::{Span, SpanRound, Unit, fmt::friendly::SpanPrinter};
 use schemars::JsonSchema;
 use serde::Serialize;
 
 use io_oauth::rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams;
-
-use crate::duration::HumanDuration;
 
 /// The access token a grant or a refresh just stored.
 ///
@@ -63,9 +62,47 @@ impl fmt::Display for TokenIssuedOutput {
         match self.expires_in {
             None => writeln!(f, " (unknown expiry)"),
             Some(exp) => {
-                let exp = Duration::from_secs(exp.saturating_add(1));
-                writeln!(f, " (expires in {})", HumanDuration(exp))
+                writeln!(f, " (expires in {})", friendly(exp.saturating_add(1)))
             }
+        }
+    }
+}
+
+/// Prints a duration in seconds in jiff's friendly form, balanced up to
+/// days of 24 hours: `2d 4h 30m`, `0s` when empty.
+///
+/// A duration too long for a jiff span stops at hours.
+pub fn friendly(secs: u64) -> String {
+    let rounding = SpanRound::new().largest(Unit::Day).days_are_24_hours();
+
+    let span = i64::try_from(secs)
+        .ok()
+        .and_then(|secs| Span::new().try_seconds(secs).ok())
+        .and_then(|span| span.round(rounding).ok());
+
+    match span {
+        Some(span) => format!("{span:#}"),
+        None => SpanPrinter::new().unsigned_duration_to_string(&Duration::from_secs(secs)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::token::issued::friendly;
+
+    #[test]
+    fn a_duration_prints_in_days_at_most() {
+        let cases = [
+            (0, "0s"),
+            (90, "1m 30s"),
+            (5400, "1h 30m"),
+            (2 * 86_400 + 4 * 3600, "2d 4h"),
+            (400 * 86_400 + 61, "400d 1m 1s"),
+            (u64::MAX, "5124095576030431h 15s"),
+        ];
+
+        for (secs, text) in cases {
+            assert_eq!(friendly(secs), text, "{secs}");
         }
     }
 }

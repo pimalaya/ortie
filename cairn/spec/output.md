@@ -60,6 +60,14 @@ Every command's text rendering SHALL end with a newline, `token show` included, 
 ### Requirement: A text record prints as aligned fields
 A text rendering holding a record, `token inspect` and the `auth get` authorization and device requests, SHALL print it through pimalaya-cli's `fields::Fields`: one `Label: value` line per field, values aligned two spaces past the longest label's colon, a list such as the scopes one item per line under the first. A link or a command for the user to copy SHALL follow its sentence after a blank line, indented two spaces, as the welcome and clap's usage lines are. A value a server wrote, the token type, a scope, the user code and the verification URIs, SHALL be defused by pimalaya-cli's `sanitize::text` first.
 
+### Requirement: A duration prints in jiff's friendly form
+A duration the text output prints, the age and the remaining lifetime of `token inspect`, the lifetime of the issued-token receipt and of the device request, SHALL be printed in whole seconds through jiff's friendly format with its default printer: compact designators (`d`, `h`, `m`, `s`), a space between units, units balanced up to days of 24 hours and never to weeks, months nor years, `0s` when empty. A duration too long for a jiff span SHALL stop at hours. The JSON prints seconds or instants, never this text.
+
+#### Scenario: A token issued two days ago
+- GIVEN a store holding a token issued 2 days, 4 hours and 30 minutes ago
+- WHEN `ortie token inspect` runs
+- THEN its `Issued` field reads `2d 4h 30m ago`, where v2 printed `2days 4h 30m ago`
+
 ### Requirement: A refused command line exits 2
 The command line SHALL be parsed through pimalaya-cli's `clap::parse`: help and version print as clap prints them, and a command line the grammar refuses (an unknown flag or command, a missing argument, a bad value) SHALL exit 2 before any configuration is read. With a `--json` word before any `--`, it SHALL print on stdout the failure object coded `usage-invalid`, its `error` clap's message without its `error: ` prefix nor styles, `sources` empty and `backtrace` null, and nothing on stderr; otherwise clap's rendering on stderr and nothing on stdout. Exit 1 stays a failure object.
 

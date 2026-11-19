@@ -5,7 +5,7 @@
 
 use std::{
     fmt,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
@@ -17,7 +17,7 @@ use serde::{Serialize, Serializer, ser::Error as _};
 
 use io_oauth::rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams;
 
-use crate::{account::Account, duration::HumanDuration};
+use crate::{account::Account, token::issued::friendly};
 
 /// Inspect metadata associated to the access token.
 ///
@@ -110,14 +110,13 @@ impl fmt::Display for TokenInspectOutput {
         fields.push("Type", sanitize::text(&self.token_type));
 
         if let (Some(issued_at), Some(now)) = (self.issued_at, now_epoch) {
-            let elapsed = Duration::from_secs(now.saturating_sub(issued_at));
-            fields.push("Issued", format!("{} ago", HumanDuration(elapsed)));
+            let elapsed = friendly(now.saturating_sub(issued_at));
+            fields.push("Issued", format!("{elapsed} ago"));
         }
 
         let expires = match (self.expires_at, now_epoch) {
             (Some(expires_at), Some(now)) if expires_at > now => {
-                let remaining = Duration::from_secs(expires_at - now);
-                format!("in {}", HumanDuration(remaining))
+                format!("in {}", friendly(expires_at - now))
             }
             (Some(_), Some(_)) => String::from("expired"),
             _ => String::from("unknown"),
