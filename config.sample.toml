@@ -19,6 +19,7 @@ pkce = "s256"				# PKCE with the SHA-256 challenge
 #tls.rustls.crypto = "ring"		# rustls on ring; omitted, the first the build carries
 #tls.rustls.crypto = "aws"		# rustls on aws-lc-rs
 #tls.cert = "/path/to/cert.pem"		# a PEM certificate to trust beside the platform's
+#tls.client = { cert = "/path/to/client.pem", key = "/path/to/client.key.pem" }	# a PEM client certificate and its key, for mutual TLS
 
 storage.read.command = "exit 127"	# prints the stored token JSON
 storage.write.command = "exit 127"	# receives the token JSON on stdin

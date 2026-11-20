@@ -884,9 +884,9 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pimalaya-cli"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f21a9483f81b04688015593403b81b8079f49d1b64ae7fa532074d49dbd19e46"
+checksum = "8451b5a986c8e4e222440ee378344568805eaee4265450d02caedd07cd89e251"
 dependencies = [
  "anyhow",
  "base64-codec",

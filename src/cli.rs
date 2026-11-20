@@ -93,8 +93,8 @@ impl Command {
         match self {
             Self::Auth(cmd) => {
                 let invocation = session.invocation();
-                let handoffs = (session.stdin_handoff, session.interrupt_handoff);
-                cmd.execute(printer, session.account()?, &invocation, handoffs)
+                let interrupt_handoff = session.interrupt_handoff;
+                cmd.execute(printer, session.account()?, &invocation, interrupt_handoff)
             }
             Self::Token(cmd) => cmd.execute(printer, session.account()?),
             Self::Repl(cmd) => cmd.execute(&*printer, session),
@@ -137,9 +137,6 @@ pub struct Session<'a> {
     pub account_name: Option<&'a str>,
     /// The account, taken on first use.
     pub account: Option<Account>,
-    /// Whether `auth listen` and `auth resume` may read a handoff on stdin,
-    /// which a REPL session reads its lines from.
-    pub stdin_handoff: bool,
     /// Whether an interactive `auth get` interrupted while it waits prints
     /// its handoff, which a REPL session leaves to the default signal end.
     pub interrupt_handoff: bool,
@@ -161,21 +158,6 @@ impl Session<'_> {
     pub fn invocation(&self) -> String {
         invocation("ortie", self.config_paths, self.account_name)
     }
-}
-
-/// Meets a bare `ortie`: the help when a configuration exists, the
-/// missing configuration otherwise, which a person meets as the welcome.
-pub fn meet_bare_invocation(config_paths: &[PathBuf]) -> Result<()> {
-    // NOTE: a broken file counts as a configuration, its error left to
-    // the first command reading it.
-    if let Err(err) = Config::load(config_paths)
-        && err.is::<ConfigMissingError>()
-    {
-        return Err(err);
-    }
-
-    Cli::command().print_help()?;
-    Ok(())
 }
 
 /// Takes the named (or default) account out of the config at

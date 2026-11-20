@@ -83,7 +83,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 
 | Code | Raised when |
 |---|---|
-| `usage-invalid` | the command line, a REPL line or an MCP tool call's arguments do not match the grammar, raised by pimalaya-cli; nothing ran |
+| `usage-invalid` | the command line, a REPL line or an MCP tool call's arguments do not match the grammar, raised by pimalaya-cli; or Ortie refuses the line after parsing it (a `--handoff` on a grant without one, an `auth listen` with no redirection to bind), exiting 2 as well; nothing ran |
 | `permission-denied` | the grant was refused to the user or the client: `access_denied` at the authorization redirect or in the device flow, `authorization_declined` (Microsoft Entra), a bare HTTP 403 |
 | `rate-limited` | a bare HTTP 429; Ortie retries nothing |
 | `grant-invalid` | `invalid_grant`: the authorization code, the refresh token or the device code was refused, has expired or was revoked; run `auth get` again |
@@ -97,6 +97,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `account-missing` | no account has the name `-a` gave, `default` included |
 | `account-default-missing` | no account is marked `default = true`, and `-a` named none |
 | `account-default-several` | several accounts are marked `default = true`, and `-a` named none |
+| `stdin-taken` | a command asked for its input on stdin (`--handoff -`) inside a REPL or MCP session, which reads its own lines there |
 
 Any other OAuth error code (`invalid_request`, `unsupported_grant_type`, `unsupported_token_type`, `invalid_target`, `server_error`, `temporarily_unavailable`, an unknown one) SHALL carry no code.
 

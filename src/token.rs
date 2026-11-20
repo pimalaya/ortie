@@ -28,7 +28,7 @@ use crate::{
 /// it at the authorization server.
 #[derive(Subcommand, Debug)]
 pub enum TokenCommand {
-    #[command(visible_alias = "get")]
+    #[command(alias = "get")]
     Show(TokenShowCommand),
     Inspect(TokenInspectCommand),
     Refresh(TokenRefreshCommand),

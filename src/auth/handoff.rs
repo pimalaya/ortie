@@ -11,10 +11,13 @@ use std::{
     io::{self, Read},
 };
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow};
 use io_oauth::{rfc6749::state::Oauth20State, rfc7636::pkce::Oauth20PkceCodeVerifier};
+use pimalaya_cli::session::check_stdin;
 use serde::Deserialize;
 use url::Url;
+
+use crate::error::ErrorCode;
 
 /// The most bytes of stdin read as a handoff.
 const HANDOFF_MAX: u64 = 64 * 1024;
@@ -32,17 +35,15 @@ pub struct AuthHandoff {
 }
 
 impl AuthHandoff {
-    /// Reads the handoff from `source`, a path or `-` for stdin, which
-    /// only `stdin_allowed` lets it read.
+    /// Reads the handoff from `source`, a path or `-` for stdin, which a
+    /// session reading its own lines there refuses, coded `stdin-taken`.
     ///
     /// A refusal names where the object breaks, never a value of it.
-    pub fn read(source: &str, stdin_allowed: bool) -> Result<Self> {
+    pub fn read(source: &str) -> Result<Self> {
         let mut input = Vec::new();
 
         if source == "-" {
-            if !stdin_allowed {
-                bail!("A REPL session reads its lines from stdin, give --handoff a file");
-            }
+            check_stdin(ErrorCode::StdinTaken)?;
 
             io::stdin()
                 .lock()

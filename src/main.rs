@@ -97,18 +97,20 @@ mod token;
 
 use std::process;
 
+use clap::CommandFactory;
 use pimalaya_cli::{
-    clap::parse,
+    clap::{meet_bare_invocation, parse},
     error::{ErrorReport, with_code},
     log::Logger,
     printer::StdoutPrinter,
     welcome::{is_wanted, shipped_sample},
 };
-use pimalaya_config::toml::ConfigMissingError;
+use pimalaya_config::toml::{ConfigMissingError, TomlConfig};
 use simd_cpu::SimdCpu;
 
 use crate::{
     cli::{Cli, Session},
+    config::Config,
     error::ErrorCode,
 };
 
@@ -128,13 +130,15 @@ fn main() {
         config_paths,
         account_name,
         account: None,
-        stdin_handoff: true,
         interrupt_handoff: true,
     };
 
     let result = Logger::try_init(&cli.log).and_then(|()| match cli.cmd {
         Some(cmd) => cmd.execute(&mut printer, &mut session),
-        None => cli::meet_bare_invocation(config_paths),
+        None => meet_bare_invocation(&printer, Cli::command(), || {
+            let missing = Config::load(config_paths).err();
+            missing.filter(|err| err.is::<ConfigMissingError>())
+        }),
     });
 
     // NOTE: a person missing a configuration meets the welcome, a script

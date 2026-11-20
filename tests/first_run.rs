@@ -70,6 +70,23 @@ fn a_bare_invocation_prints_the_help_over_a_broken_configuration() {
     assert!(text(&output.stdout).contains("Usage: ortie"));
 }
 
+/// A JSON caller reads JSON alone, so a bare run under `--json` is a
+/// refused command line, whether a configuration exists or not.
+#[test]
+fn a_bare_invocation_under_json_is_a_refused_command_line() {
+    let toml = format!("[accounts.a]\ndefault = true\n{ACCOUNT}");
+
+    for toml in [Some(toml.as_str()), None] {
+        let (home, path) = home(toml);
+        let output = run(home.path(), &["--json", "-c", path.to_str().unwrap()]);
+
+        assert_eq!(output.status.code(), Some(2), "{}", text(&output.stdout));
+        let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(json["code"], "usage-invalid", "{json}");
+        assert_eq!(json["error"], "A command is required, see --help", "{json}");
+    }
+}
+
 #[test]
 fn a_bare_invocation_without_configuration_names_the_missing_path() {
     let (home, path) = home(None);

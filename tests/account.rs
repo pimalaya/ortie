@@ -143,11 +143,13 @@ fn account_check_reads_the_storage_and_sends_each_endpoint_a_head() {
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
     let expected = json!({
-        "account": "work",
-        "backends": [
-            { "backend": "storage", "ok": true, "code": null, "error": null },
-            { "backend": "endpoints", "ok": true, "code": null, "error": null },
-        ]
+        "accounts": [{
+            "account": "work",
+            "backends": [
+                { "backend": "storage", "ok": true, "code": null, "error": null, "tls": null },
+                { "backend": "endpoints", "ok": true, "code": null, "error": null, "tls": null },
+            ]
+        }]
     });
     assert_eq!(printed(&output, 0), expected);
 
@@ -174,8 +176,8 @@ fn a_failed_row_exits_3_and_keeps_the_other() {
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
     let json = printed(&output, 3);
-    let storage = &json["backends"][0];
-    let endpoints = &json["backends"][1];
+    let storage = &json["accounts"][0]["backends"][0];
+    let endpoints = &json["accounts"][0]["backends"][1];
 
     assert_eq!(storage["ok"], false, "{json}");
     assert_eq!(storage["code"], "token-missing", "{json}");
@@ -204,9 +206,9 @@ fn an_endpoint_the_grant_needs_is_coded_endpoint_missing() {
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
     let json = printed(&output, 3);
-    let endpoints = &json["backends"][1];
+    let endpoints = &json["accounts"][0]["backends"][1];
 
-    assert_eq!(json["backends"][0]["ok"], true, "{json}");
+    assert_eq!(json["accounts"][0]["backends"][0]["ok"], true, "{json}");
     assert_eq!(endpoints["code"], "endpoint-missing", "{json}");
     let message = "Missing endpoints.device-authorization in the account config";
     assert_eq!(endpoints["error"], message, "{json}");
@@ -224,7 +226,9 @@ fn an_answer_that_is_no_http_fails_the_endpoints() {
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
     let json = printed(&output, 3);
-    let error = json["backends"][1]["error"].as_str().unwrap();
+    let error = json["accounts"][0]["backends"][1]["error"]
+        .as_str()
+        .unwrap();
     assert!(
         error.ends_with("The answer is no HTTP status line"),
         "{error}"
@@ -245,19 +249,49 @@ fn an_unknown_account_name_is_coded_account_missing() {
     assert_eq!(json["code"], "account-missing", "{json}");
 }
 
-/// The flat `tls` string of 2.x is refused by name, the sentence giving
-/// the keys its value becomes.
+/// The flat `tls` string of 2.x is refused by serde as any value of the
+/// wrong type, naming no removed key.
 #[test]
-fn the_tls_string_is_refused_by_name() {
+fn the_tls_string_is_refused_as_a_wrong_type() {
     let home = TempDir::new().unwrap();
     let toml = account(home.path(), "work", "tls = \"rustls-ring\"", TOKEN);
 
     let output = run(home.path(), &toml, &["--json", "account", "list"]);
     let json = printed(&output, 1).to_string();
-    let sentence = "The `tls` key is removed, the TLS options being a table as \
-                    in every Pimalaya CLI: write `tls.provider = \\\"rustls\\\"` \
-                    and `tls.rustls.crypto = \\\"ring\\\"`, see MIGRATION.md";
-    assert!(json.contains(sentence), "{json}");
+    assert!(json.contains("invalid type: string"), "{json}");
+    assert!(!json.contains("MIGRATION.md"), "{json}");
+}
+
+/// The endpoints row names the TLS the account configures once one
+/// endpoint is `https`, the storage row none.
+#[test]
+fn the_endpoints_row_names_the_tls_configured() {
+    let home = TempDir::new().unwrap();
+    let lines = "grant = \"client-credentials\"\n\
+                 endpoints.token = \"https://127.0.0.1:1/token\"\n\
+                 tls.provider = \"rustls\"\n\
+                 tls.cert = \"/etc/ortie/ca.pem\"\n\
+                 tls.client.cert = \"/etc/ortie/me.pem\"\n\
+                 tls.client.key = \"/etc/ortie/me.key.pem\"";
+    let toml = account(home.path(), "work", lines, TOKEN);
+
+    let output = run(home.path(), &toml, &["--json", "account", "check"]);
+    let json = printed(&output, 3);
+    let backends = &json["accounts"][0]["backends"];
+    assert_eq!(backends[0]["tls"], Value::Null, "{json}");
+
+    let tls = json!({
+        "provider": "rustls",
+        "crypto": null,
+        "cert": "/etc/ortie/ca.pem",
+        "clientCert": "/etc/ortie/me.pem",
+    });
+    assert_eq!(backends[1]["tls"], tls, "{json}");
+
+    let output = run(home.path(), &toml, &["account", "check"]);
+    let text = String::from_utf8_lossy(&output.stdout);
+    let line = ", TLS rustls, cert /etc/ortie/ca.pem, client cert /etc/ortie/me.pem";
+    assert!(text.contains(line), "{text}");
 }
 
 /// A storage command failing after it printed the token is reported by

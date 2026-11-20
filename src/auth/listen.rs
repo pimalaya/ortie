@@ -7,12 +7,15 @@
 use std::io::{IsTerminal, stdout};
 
 use anyhow::{Result, bail};
-use clap::Parser;
+use clap::{
+    Parser,
+    error::{Error as ClapError, ErrorKind},
+};
 use io_oauth::{
     client::await_redirect, rfc6749::state::Oauth20State, rfc7636::pkce::Oauth20PkceCodeVerifier,
 };
 use log::debug;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{error::usage_error, printer::Printer};
 use url::Url;
 
 use crate::{
@@ -83,7 +86,9 @@ impl AuthListenCommand {
             .redirect_uri
             .or_else(|| account.redirection_endpoint.clone())
         else {
-            bail!("Missing --redirect-uri, or endpoints.redirection in the account config");
+            let message = "Missing --redirect-uri, or endpoints.redirection in the account config";
+            let err = ClapError::raw(ErrorKind::MissingRequiredArgument, message);
+            return Err(usage_error(&err));
         };
 
         if !is_loopback_redirect(&redirect_uri) {

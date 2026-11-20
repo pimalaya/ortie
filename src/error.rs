@@ -82,6 +82,9 @@ pub enum ErrorCode {
     AccountDefaultMissing,
     /// Several accounts are marked default, and `-a` named none.
     AccountDefaultSeveral,
+    /// A command asked for its input on stdin inside a session, which
+    /// reads its own lines there.
+    StdinTaken,
 }
 
 /// An OAuth error code of a server's answer: its wire spelling and the

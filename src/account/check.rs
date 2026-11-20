@@ -2,7 +2,7 @@
 //!
 //! The `account check` subcommand: whether the account's token storage
 //! reads and its endpoints answer, one row each, on pimalaya-cli's shared
-//! [`AccountCheckOutput`].
+//! [`AccountCheckOutput`], the endpoints row naming the TLS configured.
 
 use std::io::{Read, Write};
 
@@ -11,10 +11,11 @@ use clap::Parser;
 use io_oauth::client::Oauth20ClientStd;
 use log::debug;
 use pimalaya_cli::{
-    account::{AccountCheckOutput, BackendCheck},
+    account::{AccountCheck, AccountCheckOutput, BackendCheck, BackendCheckTls},
     error::{PartialOutcome, with_code},
     printer::Printer,
 };
+use pimalaya_stream::tls::{RustlsCrypto, Tls, TlsProvider};
 use url::{Position, Url};
 
 use crate::{
@@ -39,8 +40,10 @@ const STATUS_LINE_MAX: usize = 1024;
 /// A failed row exits the command with status 3, the report being the
 /// output rather than a failure object.
 ///
-/// JSON output: `{"account", "backends": [{"backend", "ok", "code",
-/// "error"}]}`, `backend` being `storage` or `endpoints`.
+/// JSON output: `{"accounts": [{"account", "backends": [{"backend", "ok",
+/// "code", "error", "tls"}]}]}`, `backend` being `storage` or `endpoints`,
+/// `tls` the TLS configured for the endpoints, `null` for the storage and
+/// for endpoints all over plain HTTP.
 #[derive(Debug, Parser)]
 pub struct AccountCheckCommand;
 
@@ -51,15 +54,20 @@ impl AccountCheckCommand {
         let storage = account.read_storage().map(|_| ());
         let endpoints = reach_endpoints(account);
 
+        let mut endpoints = row("endpoints", endpoints);
+        endpoints.tls = over_tls(account).then(|| tls_check(&account.tls));
+
         let report = AccountCheckOutput {
-            account: account.name.clone(),
-            backends: vec![row("storage", storage), row("endpoints", endpoints)],
+            accounts: vec![AccountCheck {
+                account: account.name.clone(),
+                backends: vec![row("storage", storage), endpoints],
+            }],
         };
 
-        let failed = report.backends.iter().any(|check| !check.ok);
+        let ok = report.ok();
         printer.out(report)?;
 
-        if failed {
+        if !ok {
             return Err(PartialOutcome::default().into());
         }
 
@@ -135,6 +143,40 @@ fn reach(account: &Account, url: &Url) -> Result<()> {
             Ok(())
         }
         _ => bail!("The answer is no HTTP status line"),
+    }
+}
+
+/// Whether one of the endpoints the check sends a request is `https`.
+fn over_tls(account: &Account) -> bool {
+    let endpoints = [
+        &account.authorization_endpoint,
+        &account.device_authorization_endpoint,
+        &account.token_endpoint,
+        &account.revocation_endpoint,
+    ];
+
+    let mut urls = endpoints.into_iter().flatten();
+    urls.any(|url| url.scheme() == "https")
+}
+
+/// The TLS of the endpoints as configured, `null` where the build's
+/// default answers.
+fn tls_check(tls: &Tls) -> BackendCheckTls {
+    let provider = tls.provider.as_ref().map(|provider| match provider {
+        TlsProvider::Rustls => "rustls",
+        TlsProvider::NativeTls => "native-tls",
+    });
+
+    let crypto = tls.rustls.crypto.as_ref().map(|crypto| match crypto {
+        RustlsCrypto::Aws => "aws",
+        RustlsCrypto::Ring => "ring",
+    });
+
+    BackendCheckTls {
+        provider: provider.map(String::from),
+        crypto: crypto.map(String::from),
+        cert: tls.server.as_ref().map(|s| s.cert.display().to_string()),
+        client_cert: tls.client.as_ref().map(|c| c.cert.display().to_string()),
     }
 }
 

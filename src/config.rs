@@ -18,16 +18,11 @@
 
 use std::{collections::HashMap, fmt, path::PathBuf};
 
-use pimalaya_config::{
-    command::CommandConfig,
-    secret::Secret,
-    toml,
-    toml::{Removed, TomlConfig},
-};
-use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsProvider, TlsServer};
+use pimalaya_config::{command::CommandConfig, secret::Secret, toml, toml::TomlConfig};
+use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsClient, TlsProvider, TlsServer};
 use serde::{
     Deserialize, Deserializer,
-    de::{self, MapAccess, Visitor, value::MapAccessDeserializer},
+    de::{self, Visitor},
 };
 use url::Url;
 
@@ -87,7 +82,7 @@ pub struct AccountConfig {
     #[serde(default)]
     pub endpoints: EndpointsConfig,
     /// TLS options of the HTTPS connections.
-    #[serde(default, deserialize_with = "tls_table")]
+    #[serde(default)]
     pub tls: TlsConfig,
     /// ALPN identifiers offered during the TLS handshake, empty by
     /// default so no ALPN extension is sent.
@@ -117,25 +112,12 @@ pub struct AccountConfig {
     pub auto_refresh: bool,
     /// Shell commands reading and writing the persisted token.
     pub storage: StoragesConfig,
-    /// Refused: the hooks were removed in 3.0.0.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub hooks: Option<HooksRemoved>,
 }
 
 /// The default of [`AccountConfig::auto_refresh`]: on, since a caller of
 /// `token show` wants a token it can use.
 fn auto_refresh_default() -> bool {
     true
-}
-
-pimalaya_config::removed_key! {
-    /// The `hooks` table, which Ortie read until 3.0.0.
-    pub HooksRemoved: Table {
-        name: "hooks",
-        why: "the storage write command running on every issue and refresh",
-        instead: "chain a command after `storage.write.command`",
-    }
 }
 
 /// OAuth 2.0 grant flow run by the auth commands.
@@ -259,6 +241,20 @@ pub struct TlsConfig {
     /// A PEM certificate to trust beside the platform store.
     #[serde(default, deserialize_with = "toml::opt_shell_expanded_path")]
     pub cert: Option<PathBuf>,
+    /// A client certificate, presented when the server asks for one.
+    pub client: Option<TlsClientConfig>,
+}
+
+/// A client certificate and its private key, both PEM.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct TlsClientConfig {
+    /// The certificate, optionally followed by its intermediates.
+    #[serde(deserialize_with = "toml::shell_expanded_path")]
+    pub cert: PathBuf,
+    /// The private key, PKCS#8 under native-tls.
+    #[serde(deserialize_with = "toml::shell_expanded_path")]
+    pub key: PathBuf,
 }
 
 /// The TLS implementation.
@@ -309,51 +305,11 @@ impl TlsConfig {
                 alpn,
             },
             server: self.cert.map(|cert| TlsServer { cert }),
-            client: None,
+            client: self
+                .client
+                .map(|TlsClientConfig { cert, key }| TlsClient { cert, key }),
         }
     }
-}
-
-/// Reads the `tls` table, refusing by name the string Ortie read until
-/// 3.0.0 (`tls = "rustls-ring"`).
-fn tls_table<'de, D: Deserializer<'de>>(de: D) -> Result<TlsConfig, D::Error> {
-    struct TlsVisitor;
-
-    impl<'de> Visitor<'de> for TlsVisitor {
-        type Value = TlsConfig;
-
-        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str("a table")
-        }
-
-        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-            let instead = match v {
-                "auto" => "delete it, the build's provider being the default",
-                "native-tls" => "write `tls.provider = \"native-tls\"`",
-                "rustls-aws" => {
-                    "write `tls.provider = \"rustls\"` and `tls.rustls.crypto = \"aws\"`"
-                }
-                "rustls-ring" => {
-                    "write `tls.provider = \"rustls\"` and `tls.rustls.crypto = \"ring\"`"
-                }
-                _ => "write `tls.provider` and `tls.rustls.crypto`",
-            };
-
-            let removed = Removed::Key {
-                name: "tls",
-                why: "the TLS options being a table as in every Pimalaya CLI",
-                instead,
-            };
-
-            Err(removed.error())
-        }
-
-        fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
-            TlsConfig::deserialize(MapAccessDeserializer::new(map))
-        }
-    }
-
-    de.deserialize_any(TlsVisitor)
 }
 
 #[cfg(test)]
@@ -495,27 +451,45 @@ storage.write.command = ["tee", "token.json"]
         assert!(tls.rustls.alpn.is_empty());
     }
 
-    /// The `tls` string Ortie read until 3.0.0 is refused by name, the
-    /// sentence giving the keys its value becomes.
+    /// The `tls` string Ortie read until 3.0.0 is refused by serde as any
+    /// value of the wrong type, never by name.
     #[test]
-    fn the_tls_string_is_refused_naming_its_keys() {
-        let cases = [
-            ("auto", "delete it"),
-            ("native-tls", "`tls.provider = \"native-tls\"`"),
-            ("rustls-aws", "`tls.rustls.crypto = \"aws\"`"),
-            ("rustls-ring", "`tls.rustls.crypto = \"ring\"`"),
-        ];
-
-        for (value, instead) in cases {
+    fn the_tls_string_is_refused_as_a_wrong_type() {
+        for value in ["auto", "native-tls", "rustls-aws", "rustls-ring"] {
             let extra = format!("tls = \"{value}\"");
             let err = try_parse(&account_with("", &extra)).unwrap_err();
             let err = format!("{err:?}");
-            assert!(err.contains("The `tls` key is removed"), "{value}: {err}");
-            assert!(err.contains(instead), "{value}: {err}");
-            assert!(err.contains("see MIGRATION.md"), "{value}: {err}");
+            assert!(err.contains("invalid type: string"), "{value}: {err}");
+            assert!(!err.contains("MIGRATION.md"), "{value}: {err}");
         }
 
         let err = try_parse(&account_with("", "tls.typo = 1")).unwrap_err();
+        assert!(
+            format!("{err:?}").contains("unknown field `typo`"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn a_tls_client_certificate_reaches_the_handle_with_its_key() {
+        let extra = "tls.client.cert = \"/etc/ortie/me.pem\"\n\
+                     tls.client.key = \"/etc/ortie/me.key.pem\"";
+        let mut config = try_parse(&account_with("", extra)).unwrap();
+        let account = config.take_named_account("test").unwrap().1;
+
+        let client = account.tls.into_tls(account.alpn).client.unwrap();
+        assert_eq!(client.cert, PathBuf::from("/etc/ortie/me.pem"));
+        assert_eq!(client.key, PathBuf::from("/etc/ortie/me.key.pem"));
+
+        let extra = "tls.client.cert = \"/etc/ortie/me.pem\"";
+        let err = try_parse(&account_with("", extra)).unwrap_err();
+        assert!(
+            format!("{err:?}").contains("missing field `key`"),
+            "{err:?}"
+        );
+
+        let extra = "tls.client.typo = 1";
+        let err = try_parse(&account_with("", extra)).unwrap_err();
         assert!(
             format!("{err:?}").contains("unknown field `typo`"),
             "{err:?}"
@@ -606,10 +580,10 @@ storage.write.command = ["tee", "token.json"]
         assert!(try_parse(&account_with("", "client-secret.typo = 1")).is_err());
     }
 
-    /// The `hooks` table, which Ortie read until 3.0.0, is refused by
-    /// name whatever it holds, in the family sentence.
+    /// The `hooks` table, which Ortie read until 3.0.0, is an unknown key
+    /// like any other, whatever it holds.
     #[test]
-    fn a_removed_key_points_at_the_migration_notes() {
+    fn a_removed_key_is_an_unknown_field() {
         let cases = [
             "hooks.on-issue.success.command = \"true\"",
             "hooks.on-refresh.error.notify.summary = \"Ortie\"",
@@ -617,15 +591,11 @@ storage.write.command = ["tee", "token.json"]
             "[accounts.test.hooks.on-issue.success]\ncommand = \"true\"",
         ];
 
-        let sentence = "The `hooks` table is removed, the storage write command \
-                        running on every issue and refresh: chain a command \
-                        after `storage.write.command`, see MIGRATION.md";
-
         for extra in cases {
             let err = try_parse(&account_with("", extra)).unwrap_err();
             let err = format!("{err:?}");
-            assert!(err.contains(sentence), "{extra}: {err}");
-            assert!(!err.contains("unknown field"), "{extra}: {err}");
+            assert!(err.contains("unknown field `hooks`"), "{extra}: {err}");
+            assert!(!err.contains("MIGRATION.md"), "{extra}: {err}");
         }
     }
 

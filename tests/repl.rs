@@ -317,9 +317,15 @@ fn a_line_takes_the_whole_grammar() {
     let lines = json_lines(&out.stdout);
     assert_eq!(lines.len(), 4, "{lines:?}");
     assert_eq!(lines[0]["accounts"][0]["name"], "device", "{lines:?}");
-    assert_eq!(lines[1]["account"], "device", "{lines:?}");
-    assert_eq!(lines[1]["backends"][0]["backend"], "storage", "{lines:?}");
-    assert_eq!(lines[1]["backends"][0]["ok"], true, "{lines:?}");
+    assert_eq!(lines[1]["accounts"][0]["account"], "device", "{lines:?}");
+    assert_eq!(
+        lines[1]["accounts"][0]["backends"][0]["backend"], "storage",
+        "{lines:?}"
+    );
+    assert_eq!(
+        lines[1]["accounts"][0]["backends"][0]["ok"], true,
+        "{lines:?}"
+    );
     assert_eq!(lines[2]["shell"], "bash", "{lines:?}");
     let script = lines[2]["script"].as_str().unwrap_or_default();
     assert!(script.contains("ortie"), "{lines:?}");

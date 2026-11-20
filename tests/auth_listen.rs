@@ -378,6 +378,29 @@ fn a_repl_resume_takes_no_handoff_from_its_lines() {
     assert!(stdout.lines().any(|l| l.starts_with("code ")), "{stdout}");
 }
 
+/// A handoff asked for on stdin inside a REPL session is refused in the
+/// family's words, coded `stdin-taken`, and the next line still runs.
+#[test]
+fn a_repl_handoff_on_stdin_is_coded_stdin_taken() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock();
+    let (config, _) = write_code_config(dir.path(), addr, "");
+
+    let input = b"auth resume --handoff - http://127.0.0.1:1/?code=c&state=s\naccount list\n";
+    let repl = ortie_fed(&config, &["--json", "repl"], input);
+    let output = repl.wait_with_output().unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut lines = stdout
+        .lines()
+        .map(|l| serde_json::from_str::<Value>(l).unwrap());
+    let failure = lines.next().unwrap();
+    assert_eq!(failure["code"], "stdin-taken", "{stdout}");
+    let error = failure["error"].as_str().unwrap();
+    assert!(error.starts_with("Cannot read input from stdin"), "{error}");
+    assert!(lines.next().unwrap()["accounts"].is_array(), "{stdout}");
+}
+
 /// An interactive `auth get` interrupted while it waits for the
 /// redirection prints the `auth resume` command it hid, then exits 130.
 ///
@@ -524,6 +547,34 @@ fn without_the_handoff_flag_an_open_stdin_is_left_alone() {
 
     assert!(status.success(), "{status:?}");
     assert!(std::fs::read_to_string(token).unwrap().contains("at-test"));
+}
+
+/// A listen with no redirection to bind, and a handoff on an account
+/// whose grant takes none, are command lines Ortie refuses after clap
+/// parsed them: coded `usage-invalid`, exit 2, as clap's own refusals.
+#[test]
+fn a_command_line_refused_after_parsing_exits_2_coded() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock();
+
+    let (config, _) = write_code_config(dir.path(), addr, "");
+    let output = ortie(&config, &["--json", "auth", "listen", "--state=abc"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(2), "{stdout}");
+    let failure: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(failure["code"], "usage-invalid", "{failure}");
+    let message = "Missing --redirect-uri, or endpoints.redirection in the account config";
+    assert_eq!(failure["error"], message, "{failure}");
+
+    let (config, _) = write_code_config(dir.path(), addr, r#"grant = "device""#);
+    let args = ["--json", "auth", "resume", "--handoff", "flow.json", "CODE"];
+    let output = ortie(&config, &args);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(2), "{stdout}");
+    let failure: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(failure["code"], "usage-invalid", "{failure}");
+    let message = "The --handoff flag is only valid for the authorization-code grant";
+    assert_eq!(failure["error"], message, "{failure}");
 }
 
 /// The handoff gives the state and the verifier, so `--handoff` beside

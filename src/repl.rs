@@ -47,7 +47,6 @@ impl ReplCommand {
         // NOTE: taken up front, so a missing configuration or account
         // fails the session rather than its first line.
         session.account()?;
-        session.stdin_handoff = false;
         session.interrupt_handoff = false;
 
         let repl = Repl::new("ortie", printer.is_json());

@@ -37,7 +37,7 @@ An account SHALL define read and write storage as external shell commands, each 
 A storage command exiting non-zero SHALL be reported by its trimmed stderr, or by its program and exit status when it wrote none, never by its stdout, which holds the token or echoes it: in the failure object, the `storage` row of `account check` and the MCP tools alike. A failing read command's report SHALL end with ", run `<command>` yourself to see why", the command written as configured.
 
 ### Requirement: v1 config compatibility
-Every v1.x config file SHALL parse and run unchanged, the `hooks` table and the `tls` string aside, refused by name ("The configuration refuses every key it does not read"): `grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, and `pkce = true`/`false` are still accepted. The behaviours an existing account can notice are PKCE by default and `token show` refreshing an expired token, unless it sets `auto-refresh = false`.
+Every v1.x config file SHALL parse and run unchanged, the `hooks` table and the `tls` string aside, refused as any key it does not read or value of the wrong type ("The configuration refuses every key it does not read"): `grant` defaults to authorization-code, `endpoints.authorization` merely becomes optional, and `pkce = true`/`false` are still accepted. The behaviours an existing account can notice are PKCE by default and `token show` refreshing an expired token, unless it sets `auto-refresh = false`.
 
 ### Requirement: Account resolution failures name what is missing
 An absent or empty `-a` SHALL take the account marked `default = true`; any other name SHALL take the account of that name, `default` included, which is a name like any other.
@@ -63,7 +63,7 @@ The configuration path SHALL be overridden by `-c` only, repeatable, the first p
 - THEN it is read from that one path, not from `C` and `\Users\me\config.toml`
 
 ### Requirement: One TLS conversion, taking the ALPN list
-The `tls` table of an account SHALL hold `provider` (`rustls` or `native-tls`) and `rustls.crypto` (`ring` or `aws`), each the first the build carries when omitted, and `cert`, a PEM certificate to trust beside the platform store, its path shell-expanded. It SHALL be folded into the runtime TLS handle by a single conversion taking the ALPN list as its argument. No other code path SHALL build that handle from the configuration, so no call site can negotiate an ALPN, or none, by accident.
+The `tls` table of an account SHALL hold `provider` (`rustls` or `native-tls`) and `rustls.crypto` (`ring` or `aws`), each the first the build carries when omitted, and `cert`, a PEM certificate to trust beside the platform store, and MAY hold `client.cert` and `client.key`, a PEM client certificate presented when the server asks for one (mutual TLS) and its PEM private key (PKCS#8 under native-tls), both required once `client` is given; every path is shell-expanded. These keys are the ones every Pimalaya CLI spells alike (pimalaya-config cairn/spec/toml.md). It SHALL be folded into the runtime TLS handle by a single conversion taking the ALPN list as its argument. No other code path SHALL build that handle from the configuration, so no call site can negotiate an ALPN, or none, by accident.
 
 #### Scenario: Omitted TLS table
 - GIVEN an account with no `tls` key
@@ -74,7 +74,7 @@ The `tls` table of an account SHALL hold `provider` (`rustls` or `native-tls`) a
 An account MAY declare `alpn`, the list of ALPN identifiers offered during the TLS handshake. It SHALL default to empty, sending no ALPN extension, which is what an OAuth 2.0 endpoint over plain HTTPS expects; a non-empty list overrides it, `["http/1.1"]` being the one meaningful value, for a TLS middlebox refusing a handshake without ALPN. Only rustls reads it, native-tls ignoring ALPN.
 
 ### Requirement: A bare invocation shows the help
-A bare `ortie` SHALL show the help when a configuration exists, a broken one included, and so SHALL `--account` with no subcommand, a half-typed command. Without one it SHALL fail as an account-bound command does, the welcome or the error. Nothing prompts: Ortie writes no configuration.
+A bare `ortie` SHALL answer through pimalaya-cli's `clap::meet_bare_invocation`, and so SHALL `--account` with no subcommand, a half-typed command. Under `--json` it SHALL fail coded `usage-invalid`, "A command is required, see --help", exit 2, the configuration left unread. In text it SHALL show the help when a configuration exists, a broken one included, and fail with the missing configuration otherwise, which a person meets as the welcome. Nothing prompts: Ortie writes no configuration.
 
 ### Requirement: A missing configuration meets a person with the welcome
 When no configuration exists at the path `-c` gave or the default one, and stderr is a terminal with `--json` off, a bare `ortie` and every account-bound command SHALL print the welcome on stderr and exit 1, printing nothing more. The welcome SHALL frame Ortie in one sentence, name the missing path, give the commands creating it from config.sample.toml, invite the reader to edit it and uncomment the options they need, and give the `auth get` command carrying the `-c` paths. When share/doc/ortie/config.sample.toml exists under the prefix holding the binary's directory or under that directory itself, symlinks resolved, the commands SHALL copy it there with a writable mode, after creating the missing directory; otherwise they SHALL download it with `curl --create-dirs`. Every path SHALL be quoted for the platform's shells (single quotes on Unix, double quotes and `curl.exe` on Windows, which cmd and PowerShell both read), so each command runs as printed. Otherwise the missing-configuration error SHALL stand, as JSON under `--json`.
@@ -98,7 +98,7 @@ The repository SHALL ship config.sample.toml, and the release archives and the N
 - THEN the test suite fails naming the sample
 
 ### Requirement: The configuration refuses every key it does not read
-The configuration SHALL refuse at load, naming it, every key it does not read, at every level: the document root, which holds `accounts` alone; an account; and every table nested in one (`endpoints`, `tls`, `tls.rustls`, `storage`, `storage.read`, `storage.write`, `client-secret`). `extras` alone takes any key, its keys being wire parameter names. The `hooks` table, which Ortie read until 3.0.0, SHALL be refused by name whatever it holds, and so SHALL the `tls` string Ortie read until then, each in pimalaya-config's family sentence, "The `<name>` key (or table) is removed, <why>: <what to write instead>, see MIGRATION.md": the `hooks` one naming `storage.write.command`, the `tls` one the keys its value becomes.
+The configuration SHALL refuse at load, naming it, every key it does not read, at every level: the document root, which holds `accounts` alone; an account; and every table nested in one (`endpoints`, `tls`, `tls.rustls`, `tls.client`, `storage`, `storage.read`, `storage.write`, `client-secret`). `extras` alone takes any key, its keys being wire parameter names. A key Ortie read in an earlier release SHALL be refused by serde alone, as any key it does not read or value of the wrong type, never by name: the `hooks` table as an unknown field, the `tls` string as a string where a table is expected.
 
 #### Scenario: A typo in a nested table
 - GIVEN an account carrying `endpoints.tokn = "https://login.example.com/token"`
@@ -108,9 +108,9 @@ The configuration SHALL refuse at load, naming it, every key it does not read, a
 #### Scenario: A 2.x hook
 - GIVEN an account carrying `hooks.on-issue.success.command = "notify-send Ortie"`
 - WHEN any command loads the configuration
-- THEN it fails with "The `hooks` table is removed, the storage write command running on every issue and refresh: chain a command after `storage.write.command`, see MIGRATION.md"
+- THEN it fails naming the unknown field `hooks`, pointing at no migration guide
 
 #### Scenario: A 2.x TLS string
 - GIVEN an account carrying `tls = "rustls-ring"`
 - WHEN any command loads the configuration
-- THEN it fails with "The `tls` key is removed, the TLS options being a table as in every Pimalaya CLI: write `tls.provider = "rustls"` and `tls.rustls.crypto = "ring"`, see MIGRATION.md"
+- THEN it fails with serde's "invalid type: string", a table being expected
