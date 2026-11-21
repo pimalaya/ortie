@@ -36,12 +36,12 @@ anyhow = { version = "1", default-features = false, features = ["std"] }
 base64-codec = { version = "0.1", default-features = false, features = ["alloc"] }
 clap = { version = "4.4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage"] }
 idna_adapter = { version = "=1.0.0", default-features = false }
-io-oauth = { version = "0.7.0", default-features = false, features = ["client", "jwt-bearer"] }
+io-oauth = { version = "0.8.0", default-features = false, features = ["std", "jwt-bearer"] }
 jiff = { version = "1", default-features = false, features = ["std"] }
 log = { version = "0.4", default-features = false }
 pimalaya-cli = { version = "0.8.0", default-features = false, features = ["duration", "mcp", "repl", "signal", "terminal"] }
 pimalaya-config = { version = "0.6.0", default-features = false, features = ["toml", "secret"] }
-pimalaya-stream = { version = "0.4", default-features = false, features = ["std"] }
+pimalaya-stream = { version = "0.4.1", default-features = false, features = ["std"] }
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }
 secrecy = { version = "0.10", default-features = false, features = ["serde"] }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
