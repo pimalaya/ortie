@@ -70,12 +70,10 @@ Ortie follows the [OAuth 2.1](https://datatracker.ietf.org/doc/draft-ietf-oauth-
 
 ## Installation
 
-Ortie ships to the signed APT and DNF repositories and the Homebrew tap of [pkg.pimalaya.org](https://pkg.pimalaya.org), each package holding the static binary of the latest release with its man pages and shell completions.
-
 <details>
   <summary>Debian, Ubuntu</summary>
 
-  Add the repository once:
+  Ortie is not in the official repositories yet, but the signed APT repository of [pkg.pimalaya.org](https://pkg.pimalaya.org) ships the latest release with its man pages and shell completions. Add the repository once:
 
   ```sh
   sudo install -d -m 0755 /etc/apt/keyrings
@@ -100,6 +98,8 @@ Ortie ships to the signed APT and DNF repositories and the Homebrew tap of [pkg.
 <details>
   <summary>Fedora, RHEL, Rocky Linux, AlmaLinux</summary>
 
+  Ortie is not in the official repositories yet, but the signed DNF repository of [pkg.pimalaya.org](https://pkg.pimalaya.org) ships the latest release with its man pages and shell completions:
+
   ```sh
   sudo curl -fsSL -o /etc/yum.repos.d/pimalaya.repo https://pkg.pimalaya.org/pimalaya.repo
   sudo dnf install ortie
@@ -108,6 +108,8 @@ Ortie ships to the signed APT and DNF repositories and the Homebrew tap of [pkg.
 
 <details>
   <summary>Homebrew (macOS, Linux)</summary>
+
+  Ortie is not in homebrew-core yet, but the [pimalaya/tap](https://github.com/pimalaya/homebrew-tap) formula installs the latest release with its man pages and shell completions:
 
   ```sh
   brew install pimalaya/tap/ortie
