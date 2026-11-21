@@ -90,7 +90,7 @@ impl TokenShowCommand {
 /// `expires_in` is the lifetime granted at issuance, not a countdown,
 /// so it is added to `issued_at`. An unknown `issued_at` counts as
 /// valid, a missing `expires_in` as [`DEFAULT_EXPIRES_IN_SECS`].
-fn is_expired(issued_at: Option<u64>, expires_in: Option<u64>) -> bool {
+pub fn is_expired(issued_at: Option<u64>, expires_in: Option<u64>) -> bool {
     let Some(issued_at) = issued_at else {
         return false;
     };

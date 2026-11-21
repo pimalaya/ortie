@@ -20,7 +20,7 @@
 //! the help, or the welcome when no configuration exists; otherwise it
 //! routes into [`auth`], which obtains tokens by running the account's
 //! grant, [`token`], which works on the stored one, and [`account`],
-//! which lists the accounts and checks one.
+//! which lists the accounts, shows one and checks one.
 //!
 //! [`repl`] runs the whole command tree over one account held open, so
 //! the secret store is unlocked once instead of per command, on the

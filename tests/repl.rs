@@ -309,27 +309,24 @@ fn a_line_takes_the_whole_grammar() {
     let dir = TempDir::new().unwrap();
     let (config, _) = write_device_config(dir.path());
 
-    let input = b"account list\naccount check\ncompletion bash\ntoken show\n";
+    let input = b"account list\naccount check\naccount show\ncompletion bash\ntoken show\n";
     let out = ortie_with_input(&config, &["--json", "repl"], input);
 
     assert!(out.status.success(), "{out:?}");
 
     let lines = json_lines(&out.stdout);
-    assert_eq!(lines.len(), 4, "{lines:?}");
+    assert_eq!(lines.len(), 5, "{lines:?}");
     assert_eq!(lines[0]["accounts"][0]["name"], "device", "{lines:?}");
-    assert_eq!(lines[1]["accounts"][0]["account"], "device", "{lines:?}");
-    assert_eq!(
-        lines[1]["accounts"][0]["backends"][0]["backend"], "storage",
-        "{lines:?}"
-    );
-    assert_eq!(
-        lines[1]["accounts"][0]["backends"][0]["ok"], true,
-        "{lines:?}"
-    );
-    assert_eq!(lines[2]["shell"], "bash", "{lines:?}");
-    let script = lines[2]["script"].as_str().unwrap_or_default();
+    assert_eq!(lines[1]["account"], "device", "{lines:?}");
+    assert_eq!(lines[1]["checks"][0]["check"], "storage", "{lines:?}");
+    assert_eq!(lines[1]["checks"][0]["ok"], true, "{lines:?}");
+    assert_eq!(lines[1]["checks"][1]["check"], "token", "{lines:?}");
+    assert_eq!(lines[2]["account"]["name"], "device", "{lines:?}");
+    assert_eq!(lines[2]["account"]["grant"], "device", "{lines:?}");
+    assert_eq!(lines[3]["shell"], "bash", "{lines:?}");
+    let script = lines[3]["script"].as_str().unwrap_or_default();
     assert!(script.contains("ortie"), "{lines:?}");
-    assert_eq!(lines[3]["accessToken"], "at-test");
+    assert_eq!(lines[4]["accessToken"], "at-test");
 }
 
 /// A session never nests: pimalaya-cli refuses a `repl` or `mcp` line,

@@ -1,15 +1,16 @@
 //! # Account
 //!
 //! The `account` subcommand tree, listing the accounts a configuration
-//! declares and checking one, and the flat runtime account, built from
-//! the nested [`crate::config::AccountConfig`] by flattening every
-//! `storage.*.command` into a field.
+//! declares, showing one and checking one, and the flat runtime account,
+//! built from the nested [`crate::config::AccountConfig`] by flattening
+//! every `storage.*.command` into a field.
 //!
 //! Commands consume it and call its driver methods rather than walking
 //! the config tree, so token storage has one entry point.
 
 pub mod check;
 pub mod list;
+pub mod show;
 
 use std::{
     borrow::Cow,
@@ -32,7 +33,7 @@ use url::{Host, Url};
 use io_oauth::rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams;
 
 use crate::{
-    account::{check::AccountCheckCommand, list::AccountListCommand},
+    account::{check::AccountCheckCommand, list::AccountListCommand, show::AccountShowCommand},
     auth::get::is_loopback_redirect,
     cli::Session,
     config::{
@@ -44,25 +45,30 @@ use crate::{
 /// The redirection bound when the account configures none.
 pub const DEFAULT_REDIRECTION: &str = "http://127.0.0.1";
 
+/// The failure of a storage holding no token.
+pub const TOKEN_MISSING: &str = "No access token stored, run `auth get` to issue one";
+
 /// Manage accounts defined in the TOML configuration file.
 ///
 /// An account is an OAuth 2.0 client, its endpoints and the commands
-/// storing its token. These subcommands list the accounts and check one;
-/// creating one means adding an `[accounts.<name>]` table, as
+/// storing its token. These subcommands list the accounts, show one and
+/// check one; creating one means adding an `[accounts.<name>]` table, as
 /// config.sample.toml shows.
 #[derive(Debug, Subcommand)]
 pub enum AccountCommand {
     #[command(visible_alias = "ls")]
     List(AccountListCommand),
+    Show(AccountShowCommand),
     Check(AccountCheckCommand),
 }
 
 impl AccountCommand {
-    /// Dispatches the account leaf: the list reads the configuration, the
-    /// check runs over the session's account.
+    /// Dispatches the account leaf: the list and the show read the
+    /// configuration, the check runs over the session's account.
     pub fn execute(self, printer: &mut impl Printer, session: &mut Session) -> Result<()> {
         match self {
             Self::List(cmd) => cmd.execute(printer, session.config_paths),
+            Self::Show(cmd) => cmd.execute(printer, session.config_paths, session.account_name),
             Self::Check(cmd) => cmd.execute(printer, session.account()?),
         }
     }
@@ -221,8 +227,7 @@ impl Account {
         // secret-tool does, 1 without a word.
         let silent = output.status.success() || output.stderr.trim_ascii().is_empty();
         if silent && output.stdout.trim_ascii().is_empty() {
-            let message = "No access token stored, run `auth get` to issue one";
-            return Err(error::coded(ErrorCode::TokenMissing, message));
+            return Err(error::coded(ErrorCode::TokenMissing, TOKEN_MISSING));
         }
 
         if !output.status.success() {

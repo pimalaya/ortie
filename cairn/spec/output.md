@@ -18,10 +18,10 @@ Ortie SHALL provide a `json-schema` command printing the JSON Schema of a comman
 Each schema SHALL be derived from the Rust type the command hands to the printer, as printed (the serialize contract), so the description cannot drift from the emission: a key the type always prints is required, `null` or not. Where a field serializes through a custom serializer, the schema SHALL describe the shape that serializer produces.
 
 ### Requirement: Only Ortie's own types are described
-Every registered command payload SHALL be owned by Ortie. No schema SHALL be derived from an io-oauth type, so the machine contract stays a decision of this repository and needs no release of the library below it. The family's shared shapes from pimalaya-cli are the exception: the failure object `ErrorReport` and the account outputs `AccountListOutput` and `AccountCheckOutput`.
+Every registered command payload SHALL be owned by Ortie. No schema SHALL be derived from an io-oauth type, so the machine contract stays a decision of this repository and needs no release of the library below it. The family's shared shape from pimalaya-cli is the exception: the failure object `ErrorReport`. The account outputs (`AccountListOutput`, `AccountShowOutput`, `AccountCheckOutput`) are Ortie's own, Ortie having no backend for the family's shapes to describe.
 
 ### Requirement: Commands carrying a schema
-Every command printing a value SHALL carry one key: `ortie-account-list`, `ortie-account-check`, `ortie-token-show`, `ortie-token-inspect`, `ortie-token-refresh`, `ortie-token-revoke`, `ortie-auth-get`, `ortie-auth-listen` and `ortie-auth-resume`, beside the `completion`, `manual` and `json-schema` keys pimalaya-cli registers. Bare `ortie` carries none, showing the help, and neither does the REPL: it dispatches the commands of the binary and prints their payloads unchanged, so those keys describe its lines too. `ortie-error` describes the failure object any command prints instead of its payload.
+Every command printing a value SHALL carry one key: `ortie-account-list`, `ortie-account-show`, `ortie-account-check`, `ortie-token-show`, `ortie-token-inspect`, `ortie-token-refresh`, `ortie-token-revoke`, `ortie-auth-get`, `ortie-auth-listen` and `ortie-auth-resume`, beside the `completion`, `manual` and `json-schema` keys pimalaya-cli registers. Bare `ortie` carries none, showing the help, and neither does the REPL: it dispatches the commands of the binary and prints their payloads unchanged, so those keys describe its lines too. `ortie-error` describes the failure object any command prints instead of its payload.
 
 ### Requirement: One command, one schema
 A command emitting more than one payload shape SHALL print them through a single type describing the alternatives, told apart by their keys, so its key maps to one schema. `auth get` emits the authorization-code handoff, the device-authorization handoff, or the receipt of a token its grant issued in-process, and all three are variants of that one type.
@@ -93,6 +93,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `device-code-expired` | the device code expired before the user approved it, by the server's `expired_token` or by the local deadline |
 | `state-mismatch` | the authorization redirect carries no `state`, or another than the request sent |
 | `token-missing` | the account stores no token (its read command prints nothing, exiting 0, or non-zero without a word), or no refresh token where a refresh needs one; run `auth get` |
+| `token-expired` | the `token` row of `account check`: the stored token expired and holds no refresh token, on a grant other than the client credentials ones, which run again by themselves; run `auth get` |
 | `endpoint-missing` | the account configures no endpoint the grant needs (authorization, token, device authorization, revocation) |
 | `account-missing` | no account has the name `-a` gave, `default` included |
 | `account-default-missing` | no account is marked `default = true`, and `-a` named none |

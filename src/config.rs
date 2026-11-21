@@ -4,7 +4,8 @@
 //! DTO mirroring the nested shape (`storage.read.command`, ...), the
 //! sole behaviour being [`TlsConfig::into_tls`], which folds the
 //! selector and the ALPN list into the handle the connect helpers
-//! expect.
+//! expect. The enums also serialize as the configuration spells them,
+//! which `account list` and `account show` print back.
 //!
 //! The flat runtime view commands consume is
 //! [`crate::account::Account`], which this one is flattened into once
@@ -20,8 +21,9 @@ use std::{collections::HashMap, fmt, path::PathBuf};
 
 use pimalaya_config::{command::CommandConfig, secret::Secret, toml, toml::TomlConfig};
 use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsClient, TlsProvider, TlsServer};
+use schemars::JsonSchema;
 use serde::{
-    Deserialize, Deserializer,
+    Deserialize, Deserializer, Serialize,
     de::{self, Visitor},
 };
 use url::Url;
@@ -121,7 +123,7 @@ fn auto_refresh_default() -> bool {
 }
 
 /// OAuth 2.0 grant flow run by the auth commands.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum GrantConfig {
     /// The browser-redirect flow (RFC 6749 section 4.1).
@@ -142,6 +144,16 @@ impl GrantConfig {
     /// re-run rather than refreshed, having no refresh token.
     pub fn is_client_credentials(self) -> bool {
         matches!(self, Self::ClientCredentials | Self::ClientCredentialsJwt)
+    }
+
+    /// The grant as the configuration spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AuthorizationCode => "authorization-code",
+            Self::Device => "device",
+            Self::ClientCredentials => "client-credentials",
+            Self::ClientCredentialsJwt => "client-credentials-jwt",
+        }
     }
 }
 
@@ -258,7 +270,7 @@ pub struct TlsClientConfig {
 }
 
 /// The TLS implementation.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TlsProviderConfig {
     /// The pure-Rust rustls stack.
@@ -276,7 +288,7 @@ pub struct RustlsConfig {
 }
 
 /// The crypto provider rustls runs on.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RustlsCryptoConfig {
     /// aws-lc-rs.

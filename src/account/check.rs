@@ -1,67 +1,113 @@
 //! # Account check command
 //!
 //! The `account check` subcommand: whether the account's token storage
-//! reads and its endpoints answer, one row each, on pimalaya-cli's shared
-//! [`AccountCheckOutput`], the endpoints row naming the TLS configured.
+//! reads, whether the token it holds is usable, and whether each endpoint
+//! its grant uses answers, one row each, the `https` endpoint rows naming
+//! the TLS configured.
 
-use std::io::{Read, Write};
-
-use anyhow::{Context, Result, bail};
-use clap::Parser;
-use io_oauth::client::Oauth20ClientStd;
-use log::debug;
-use pimalaya_cli::{
-    account::{AccountCheck, AccountCheckOutput, BackendCheck, BackendCheckTls},
-    error::{PartialOutcome, with_code},
-    printer::Printer,
+use std::{
+    fmt,
+    io::{Read, Write},
 };
+
+use anyhow::{Context, Result, anyhow, bail};
+use clap::Parser;
+use io_oauth::{
+    client::Oauth20ClientStd, rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams,
+};
+use log::debug;
+use pimalaya_cli::{error::PartialOutcome, fields::Fields, printer::Printer, sanitize};
 use pimalaya_stream::tls::{RustlsCrypto, Tls, TlsProvider};
+use schemars::JsonSchema;
+use serde::Serialize;
 use url::{Position, Url};
 
 use crate::{
-    account::Account,
+    account::{Account, TOKEN_MISSING},
     config::GrantConfig,
     error::{self, ErrorCode},
+    token::{
+        refresh::{RefreshAction, refresh_action},
+        show::is_expired,
+    },
 };
 
 /// The most bytes read looking for the status line of an answer.
 const STATUS_LINE_MAX: usize = 1024;
 
-/// Check that the account's token storage and endpoints work.
+/// Check that the account's token storage, token and endpoints work.
 ///
-/// Prints two rows, each OK or FAIL with why. `storage` runs
-/// `storage.read.command` and parses the token it prints; the write
-/// command never runs, since it would replace the stored token.
-/// `endpoints` checks that the endpoints the grant needs are configured,
-/// then sends each configured one but the redirection a `HEAD` request
-/// carrying no credential, any HTTP answer counting. Neither proves the
-/// provider accepts the client: only a grant does.
+/// Prints one row per check, each OK or FAIL with why, every row checked
+/// whatever the others did:
 ///
-/// A failed row exits the command with status 3, the report being the
-/// output rather than a failure object.
+/// - `storage` runs `storage.read.command` and parses the token it
+///   prints; the write command never runs, since it would replace the
+///   stored token.
 ///
-/// JSON output: `{"accounts": [{"account", "backends": [{"backend", "ok",
-/// "code", "error", "tls"}]}]}`, `backend` being `storage` or `endpoints`,
-/// `tls` the TLS configured for the endpoints, `null` for the storage and
-/// for endpoints all over plain HTTP.
+/// - `token` reads that token, sending nothing: it fails when none is
+///   stored, and when it expired with no refresh token on a grant that
+///   cannot run again by itself, `auth get` being the way out. An expired
+///   token that auto-refresh or `token refresh` renews passes.
+///
+/// - `endpoints.<key>`, one row per endpoint the grant uses
+///   (`authorization`, `device-authorization`, `token`, `revocation`):
+///   one the grant needs and the account leaves out fails, a configured
+///   one is sent a `HEAD` request carrying no credential, any HTTP answer
+///   counting. The redirection is not checked.
+///
+/// None proves the provider accepts the client: only a grant does.
+///
+/// Exits 0 when every row passes, 3 when one fails, the report being the
+/// output rather than a failure object, and 1 on an account it cannot
+/// take.
+///
+/// JSON output: `{"account", "checks": [{"check", "ok", "code", "error",
+/// "tls"}]}`, `check` naming the row, `code` the stable code of its
+/// failure, `tls` the TLS configured for an `https` endpoint, `null` on
+/// the other rows.
 #[derive(Debug, Parser)]
 pub struct AccountCheckCommand;
 
 impl AccountCheckCommand {
-    /// Checks the storage, then the endpoints, of `account`, printing
-    /// both outcomes whatever the first one was.
+    /// Checks the storage, the token, then the endpoints of `account`,
+    /// printing every outcome whatever the others were.
     pub fn execute(self, printer: &mut impl Printer, account: &Account) -> Result<()> {
-        let storage = account.read_storage().map(|_| ());
-        let endpoints = reach_endpoints(account);
+        let stored = account.read_storage();
 
-        let mut endpoints = row("endpoints", endpoints);
-        endpoints.tls = over_tls(account).then(|| tls_check(&account.tls));
+        let token = match &stored {
+            Ok(token) => check_token(account.grant, token),
+            Err(err) if error::code(err) == Some(ErrorCode::TokenMissing) => {
+                Err(error::coded(ErrorCode::TokenMissing, TOKEN_MISSING))
+            }
+            Err(_) => Err(anyhow!(
+                "No access token to check, the storage check failed"
+            )),
+        };
+
+        let mut checks = vec![
+            AccountCheckRow::new("storage", stored.map(|_| ())),
+            AccountCheckRow::new("token", token),
+        ];
+
+        for (key, url, needed) in endpoints(account) {
+            match url {
+                Some(url) => {
+                    let reached =
+                        reach(account, url).with_context(|| format!("Cannot reach {key} at {url}"));
+                    let mut row = AccountCheckRow::new(key, reached);
+                    row.tls = (url.scheme() == "https").then(|| tls_check(&account.tls));
+                    checks.push(row);
+                }
+                None if needed => {
+                    checks.push(AccountCheckRow::new(key, Err(error::endpoint_missing(key))));
+                }
+                None => (),
+            }
+        }
 
         let report = AccountCheckOutput {
-            accounts: vec![AccountCheck {
-                account: account.name.clone(),
-                backends: vec![row("storage", storage), endpoints],
-            }],
+            account: account.name.clone(),
+            checks,
         };
 
         let ok = report.ok();
@@ -75,38 +121,50 @@ impl AccountCheckCommand {
     }
 }
 
-/// Fails on the first endpoint the grant needs that the account leaves
-/// out, then on the first configured one that does not answer.
-fn reach_endpoints(account: &Account) -> Result<()> {
-    let endpoints = [
-        ("endpoints.authorization", &account.authorization_endpoint),
-        (
-            "endpoints.device-authorization",
-            &account.device_authorization_endpoint,
-        ),
-        ("endpoints.token", &account.token_endpoint),
-        ("endpoints.revocation", &account.revocation_endpoint),
-    ];
-
-    let needed: &[&str] = match account.grant {
-        GrantConfig::AuthorizationCode => &["endpoints.authorization", "endpoints.token"],
-        GrantConfig::Device => &["endpoints.device-authorization", "endpoints.token"],
-        GrantConfig::ClientCredentials | GrantConfig::ClientCredentialsJwt => &["endpoints.token"],
-    };
-
-    for (key, url) in endpoints {
-        if url.is_none() && needed.contains(&key) {
-            return Err(error::endpoint_missing(key));
-        }
+/// Whether `token` is usable on `grant`: unexpired, or expired with a way
+/// to renew it, a refresh token or a grant running again by itself.
+fn check_token(grant: GrantConfig, token: &Oauth20AccessTokenSuccessParams) -> Result<()> {
+    if !is_expired(token.issued_at, token.expires_in) {
+        return Ok(());
     }
 
-    for (key, url) in endpoints {
-        if let Some(url) = url {
-            reach(account, url).with_context(|| format!("Cannot reach {key} at {url}"))?;
+    match refresh_action(grant, token.refresh_token.is_some()) {
+        RefreshAction::Refresh | RefreshAction::Reacquire => Ok(()),
+        RefreshAction::Keep => {
+            let message = "Expired access token with no refresh token, run `auth get` to issue one";
+            Err(error::coded(ErrorCode::TokenExpired, message))
         }
     }
+}
 
-    Ok(())
+/// The endpoints the grant of `account` uses, in check order, each with
+/// its configuration key, its URL when configured, and whether the grant
+/// needs it.
+fn endpoints(account: &Account) -> Vec<(&'static str, Option<&Url>, bool)> {
+    let authorization = (
+        "endpoints.authorization",
+        account.authorization_endpoint.as_ref(),
+        true,
+    );
+    let device_authorization = (
+        "endpoints.device-authorization",
+        account.device_authorization_endpoint.as_ref(),
+        true,
+    );
+    let token = ("endpoints.token", account.token_endpoint.as_ref(), true);
+    let revocation = (
+        "endpoints.revocation",
+        account.revocation_endpoint.as_ref(),
+        false,
+    );
+
+    match account.grant {
+        GrantConfig::AuthorizationCode => vec![authorization, token, revocation],
+        GrantConfig::Device => vec![device_authorization, token, revocation],
+        GrantConfig::ClientCredentials | GrantConfig::ClientCredentialsJwt => {
+            vec![token, revocation]
+        }
+    }
 }
 
 /// Sends `url` one `HEAD` request, over a connection opened as the grants
@@ -146,22 +204,9 @@ fn reach(account: &Account, url: &Url) -> Result<()> {
     }
 }
 
-/// Whether one of the endpoints the check sends a request is `https`.
-fn over_tls(account: &Account) -> bool {
-    let endpoints = [
-        &account.authorization_endpoint,
-        &account.device_authorization_endpoint,
-        &account.token_endpoint,
-        &account.revocation_endpoint,
-    ];
-
-    let mut urls = endpoints.into_iter().flatten();
-    urls.any(|url| url.scheme() == "https")
-}
-
 /// The TLS of the endpoints as configured, `null` where the build's
 /// default answers.
-fn tls_check(tls: &Tls) -> BackendCheckTls {
+fn tls_check(tls: &Tls) -> AccountCheckTls {
     let provider = tls.provider.as_ref().map(|provider| match provider {
         TlsProvider::Rustls => "rustls",
         TlsProvider::NativeTls => "native-tls",
@@ -172,7 +217,7 @@ fn tls_check(tls: &Tls) -> BackendCheckTls {
         RustlsCrypto::Ring => "ring",
     });
 
-    BackendCheckTls {
+    AccountCheckTls {
         provider: provider.map(String::from),
         crypto: crypto.map(String::from),
         cert: tls.server.as_ref().map(|s| s.cert.display().to_string()),
@@ -180,8 +225,129 @@ fn tls_check(tls: &Tls) -> BackendCheckTls {
     }
 }
 
-/// The row named `name`, coded as the failure object of any other command
-/// would be, a code read off a typed error included.
-fn row(name: &'static str, result: Result<()>) -> BackendCheck<ErrorCode> {
-    BackendCheck::new(name, result.map_err(|err| with_code(err, error::code)))
+/// The `account check` output, one row per check of the account.
+#[derive(Clone, Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountCheckOutput {
+    /// The account that was checked.
+    pub account: String,
+    /// The rows, `storage`, `token`, then one per endpoint the grant
+    /// uses.
+    pub checks: Vec<AccountCheckRow>,
+}
+
+impl AccountCheckOutput {
+    /// Whether every row passed, the command exiting with a partial
+    /// outcome otherwise.
+    pub fn ok(&self) -> bool {
+        self.checks.iter().all(|check| check.ok)
+    }
+}
+
+/// The account, then one `<check>: OK` or `<check>: FAIL (<why>)` line
+/// per row, an `https` endpoint naming its TLS.
+impl fmt::Display for AccountCheckOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut fields = Fields::default();
+        fields.push("Account", sanitize::text(&self.account));
+
+        for check in &self.checks {
+            let mut outcome = match &check.error {
+                None => String::from("OK"),
+                Some(err) => format!("FAIL ({})", sanitize::text(err)),
+            };
+
+            if let Some(tls) = &check.tls {
+                outcome.push_str(", TLS");
+
+                let tls = tls.to_string();
+                if !tls.is_empty() {
+                    outcome.push(' ');
+                    outcome.push_str(&tls);
+                }
+            }
+
+            fields.push(check.check, outcome);
+        }
+
+        write!(f, "{fields}")
+    }
+}
+
+/// The outcome of one check.
+#[derive(Clone, Debug, JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountCheckRow {
+    /// The check: `storage`, `token`, or the configuration key of an
+    /// endpoint (`endpoints.token`).
+    pub check: &'static str,
+    /// Whether it passed.
+    pub ok: bool,
+    /// The stable code of the failure, `null` when it passed or the
+    /// failure carries none.
+    pub code: Option<ErrorCode>,
+    /// Why it failed, `null` when it passed.
+    pub error: Option<String>,
+    /// The TLS configured for an `https` endpoint, `null` on the other
+    /// rows.
+    pub tls: Option<AccountCheckTls>,
+}
+
+impl AccountCheckRow {
+    /// Folds the outcome of `check` into its row, coded as the failure
+    /// object of any other command would be, `tls` left `null`.
+    fn new(check: &'static str, result: Result<()>) -> Self {
+        match result {
+            Ok(()) => Self {
+                check,
+                ok: true,
+                code: None,
+                error: None,
+                tls: None,
+            },
+            Err(err) => Self {
+                check,
+                ok: false,
+                code: error::code(&err),
+                error: Some(format!("{err:#}")),
+                tls: None,
+            },
+        }
+    }
+}
+
+/// The TLS an `https` endpoint is configured with, as the `tls` table
+/// resolves it: `null` where the build's default answers.
+#[derive(Clone, Debug, Default, Eq, JsonSchema, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountCheckTls {
+    /// The TLS implementation, `rustls` or `native-tls`; `null` for the
+    /// build's first.
+    pub provider: Option<String>,
+    /// The cryptographic provider of rustls, `aws` or `ring`; `null` for
+    /// the build's first.
+    pub crypto: Option<String>,
+    /// The PEM certificate trusted beside the platform's; `null` for the
+    /// platform's alone.
+    pub cert: Option<String>,
+    /// The PEM client certificate presented; `null` for none.
+    pub client_cert: Option<String>,
+}
+
+/// The configured parts, `native-tls, cert /etc/ca.pem`, empty when the
+/// build's defaults answer every one.
+impl fmt::Display for AccountCheckTls {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let parts = [
+            self.provider.clone(),
+            self.crypto.clone(),
+            self.cert.as_ref().map(|cert| format!("cert {cert}")),
+            self.client_cert
+                .as_ref()
+                .map(|cert| format!("client cert {cert}")),
+        ];
+
+        let parts: Vec<String> = parts.into_iter().flatten().collect();
+        write!(f, "{}", sanitize::text(&parts.join(", ")))
+    }
 }

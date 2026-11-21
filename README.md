@@ -39,7 +39,7 @@ $ ortie --json token inspect
 - **Token lifecycle**: refreshed when read or on demand, inspected without printing it, revoked at the server
 - **Your own storage**: tokens read and written through your commands, such as `pass` or `secret-tool`
 - **Ready-made providers**: Google, Microsoft and Fastmail accounts to paste from this README
-- **Account check** proving the token storage reads and every endpoint answers
+- **Account check** proving the token storage reads, the token is usable and every endpoint answers
 - **REPL** unlocking the secret store once per session, and **MCP server** never handing a token to the agent
 - **JSON output** of every command, described by `ortie json-schema`
 - **TLS** via Rustls (`rustls-ring` default, `rustls-aws`) or Native TLS (`native-tls`), client certificates included
@@ -239,6 +239,7 @@ Every command runs on the default account unless `-a` names another, prints JSON
 
 ```sh
 ortie auth get
+ortie account show
 ortie account check
 ortie token show
 ortie token inspect --json

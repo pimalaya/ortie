@@ -12,19 +12,16 @@
 //!
 //! Every registered type is Ortie's own, so the machine contract stays a
 //! decision of this repository rather than of the libraries below it.
-//! The family's shared shapes are the exception: the account list and
-//! check, and the failure object, its `code` typed by Ortie's vocabulary
-//! ([`crate::error`]) and pimalaya-cli's `usage-invalid`.
+//! The family's shared shape is the exception: the failure object, its
+//! `code` typed by Ortie's vocabulary ([`crate::error`]) and
+//! pimalaya-cli's `usage-invalid`.
 //!
 //! [`JsonSchemaCommand`]: pimalaya_cli::clap::commands::json_schema::JsonSchemaCommand
 
-use pimalaya_cli::{
-    account::{AccountCheckOutput, AccountListOutput},
-    clap::commands::json_schema::JsonSchemaRegistry,
-    error::ErrorReport,
-};
+use pimalaya_cli::{clap::commands::json_schema::JsonSchemaRegistry, error::ErrorReport};
 
 use crate::{
+    account::{check::AccountCheckOutput, list::AccountListOutput, show::AccountShowOutput},
     auth::get::AuthGetOutput,
     error::ErrorCode,
     token::{
@@ -42,7 +39,8 @@ pub fn registry() -> JsonSchemaRegistry {
     let mut registry = JsonSchemaRegistry::new("ortie", env!("CARGO_PKG_VERSION"));
 
     registry.insert::<AccountListOutput>("ortie-account-list");
-    registry.insert::<AccountCheckOutput<ErrorCode>>("ortie-account-check");
+    registry.insert::<AccountShowOutput>("ortie-account-show");
+    registry.insert::<AccountCheckOutput>("ortie-account-check");
     registry.insert::<AuthGetOutput<'static>>("ortie-auth-get");
     registry.insert::<TokenIssuedOutput>("ortie-auth-listen");
     registry.insert::<TokenIssuedOutput>("ortie-auth-resume");
@@ -58,6 +56,7 @@ pub fn registry() -> JsonSchemaRegistry {
 #[cfg(test)]
 mod tests {
     use clap::CommandFactory;
+    use serde_json::json;
 
     use crate::{cli::Cli, json_schema::registry};
 
@@ -97,6 +96,46 @@ mod tests {
         ] {
             assert!(schema.contains(&format!("\"{code}\"")), "{code}: {schema}");
         }
+    }
+
+    /// The account schemas require every key the commands always print,
+    /// and none of the optional properties `account show` leaves out.
+    #[test]
+    fn the_account_schemas_require_what_is_always_printed() {
+        let schemas = registry().schemas;
+        let required = |schema: &serde_json::Value| schema["required"].clone();
+
+        let list = &schemas["ortie-account-list"];
+        let row = &list["$defs"]["AccountListRow"];
+        assert_eq!(required(row), json!(["name", "default", "grant"]), "{list}");
+
+        let check = &schemas["ortie-account-check"];
+        assert_eq!(required(check), json!(["account", "checks"]), "{check}");
+        let row = &check["$defs"]["AccountCheckRow"];
+        let keys = json!(["check", "ok", "code", "error", "tls"]);
+        assert_eq!(required(row), keys, "{check}");
+
+        let show = &schemas["ortie-account-show"];
+        assert_eq!(required(show), json!(["account"]), "{show}");
+        let account = &show["$defs"]["AccountShow"];
+        let keys = json!([
+            "name",
+            "default",
+            "clientId",
+            "grant",
+            "endpoints",
+            "tls",
+            "alpn",
+            "scopes",
+            "resources",
+            "pkce",
+            "extras",
+            "autoRefresh",
+            "storage",
+        ]);
+        assert_eq!(required(account), keys, "{show}");
+        let redacted = &show["$defs"]["AccountShowRedacted"];
+        assert_eq!(required(redacted), json!(["raw", "redacted"]), "{show}");
     }
 
     #[test]

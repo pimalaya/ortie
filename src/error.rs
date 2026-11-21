@@ -73,6 +73,9 @@ pub enum ErrorCode {
     /// The account stores no token, or no refresh token where a refresh
     /// needs one; run `auth get`.
     TokenMissing,
+    /// The stored token expired and holds no refresh token, on a grant
+    /// that cannot run again by itself; run `auth get`.
+    TokenExpired,
     /// The account configures no endpoint the grant needs: token, device
     /// authorization, authorization or revocation.
     EndpointMissing,

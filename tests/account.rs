@@ -1,9 +1,10 @@
 //! # Accounts
 //!
-//! The built binary's `account list` and `account check`, the latter
-//! against a local listener standing for the authorization server and a
-//! token file standing for the store, and its failure object for an
-//! account it cannot take or a key the configuration no longer reads.
+//! The built binary's `account list`, `account show` and `account
+//! check`, the latter against a local listener standing for the
+//! authorization server and a token file standing for the store, and its
+//! failure object for an account it cannot take or a key the
+//! configuration no longer reads.
 
 use std::{
     fs,
@@ -21,6 +22,13 @@ use tempfile::TempDir;
 /// The token the store holds when the test seeds it.
 const TOKEN: &str = r#"{"access_token":"at-test","token_type":"Bearer"}"#;
 
+/// A token issued in 1970 for an hour, with no refresh token.
+const EXPIRED: &str =
+    r#"{"access_token":"at-test","token_type":"Bearer","expires_in":3600,"issued_at":1000}"#;
+
+/// A token issued in 1970 for an hour, with a refresh token.
+const EXPIRED_REFRESHABLE: &str = r#"{"access_token":"at-test","token_type":"Bearer","expires_in":3600,"issued_at":1000,"refresh_token":"rt-test"}"#;
+
 /// What the listener answers a `HEAD` on an OAuth endpoint, usually.
 const NOT_ALLOWED: &str =
     "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
@@ -28,12 +36,22 @@ const NOT_ALLOWED: &str =
 /// Runs the binary with `args` over the configuration `toml`, in a home
 /// of its own, its stdin closed.
 fn run(home: &Path, toml: &str, args: &[&str]) -> Output {
-    let config = home.join("config.toml");
-    fs::write(&config, toml).unwrap();
+    run_layers(home, &[toml], args)
+}
 
-    Command::new(env!("CARGO_BIN_EXE_ortie"))
-        .args(["-c", config.to_str().unwrap()])
-        .args(args)
+/// Runs the binary with `args` over one `-c` per layer of `tomls`, the
+/// first the base and the next ones merged on top, in a home of its own,
+/// its stdin closed.
+fn run_layers(home: &Path, tomls: &[&str], args: &[&str]) -> Output {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ortie"));
+
+    for (i, toml) in tomls.iter().enumerate() {
+        let config = home.join(format!("config-{i}.toml"));
+        fs::write(&config, toml).unwrap();
+        cmd.arg("-c").arg(config);
+    }
+
+    cmd.args(args)
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", home)
         .env_remove("XDG_CONFIG_DIRS")
@@ -47,6 +65,13 @@ fn printed(output: &Output, status: i32) -> Value {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(output.status.code(), Some(status), "{stdout}");
     serde_json::from_str(&stdout).unwrap()
+}
+
+/// What `output` printed as text, once it exited with `status`.
+fn printed_text(output: &Output, status: i32) -> String {
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    assert_eq!(output.status.code(), Some(status), "{stdout}");
+    stdout
 }
 
 /// An account `name` of `lines`, its token read from token.json in
@@ -98,10 +123,26 @@ fn listen(answer: &'static str) -> (SocketAddr, Arc<Mutex<Vec<String>>>) {
     (addr, heads)
 }
 
+/// The rows of a check, by name.
+fn rows(json: &Value) -> Vec<&str> {
+    let checks = json["checks"].as_array().unwrap();
+    checks
+        .iter()
+        .map(|c| c["check"].as_str().unwrap())
+        .collect()
+}
+
+/// The row of a check named `name`.
+fn row<'a>(json: &'a Value, name: &str) -> &'a Value {
+    let checks = json["checks"].as_array().unwrap();
+    let row = checks.iter().find(|c| c["check"] == name);
+    row.unwrap_or_else(|| panic!("no {name} row: {json}"))
+}
+
 #[test]
-fn account_list_prints_every_account_sorted_with_no_backend() {
+fn account_list_prints_every_account_sorted_with_its_grant() {
     let home = TempDir::new().unwrap();
-    let toml = account(home.path(), "work", "", TOKEN)
+    let toml = account(home.path(), "work", "grant = \"device\"", TOKEN)
         + "[accounts.home]\nclient-id = \"c\"\n\
            storage.read.command = \"exit 127\"\n\
            storage.write.command = \"exit 127\"\n";
@@ -109,26 +150,24 @@ fn account_list_prints_every_account_sorted_with_no_backend() {
     let output = run(home.path(), &toml, &["--json", "account", "list"]);
     let expected = json!({
         "accounts": [
-            { "name": "home", "default": false, "backends": [], "notBuilt": [] },
-            { "name": "work", "default": true, "backends": [], "notBuilt": [] },
+            { "name": "home", "default": false, "grant": "authorization-code" },
+            { "name": "work", "default": true, "grant": "device" },
         ]
     });
     assert_eq!(printed(&output, 0), expected);
 
     let output = run(home.path(), &toml, &["account", "ls"]);
-    let text = String::from_utf8_lossy(&output.stdout);
-    assert_eq!(output.status.code(), Some(0), "{text}");
-
-    let rows: Vec<Vec<&str>> = text
-        .lines()
-        .map(|l| l.split_whitespace().collect())
-        .collect();
-    assert_eq!(rows, [vec!["home", "-", "-"], vec!["work", "-", "default"]]);
+    let text = printed_text(&output, 0);
+    let expected = "\
+home  authorization-code  -
+work  device              default
+";
+    assert_eq!(text, expected);
 }
 
-/// The check runs the read command and sends each endpoint one `HEAD`
-/// carrying nothing but its target and host, any HTTP answer counting;
-/// the write command never runs.
+/// The check runs the read command, reads the token it printed, and
+/// sends each endpoint one `HEAD` carrying nothing but its target and
+/// host, any HTTP answer counting; the write command never runs.
 #[test]
 fn account_check_reads_the_storage_and_sends_each_endpoint_a_head() {
     let home = TempDir::new().unwrap();
@@ -142,14 +181,16 @@ fn account_check_reads_the_storage_and_sends_each_endpoint_a_head() {
     let toml = account(home.path(), "work", &lines, TOKEN);
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
+    let ok = |check: &str| json!({ "check": check, "ok": true, "code": null, "error": null, "tls": null });
     let expected = json!({
-        "accounts": [{
-            "account": "work",
-            "backends": [
-                { "backend": "storage", "ok": true, "code": null, "error": null, "tls": null },
-                { "backend": "endpoints", "ok": true, "code": null, "error": null, "tls": null },
-            ]
-        }]
+        "account": "work",
+        "checks": [
+            ok("storage"),
+            ok("token"),
+            ok("endpoints.authorization"),
+            ok("endpoints.token"),
+            ok("endpoints.revocation"),
+        ]
     });
     assert_eq!(printed(&output, 0), expected);
 
@@ -163,12 +204,23 @@ fn account_check_reads_the_storage_and_sends_each_endpoint_a_head() {
     );
 
     assert!(!home.path().join("written.json").exists());
+
+    let output = run(home.path(), &toml, &["account", "check"]);
+    let expected = "\
+Account:                  work
+storage:                  OK
+token:                    OK
+endpoints.authorization:  OK
+endpoints.token:          OK
+endpoints.revocation:     OK
+";
+    assert_eq!(printed_text(&output, 0), expected);
 }
 
-/// Both rows print whatever the first one did, and a failed one exits 3
+/// Every row prints whatever the others did, and a failed one exits 3
 /// with the report, each failure coded as any command would code it.
 #[test]
-fn a_failed_row_exits_3_and_keeps_the_other() {
+fn a_failed_row_exits_3_and_keeps_the_others() {
     let home = TempDir::new().unwrap();
     let lines = "grant = \"client-credentials\"\n\
                  endpoints.token = \"http://127.0.0.1:1/token\"";
@@ -176,48 +228,75 @@ fn a_failed_row_exits_3_and_keeps_the_other() {
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
     let json = printed(&output, 3);
-    let storage = &json["accounts"][0]["backends"][0];
-    let endpoints = &json["accounts"][0]["backends"][1];
+    assert_eq!(rows(&json), ["storage", "token", "endpoints.token"]);
 
-    assert_eq!(storage["ok"], false, "{json}");
-    assert_eq!(storage["code"], "token-missing", "{json}");
+    for name in ["storage", "token"] {
+        let row = row(&json, name);
+        assert_eq!(row["ok"], false, "{json}");
+        assert_eq!(row["code"], "token-missing", "{json}");
+    }
 
-    assert_eq!(endpoints["ok"], false, "{json}");
-    assert_eq!(endpoints["code"], Value::Null, "{json}");
-    let error = endpoints["error"].as_str().unwrap();
+    let endpoint = row(&json, "endpoints.token");
+    assert_eq!(endpoint["ok"], false, "{json}");
+    assert_eq!(endpoint["code"], Value::Null, "{json}");
+    let error = endpoint["error"].as_str().unwrap();
     let reach = "Cannot reach endpoints.token at http://127.0.0.1:1/token";
     assert!(error.starts_with(reach), "{error}");
 
     let output = run(home.path(), &toml, &["account", "check"]);
-    let text = String::from_utf8_lossy(&output.stdout);
-    assert_eq!(output.status.code(), Some(3), "{text}");
-    assert!(text.contains("storage:"), "{text}");
-    assert!(text.contains("FAIL (No access token stored"), "{text}");
+    let text = printed_text(&output, 3);
+    assert!(
+        text.contains("storage:          FAIL (No access token stored"),
+        "{text}"
+    );
+    assert!(
+        text.contains("token:            FAIL (No access token stored"),
+        "{text}"
+    );
+    assert!(
+        text.contains("endpoints.token:  FAIL (Cannot reach"),
+        "{text}"
+    );
 }
 
-/// An endpoint the grant needs is checked configured before any request,
-/// coded as `auth get` codes it.
+/// An endpoint the grant needs fails its row before any request, coded
+/// as `auth get` codes it; the other rows still run, and an endpoint the
+/// grant has no use for is not checked.
 #[test]
 fn an_endpoint_the_grant_needs_is_coded_endpoint_missing() {
     let home = TempDir::new().unwrap();
     let (addr, heads) = listen(NOT_ALLOWED);
-    let lines = format!("grant = \"device\"\nendpoints.token = \"http://{addr}/token\"");
+    let lines = format!(
+        "grant = \"device\"\n\
+         endpoints.authorization = \"http://{addr}/authorize\"\n\
+         endpoints.token = \"http://{addr}/token\""
+    );
     let toml = account(home.path(), "work", &lines, TOKEN);
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
     let json = printed(&output, 3);
-    let endpoints = &json["accounts"][0]["backends"][1];
+    let names = [
+        "storage",
+        "token",
+        "endpoints.device-authorization",
+        "endpoints.token",
+    ];
+    assert_eq!(rows(&json), names);
 
-    assert_eq!(json["accounts"][0]["backends"][0]["ok"], true, "{json}");
-    assert_eq!(endpoints["code"], "endpoint-missing", "{json}");
+    let missing = row(&json, "endpoints.device-authorization");
+    assert_eq!(missing["code"], "endpoint-missing", "{json}");
     let message = "Missing endpoints.device-authorization in the account config";
-    assert_eq!(endpoints["error"], message, "{json}");
-    assert!(heads.lock().unwrap().is_empty());
+    assert_eq!(missing["error"], message, "{json}");
+    assert_eq!(missing["tls"], Value::Null, "{json}");
+    assert_eq!(row(&json, "endpoints.token")["ok"], true, "{json}");
+
+    let head = format!("HEAD /token HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n");
+    assert_eq!(*heads.lock().unwrap(), [head]);
 }
 
 /// A server answering something else than HTTP is not reached.
 #[test]
-fn an_answer_that_is_no_http_fails_the_endpoints() {
+fn an_answer_that_is_no_http_fails_the_endpoint() {
     let home = TempDir::new().unwrap();
     let (addr, _) = listen("SSH-2.0-OpenSSH_9.9\r\n");
     let lines =
@@ -226,13 +305,70 @@ fn an_answer_that_is_no_http_fails_the_endpoints() {
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
     let json = printed(&output, 3);
-    let error = json["accounts"][0]["backends"][1]["error"]
-        .as_str()
-        .unwrap();
+    let error = row(&json, "endpoints.token")["error"].as_str().unwrap();
     assert!(
         error.ends_with("The answer is no HTTP status line"),
         "{error}"
     );
+}
+
+/// The token row reads what the storage returned, sending nothing: an
+/// expired token passes when a refresh token or the grant renews it, and
+/// fails coded `token-expired` otherwise.
+#[test]
+fn the_token_row_tells_an_expired_token_apart() {
+    let home = TempDir::new().unwrap();
+    let cases = [
+        ("", EXPIRED, false),
+        ("", EXPIRED_REFRESHABLE, true),
+        ("grant = \"client-credentials\"", EXPIRED, true),
+        ("auto-refresh = false", EXPIRED_REFRESHABLE, true),
+    ];
+
+    for (lines, token, ok) in cases {
+        let toml = account(home.path(), "work", lines, token);
+        let output = run(home.path(), &toml, &["--json", "account", "check"]);
+        let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+        let row = row(&json, "token");
+
+        assert_eq!(row["ok"], ok, "{lines} {token}: {json}");
+        assert_eq!(row["tls"], Value::Null, "{json}");
+
+        if ok {
+            assert_eq!(row["code"], Value::Null, "{json}");
+            assert_eq!(row["error"], Value::Null, "{json}");
+        } else {
+            assert_eq!(row["code"], "token-expired", "{json}");
+            let error = "Expired access token with no refresh token, run `auth get` to issue one";
+            assert_eq!(row["error"], error, "{json}");
+            assert_eq!(output.status.code(), Some(3), "{json}");
+        }
+    }
+}
+
+/// A storage command failing for another reason than an empty store
+/// leaves the token row nothing to read, uncoded.
+#[test]
+fn a_failed_storage_fails_the_token_row_uncoded() {
+    let home = TempDir::new().unwrap();
+    let toml = "[accounts.a]\ndefault = true\nclient-id = \"c\"\n\
+                storage.read.command = \"echo locked >&2; exit 1\"\n\
+                storage.write.command = \"true\"\n";
+
+    let output = run(home.path(), toml, &["--json", "account", "check"]);
+    let json = printed(&output, 3);
+    let storage = row(&json, "storage");
+    let token = row(&json, "token");
+
+    assert_eq!(storage["code"], Value::Null, "{json}");
+    assert!(
+        storage["error"].as_str().unwrap().contains("locked"),
+        "{json}"
+    );
+    assert_eq!(token["ok"], false, "{json}");
+    assert_eq!(token["code"], Value::Null, "{json}");
+    let error = "No access token to check, the storage check failed";
+    assert_eq!(token["error"], error, "{json}");
 }
 
 #[test]
@@ -240,13 +376,15 @@ fn an_unknown_account_name_is_coded_account_missing() {
     let home = TempDir::new().unwrap();
     let toml = account(home.path(), "work", "", TOKEN);
 
-    let output = run(
-        home.path(),
-        &toml,
-        &["--json", "-a", "nope", "account", "check"],
-    );
-    let json = printed(&output, 1);
-    assert_eq!(json["code"], "account-missing", "{json}");
+    for command in ["check", "show"] {
+        let output = run(
+            home.path(),
+            &toml,
+            &["--json", "-a", "nope", "account", command],
+        );
+        let json = printed(&output, 1);
+        assert_eq!(json["code"], "account-missing", "{json}");
+    }
 }
 
 /// The flat `tls` string of 2.x is refused by serde as any value of the
@@ -262,13 +400,14 @@ fn the_tls_string_is_refused_as_a_wrong_type() {
     assert!(!json.contains("MIGRATION.md"), "{json}");
 }
 
-/// The endpoints row names the TLS the account configures once one
-/// endpoint is `https`, the storage row none.
+/// An `https` endpoint row names the TLS the account configures, a plain
+/// HTTP one and the storage and token rows none.
 #[test]
-fn the_endpoints_row_names_the_tls_configured() {
+fn an_https_endpoint_row_names_the_tls_configured() {
     let home = TempDir::new().unwrap();
     let lines = "grant = \"client-credentials\"\n\
                  endpoints.token = \"https://127.0.0.1:1/token\"\n\
+                 endpoints.revocation = \"http://127.0.0.1:1/revoke\"\n\
                  tls.provider = \"rustls\"\n\
                  tls.cert = \"/etc/ortie/ca.pem\"\n\
                  tls.client.cert = \"/etc/ortie/me.pem\"\n\
@@ -277,8 +416,10 @@ fn the_endpoints_row_names_the_tls_configured() {
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
     let json = printed(&output, 3);
-    let backends = &json["accounts"][0]["backends"];
-    assert_eq!(backends[0]["tls"], Value::Null, "{json}");
+
+    for name in ["storage", "token", "endpoints.revocation"] {
+        assert_eq!(row(&json, name)["tls"], Value::Null, "{name}: {json}");
+    }
 
     let tls = json!({
         "provider": "rustls",
@@ -286,11 +427,11 @@ fn the_endpoints_row_names_the_tls_configured() {
         "cert": "/etc/ortie/ca.pem",
         "clientCert": "/etc/ortie/me.pem",
     });
-    assert_eq!(backends[1]["tls"], tls, "{json}");
+    assert_eq!(row(&json, "endpoints.token")["tls"], tls, "{json}");
 
     let output = run(home.path(), &toml, &["account", "check"]);
-    let text = String::from_utf8_lossy(&output.stdout);
-    let line = ", TLS rustls, cert /etc/ortie/ca.pem, client cert /etc/ortie/me.pem";
+    let text = printed_text(&output, 3);
+    let line = ", TLS rustls, cert /etc/ortie/ca.pem, client cert /etc/ortie/me.pem\n";
     assert!(text.contains(line), "{text}");
 }
 
@@ -329,4 +470,174 @@ fn a_failing_read_command_never_reports_its_stdout() {
             }
         }
     }
+}
+
+/// `account show` fills the defaults of every property the account
+/// leaves out, and leaves out the optional ones it does not set.
+#[test]
+fn account_show_fills_the_defaults() {
+    let home = TempDir::new().unwrap();
+    let token = home.path().join("token.json");
+    let token = token.display();
+    let written = home.path().join("written.json");
+    let written = written.display();
+    let toml = format!(
+        "[accounts.work]\nclient-id = \"c\"\n\
+         storage.read.command = [\"cat\", \"{token}\"]\n\
+         storage.write.command = \"tee {written}\"\n"
+    );
+
+    let output = run(
+        home.path(),
+        &toml,
+        &["--json", "-a", "work", "account", "show"],
+    );
+    let expected = json!({
+        "account": {
+            "name": "work",
+            "default": false,
+            "clientId": "c",
+            "grant": "authorization-code",
+            "endpoints": {},
+            "tls": { "rustls": {} },
+            "alpn": [],
+            "scopes": [],
+            "resources": [],
+            "pkce": "s256",
+            "extras": {},
+            "autoRefresh": true,
+            "storage": {
+                "read": { "command": ["cat", token.to_string()] },
+                "write": { "command": format!("tee {written}") },
+            },
+        }
+    });
+    assert_eq!(printed(&output, 0), expected);
+
+    let output = run(home.path(), &toml, &["-a", "work", "account", "show"]);
+    let expected = format!(
+        "\
+[accounts.work]
+
+default = false
+client-id = \"c\"
+grant = \"authorization-code\"
+alpn = []
+scopes = []
+resources = []
+pkce = \"s256\"
+extras = {{}}
+auto-refresh = true
+
+storage.read.command = [\"cat\", \"{token}\"]
+storage.write.command = \"tee {written}\"
+"
+    );
+    assert_eq!(printed_text(&output, 0), expected);
+    assert!(!home.path().join("written.json").exists());
+}
+
+/// `account show` prints the account every `-c` layer merges into, a
+/// list of the overlay appended to the base's as the loader merges it.
+#[test]
+fn account_show_prints_the_merged_layers() {
+    let home = TempDir::new().unwrap();
+    let base = account(home.path(), "work", "scopes = [\"a\", \"b\"]", TOKEN);
+    let overlay = "[accounts.work]\ngrant = \"device\"\n\
+                   endpoints.token = \"https://example.com/token\"\n\
+                   scopes = [\"c\"]\n";
+
+    let output = run_layers(
+        home.path(),
+        &[&base, overlay],
+        &["--json", "account", "show"],
+    );
+    let json = printed(&output, 0);
+    let account = &json["account"];
+
+    assert_eq!(account["clientId"], "c", "{json}");
+    assert_eq!(account["grant"], "device", "{json}");
+    assert_eq!(account["scopes"], json!(["a", "b", "c"]), "{json}");
+    let endpoints = json!({ "token": "https://example.com/token" });
+    assert_eq!(account["endpoints"], endpoints, "{json}");
+    assert_eq!(account["default"], true, "{json}");
+}
+
+/// No raw secret is ever printed: the text writes it `<redacted>` and the
+/// JSON `{"raw": null, "redacted": true}`, while a secret command prints
+/// as written.
+#[test]
+fn account_show_never_prints_a_raw_secret() {
+    let home = TempDir::new().unwrap();
+    let secret = "s3cret-never-printed";
+    let toml = account(home.path(), "work", "", TOKEN).replace("s3cret", secret)
+        + "[accounts.home]\nclient-id = \"c\"\n\
+           client-secret.command = [\"pass\", \"show\", \"ortie/home\"]\n\
+           storage.read.command = \"true\"\nstorage.write.command = \"true\"\n";
+
+    let output = run(home.path(), &toml, &["--json", "account", "show"]);
+    let json = printed(&output, 0);
+    let redacted = json!({ "raw": null, "redacted": true });
+    assert_eq!(json["account"]["clientSecret"], redacted, "{json}");
+    assert!(!json.to_string().contains(secret), "{json}");
+
+    let output = run(home.path(), &toml, &["account", "show"]);
+    let text = printed_text(&output, 0);
+    assert!(
+        text.contains("\nclient-secret.raw = \"<redacted>\"\n"),
+        "{text}"
+    );
+    assert!(!text.contains(secret), "{text}");
+
+    let args = ["--json", "-a", "home", "account", "show"];
+    let json = printed(&run(home.path(), &toml, &args), 0);
+    let command = json!({ "command": ["pass", "show", "ortie/home"] });
+    assert_eq!(json["account"]["clientSecret"], command, "{json}");
+
+    let output = run(home.path(), &toml, &["-a", "home", "account", "show"]);
+    let text = printed_text(&output, 0);
+    let line = "\nclient-secret.command = [\"pass\", \"show\", \"ortie/home\"]\n";
+    assert!(text.contains(line), "{text}");
+}
+
+/// The text of `account show`, its `<redacted>` swapped back for a value,
+/// is a configuration loading the account it shows.
+#[test]
+fn account_show_text_pastes_back_into_a_configuration() {
+    let home = TempDir::new().unwrap();
+    let lines = "grant = \"client-credentials-jwt\"\n\
+                 client-key = \"/etc/ortie/key.pem\"\n\
+                 client-cert = \"/etc/ortie/cert.pem\"\n\
+                 endpoints.authorization = \"https://example.com/authorize\"\n\
+                 endpoints.device-authorization = \"https://example.com/device\"\n\
+                 endpoints.token = \"https://example.com/token?tenant=x\"\n\
+                 endpoints.revocation = \"https://example.com/revoke\"\n\
+                 endpoints.redirection = \"http://localhost\"\n\
+                 tls.provider = \"rustls\"\n\
+                 tls.rustls.crypto = \"aws\"\n\
+                 tls.cert = \"/etc/ortie/ca.pem\"\n\
+                 tls.client.cert = \"/etc/ortie/me.pem\"\n\
+                 tls.client.key = \"/etc/ortie/me.key.pem\"\n\
+                 alpn = [\"http/1.1\"]\n\
+                 scopes = [\"openid\", \"quote\\\"d \\u202e bidi\"]\n\
+                 resources = [\"https://example.com/jmap\"]\n\
+                 pkce = false\n\
+                 extras.access_type = \"offline\"\n\
+                 extras.\"odd key\" = \"tab\\there\"\n\
+                 auto-refresh = false";
+    let toml = account(home.path(), "my.work", lines, TOKEN)
+        .replace("[accounts.my.work]", "[accounts.\"my.work\"]");
+
+    let shown = printed(&run(home.path(), &toml, &["--json", "account", "show"]), 0);
+    let text = printed_text(&run(home.path(), &toml, &["account", "show"]), 0);
+    assert!(!text.contains('\u{202e}'), "{text}");
+
+    let pasted = text.replace("<redacted>", "s3cret");
+    let again = printed(
+        &run(home.path(), &pasted, &["--json", "account", "show"]),
+        0,
+    );
+    assert_eq!(again, shown);
+    assert_eq!(shown["account"]["name"], "my.work", "{shown}");
+    assert_eq!(shown["account"]["pkce"], false, "{shown}");
 }
