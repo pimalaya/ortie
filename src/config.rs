@@ -605,19 +605,13 @@ storage.write.command = ["tee", "token.json"]
         assert!(!GrantConfig::Device.is_client_credentials());
     }
 
-    /// The provider sections of config.sample.toml, one of which a user
-    /// uncomments.
-    const SECTIONS: [&str; 5] = [
-        "# Google",
-        "# Microsoft Graph",
-        "# Microsoft IMAP and SMTP",
-        "# Fastmail",
-        "# Custom",
-    ];
+    /// The sections of config.sample.toml a user uncomments, the
+    /// providers' accounts living in the README.
+    const SECTIONS: [&str; 1] = ["# Custom"];
 
     /// Checks config.sample.toml: one `[accounts.example]` table and no
-    /// other, its provider sections each parsed through the loader `-c`
-    /// uses with every variant on top.
+    /// other, its custom section parsed through the loader `-c` uses with
+    /// every variant on top.
     #[test]
     fn the_sample_configuration_parses_with_each_variant() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config.sample.toml");
@@ -632,5 +626,61 @@ storage.write.command = ["tee", "token.json"]
             });
             assert!(config.accounts.contains_key("example"), "{name}");
         }
+    }
+
+    /// The fenced toml blocks of `markdown`, each with the line number of
+    /// its fence.
+    fn toml_blocks(markdown: &str) -> Vec<(usize, String)> {
+        let mut blocks: Vec<(usize, String)> = Vec::new();
+        let mut open = false;
+
+        for (number, line) in markdown.lines().enumerate() {
+            if line == "```toml" {
+                blocks.push((number + 1, String::new()));
+                open = true;
+            } else if line == "```" {
+                open = false;
+            } else if open {
+                let block = &mut blocks.last_mut().unwrap().1;
+                block.push_str(line);
+                block.push('\n');
+            }
+        }
+
+        blocks
+    }
+
+    /// Checks the provider accounts of README.md: each toml block one
+    /// `[accounts.<name>]` table, parsed through the loader `-c` uses and
+    /// holding that account, the live suites reading them by name.
+    #[test]
+    fn the_readme_provider_accounts_parse() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("README.md");
+        let readme = fs::read_to_string(&path).unwrap();
+        let mut names = Vec::new();
+
+        for (line, block) in toml_blocks(&readme) {
+            let headers: Vec<_> = block.lines().filter(|l| l.starts_with('[')).collect();
+            let [header] = headers[..] else {
+                panic!("README.md:{line}: {} tables", headers.len())
+            };
+            let name = header
+                .strip_prefix("[accounts.")
+                .and_then(|name| name.strip_suffix(']'))
+                .unwrap_or_else(|| panic!("README.md:{line}: {header}"));
+
+            let config =
+                try_parse(&block).unwrap_or_else(|err| panic!("README.md:{line}: {name}: {err:?}"));
+            assert!(config.accounts.contains_key(name), "README.md:{line}");
+            names.push(name.to_owned());
+        }
+
+        let expected = [
+            "google",
+            "microsoft-graph",
+            "microsoft-imap-smtp",
+            "fastmail",
+        ];
+        assert_eq!(names, expected);
     }
 }

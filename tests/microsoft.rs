@@ -1,7 +1,7 @@
 //! # Microsoft live suite
 //!
-//! The binary against Entra. `anonymous` runs the public client of
-//! config.sample.toml and made-up secrets, touching no account.
+//! The binary against Entra. `anonymous` runs the public client of the
+//! README.md Graph account and made-up secrets, touching no account.
 //! `credentialed` runs a confidential registration of the test tenant,
 //! read from `ORTIE_MICROSOFT_TENANT_ID`, `ORTIE_MICROSOFT_CLIENT_ID` and
 //! `ORTIE_MICROSOFT_CLIENT_SECRET`, the JWT kind from
@@ -22,7 +22,7 @@ mod anonymous {
 
     use crate::common::*;
 
-    /// The device authorization endpoint of the sample's tenant.
+    /// The device authorization endpoint of the README account's tenant.
     const DEVICE_AUTHORIZATION: &str =
         "https://login.microsoftonline.com/common/oauth2/v2.0/devicecode";
 
@@ -30,7 +30,7 @@ mod anonymous {
     #[ignore = "requires network and --ignored"]
     fn device_auth_get_json() {
         let dir = TempDir::new().unwrap();
-        let section = sample_section("Microsoft Graph", &[]);
+        let section = readme_account("microsoft-graph", &[]);
         let lines = format!(
             "{section}grant = \"device\"\nendpoints.device-authorization = \"{DEVICE_AUTHORIZATION}\""
         );
@@ -52,7 +52,7 @@ mod anonymous {
     #[ignore = "requires network and --ignored"]
     fn client_credentials_rejected() {
         let dir = TempDir::new().unwrap();
-        let client_id = sample_section("Microsoft Graph", &[])
+        let client_id = readme_account("microsoft-graph", &[])
             .lines()
             .find_map(|line| line.strip_prefix("client-id = "))
             .unwrap()

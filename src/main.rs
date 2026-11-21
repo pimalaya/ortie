@@ -32,11 +32,11 @@
 //! shared crate answers the protocol, Ortie its tools and their flows.
 //!
 //! The config is user-owned: Ortie never writes it, and an account
-//! starts from config.sample.toml: the fields every provider shares,
-//! then one section per provider, the client and endpoints included,
-//! one of which to uncomment. A person running Ortie without a config
-//! meets the welcome ([`cli::welcome`], the shared one in Ortie's
-//! words), which copies it from the release or the package,
+//! starts from config.sample.toml, the fields every provider shares and
+//! a custom section, or from a provider's ready-made account in the
+//! README, its client and endpoints included. A person running Ortie
+//! without a config meets the welcome ([`cli::welcome`], the shared one
+//! in Ortie's words), which copies it from the release or the package,
 //! share/doc/ortie/ beside the binary, or downloads it.
 //!
 //! Configuration is two layers. [`config`] holds the pure TOML DTOs,

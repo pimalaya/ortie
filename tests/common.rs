@@ -2,7 +2,7 @@
 //!
 //! The account configuration every suite writes, its token stored in a
 //! file beside it, the built binary run against it, the provider
-//! sections of config.sample.toml, and the environment the live suites
+//! accounts of README.md, and the environment the live suites
 //! read their credentials from.
 
 #![allow(dead_code)]
@@ -106,31 +106,32 @@ pub fn stored(token: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(token).unwrap()).unwrap()
 }
 
-/// The commented section `name` of config.sample.toml, uncommented,
-/// each line setting a key of `overrides` set to its value instead.
-pub fn sample_section(name: &str, overrides: &[(&str, &str)]) -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("config.sample.toml");
-    let sample = fs::read_to_string(path).unwrap();
-    let heading = format!("# {name}");
+/// The fields of the README's `[accounts.<name>]` block, its header and
+/// storage commands left to [`write_config`], each line setting a key of
+/// `overrides` set to its value instead.
+pub fn readme_account(name: &str, overrides: &[(&str, &str)]) -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md");
+    let readme = fs::read_to_string(path).unwrap();
+    let header = format!("[accounts.{name}]");
 
-    let mut lines = sample.lines().skip_while(|line| *line != heading).skip(2);
-    let mut section = String::new();
+    let mut lines = readme.lines().skip_while(|line| *line != header).skip(1);
+    let mut account = String::new();
 
-    for line in lines.by_ref().take_while(|line| !line.is_empty()) {
-        let line = line.strip_prefix('#').unwrap_or(line);
+    for line in lines.by_ref().take_while(|line| *line != "```") {
+        if line.is_empty() || line.starts_with("storage.") {
+            continue;
+        }
+
         let key = line.split(" = ").next().unwrap_or_default();
 
         match overrides.iter().find(|(k, _)| *k == key) {
-            Some((key, value)) => section.push_str(&format!("{key} = {value}\n")),
-            None => section.push_str(&format!("{line}\n")),
+            Some((key, value)) => account.push_str(&format!("{key} = {value}\n")),
+            None => account.push_str(&format!("{line}\n")),
         }
     }
 
-    assert!(
-        !section.is_empty(),
-        "no {name} section in config.sample.toml"
-    );
-    section
+    assert!(!account.is_empty(), "no {header} block in README.md");
+    account
 }
 
 /// The environment variable `name`, an empty value counting as unset,

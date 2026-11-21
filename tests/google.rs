@@ -1,7 +1,7 @@
 //! # Google live suite
 //!
-//! The binary against Google, on the Google section of config.sample.toml
-//! with a made-up client. Ortie has no headless grant Google accepts, so
+//! The binary against Google, on the Google account of README.md with a
+//! made-up client. Ortie has no headless grant Google accepts, so
 //! the suite is `anonymous` only and touches no account.
 //!
 //! Run with `cargo test --test google -- --ignored`.
@@ -21,7 +21,7 @@ mod anonymous {
     /// A token the server never issued.
     const MADE_UP: &str = r#"{"access_token":"made-up","token_type":"Bearer","refresh_token":"made-up","issued_at":1000}"#;
 
-    /// Writes the sample's Google account on a made-up client, its
+    /// Writes the README's Google account on a made-up client, its
     /// storage seeded with `token`.
     fn write_account(dir: &Path, token: &str) -> (PathBuf, PathBuf) {
         let client = [
@@ -31,7 +31,7 @@ mod anonymous {
             ),
             ("client-secret.raw", "\"made-up\""),
         ];
-        write_config(dir, "google", &sample_section("Google", &client), token)
+        write_config(dir, "google", &readme_account("google", &client), token)
     }
 
     #[test]

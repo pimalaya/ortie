@@ -24,63 +24,8 @@ pkce = "s256"				# PKCE with the SHA-256 challenge
 storage.read.command = "exit 127"	# prints the stored token JSON
 storage.write.command = "exit 127"	# receives the token JSON on stdin
 
-# Google
-#
-#client-id = ""
-#client-secret.raw = ""
-#extras.access_type = "offline"
-#endpoints.authorization = "https://accounts.google.com/o/oauth2/v2/auth"
-#endpoints.token = "https://oauth2.googleapis.com/token"
-#endpoints.revocation = "https://oauth2.googleapis.com/revoke"
-#scopes = [
-#  "https://mail.google.com/",
-#  "https://www.googleapis.com/auth/calendar",
-#  "https://www.googleapis.com/auth/calendar.events",
-#  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
-#  "https://www.googleapis.com/auth/contacts",
-#  "https://www.googleapis.com/auth/carddav",
-#]
-
-# Microsoft Graph
-#
-#client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
-#endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-#endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-#endpoints.redirection = "http://localhost"
-#scopes = [
-#  "offline_access",
-#  "https://graph.microsoft.com/Mail.ReadWrite",
-#  "https://graph.microsoft.com/Mail.Send",
-#  "https://graph.microsoft.com/Calendars.ReadWrite",
-#  "https://graph.microsoft.com/Contacts.ReadWrite",
-#]
-
-# Microsoft IMAP and SMTP
-#
-#client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
-#endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-#endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-#endpoints.redirection = "http://localhost"
-#scopes = [
-#  "offline_access",
-#  "https://outlook.office.com/IMAP.AccessAsUser.All",
-#  "https://outlook.office.com/SMTP.Send",
-#]
-
-# Fastmail
-#
-#client-id = "df6e41ae"
-#endpoints.authorization = "https://api.fastmail.com/oauth/authorize"
-#endpoints.token = "https://api.fastmail.com/oauth/refresh"
-#endpoints.revocation = "https://api.fastmail.com/oauth/revoke"
-#endpoints.redirection = "http://localhost/"
-#resources = ["https://api.fastmail.com/jmap/session"]
-#scopes = [
-#  "offline_access",
-#  "urn:ietf:params:oauth:scope:mail",
-#  "urn:ietf:params:oauth:scope:contacts",
-#  "urn:ietf:params:oauth:scope:calendars",
-#]
+# Google, Microsoft and Fastmail: paste the ready-made account of the
+# README instead, https://github.com/pimalaya/ortie#configuration
 
 # Custom
 #

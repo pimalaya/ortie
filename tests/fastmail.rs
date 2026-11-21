@@ -1,8 +1,8 @@
 //! # Fastmail live suite
 //!
-//! The binary against Fastmail, on the Fastmail section of
-//! config.sample.toml. Only a browser consent issues a Fastmail token, so
-//! the suite is `anonymous` only and touches no account.
+//! The binary against Fastmail, on the Fastmail account of README.md.
+//! Only a browser consent issues a Fastmail token, so the suite is
+//! `anonymous` only and touches no account.
 //!
 //! Run with `cargo test --test fastmail -- --ignored`.
 
@@ -19,7 +19,7 @@ mod anonymous {
     #[ignore = "requires network and --ignored"]
     fn auth_resume_rejected() {
         let dir = TempDir::new().unwrap();
-        let section = sample_section("Fastmail", &[]);
+        let section = readme_account("fastmail", &[]);
         let (config, token) = write_config(dir.path(), "fastmail", &section, "");
 
         let args = [
