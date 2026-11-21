@@ -5,9 +5,12 @@ CLI to manage OAuth tokens
 ## Table of contents
 
 - [Features](#features)
-- [Coverage](#coverage)
+- [RFC coverage](#rfc-coverage)
 - [Installation](#installation)
 - [Configuration](#configuration)
+  - [Google](#google)
+  - [Microsoft](#microsoft)
+  - [Fastmail](#fastmail)
 - [Usage](#usage)
 - [Alternatives](#alternatives)
 - [AI policy](https://github.com/pimalaya/.github/blob/master/AI_POLICY.md)
@@ -18,175 +21,223 @@ CLI to manage OAuth tokens
 
 ## Features
 
-- **Ready-made providers**: Microsoft and Fastmail sections in the sample on Pimalaya's own applications, and a Google one taking your own client.
-- **Every common grant**: authorization code, device code, and client credentials by secret or signed JWT.
-- **Token lifecycle**: refresh on demand or when the token is read, inspect, and revoke at the server.
-- **Your own storage**: tokens read and written through your commands, such as `pass` or `secret-tool`.
-- **Persistent session**: `ortie repl` unlocks the secret store once, then answers any command over stdin.
-- **Account check**: `ortie account check` proves the token storage reads and the endpoints answer.
-- **MCP server**: an agent drives the grants through `ortie mcp`, and no tool ever returns a token.
-- **JSON output**: `--json` on every data command, its schema given by `ortie json-schema`.
-- **Full client**: TLS via Rustls (`rustls-ring` default, `rustls-aws`) or Native TLS (`native-tls`), OpenSSL vendored (`vendored`, default).
+- **Every common grant**: authorization code with PKCE, device code, client credentials by secret or signed JWT
+- **Token lifecycle**: refreshed when read or on demand, inspected without printing it, revoked at the server
+- **Your own storage**: tokens read and written through your commands, such as `pass` or `secret-tool`
+- **Ready-made providers**: Google, Microsoft and Fastmail accounts to paste from this README
+- **Account check** proving the token storage reads and every endpoint answers
+- **REPL** unlocking the secret store once per session, and **MCP server** never handing a token to the agent
+- **JSON output** of every command, described by `ortie json-schema`
+- **TLS** via Rustls (`rustls-ring` default, `rustls-aws`) or Native TLS (`native-tls`), client certificates included
 
-> [!TIP]
-> Ortie is written in [Rust](https://www.rust-lang.org/) and uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional functionality. The default feature set is declared in [Cargo.toml](./Cargo.toml).
+## RFC coverage
 
-## Coverage
+Ortie follows the [OAuth 2.1](https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/) draft: no implicit nor password grant, PKCE S256 by default, `pkce = "plain"` or `false` for servers that need it.
 
-| RFC    | What is covered |
-|--------|-----------------|
+| RFC    | What is covered                                                                                              |
+|--------|--------------------------------------------------------------------------------------------------------------|
 | [6749] | The OAuth 2.0 framework: authorization code and client credentials grants, access token issuance and refresh |
-| [7009] | Token revocation: `token revoke` retires the refresh token, or the access token when none is stored |
-| [7523] | JWT client authentication on the client credentials grant: assertion signed with a private key, certificate `x5t` thumbprint (Microsoft certificate credentials) |
-| [7636] | PKCE: the S256 and plain code challenges protecting the authorization code in transit |
-| [8628] | Device authorization grant: device and user code request, token endpoint polling |
-| [8707] | Resource indicators: the `resource` parameter a server bound to one resource requires |
+| [7009] | Token revocation: the refresh token, or the access token when none is stored                                 |
+| [7523] | JWT client authentication: an assertion signed with a private key, carrying the certificate thumbprint       |
+| [7636] | PKCE: the S256 and plain code challenges protecting the authorization code in transit                        |
+| [8252] | Native apps: a loopback redirection naming no port gets a random one                                         |
+| [8628] | Device authorization grant: device and user code request, token endpoint polling                             |
+| [8707] | Resource indicators: the `resource` parameter a server bound to one resource requires                        |
+| [9700] | Security best current practice: the refreshed token stored at once, the previous refresh token kept if none rotates |
 
 [6749]: https://www.rfc-editor.org/rfc/rfc6749
 [7009]: https://www.rfc-editor.org/rfc/rfc7009
 [7523]: https://www.rfc-editor.org/rfc/rfc7523
 [7636]: https://www.rfc-editor.org/rfc/rfc7636
+[8252]: https://www.rfc-editor.org/rfc/rfc8252
 [8628]: https://www.rfc-editor.org/rfc/rfc8628
 [8707]: https://www.rfc-editor.org/rfc/rfc8707
-
-### OAuth 2.1
-
-Ortie follows the OAuth 2.1 draft and its security best current practice (RFC 9700):
-
-- Grants: no implicit nor resource owner password grant, both removed by OAuth 2.1.
-- PKCE: S256 on every authorization code flow, `pkce = "plain"` or `false` for servers that need it.
-- Redirects: sent as configured, a port-less loopback such as the default `http://127.0.0.1` getting a random port (RFC 8252).
-- Refresh rotation: a refreshed token is stored as soon as it arrives, the previous refresh token kept when none rotates.
+[9700]: https://www.rfc-editor.org/rfc/rfc9700
 
 ## Installation
 
-### Pre-built binary
+<details>
+  <summary>Pre-built binary</summary>
 
-Ortie can be installed with the installer:
+  Ortie can be installed with the installer:
 
-*As root:*
+  *As root:*
 
-```sh
-curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | sudo sh
-```
+  ```sh
+  curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | sudo sh
+  ```
 
-*As a regular user:*
+  *As a regular user:*
 
-```sh
-curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | PREFIX=~/.local sh
-```
+  ```sh
+  curl -sSL https://raw.githubusercontent.com/pimalaya/ortie/master/install.sh | PREFIX=~/.local sh
+  ```
 
-These commands install the latest binary from the GitHub [releases](https://github.com/pimalaya/ortie/releases) section.
+  These commands install the latest [release](https://github.com/pimalaya/ortie/releases), built with the default cargo features. For a build of `master`, check out the [releases](https://github.com/pimalaya/ortie/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section.
+</details>
 
-For a more up-to-date version than the latest release, check out the [releases](https://github.com/pimalaya/ortie/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. These pre-built binaries are built from the master branch.
+<details>
+  <summary>Cargo</summary>
 
-> [!NOTE]
-> Such binaries are built with the default cargo features. If you need specific features, please use another installation method.
+  ```sh
+  cargo install --locked ortie
+  ```
 
-### Cargo
+  For a build of `master`:
 
-```sh
-cargo install --locked ortie
-```
+  ```sh
+  cargo install --locked --git https://github.com/pimalaya/ortie.git
+  ```
+</details>
 
-For the git tip:
+<details>
+  <summary>Nix</summary>
 
-```sh
-cargo install --locked --git https://github.com/pimalaya/ortie.git
-```
+  ```sh
+  nix profile install github:pimalaya/ortie
+  ```
+</details>
 
-### Nix
+<details>
+  <summary>Sources</summary>
 
-If you have the [Flakes](https://wiki.nixos.org/wiki/Flakes) feature enabled:
+  Requires [Rust](https://www.rust-lang.org/tools/install) 1.89 or later:
 
-```sh
-nix profile install github:pimalaya/ortie
-```
+  ```sh
+  git clone https://github.com/pimalaya/ortie
+  cd ortie
+  cargo build --release --locked
+  ```
 
-Or run without installing:
-
-```sh
-nix run github:pimalaya/ortie
-```
-
-### Sources
-
-```sh
-git clone https://github.com/pimalaya/ortie
-cd ortie
-nix run
-```
+  The binary lands at target/release/ortie.
+</details>
 
 ## Configuration
 
-Ortie reads a TOML configuration you write, and never writes one. [config.sample.toml](./config.sample.toml) lists the fields every provider shares with their values, then one section per provider, yours to uncomment: Google, Microsoft Graph, Microsoft IMAP and SMTP, Fastmail, and a custom one for an application of your own. Releases and packages ship it as share/doc/ortie/config.sample.toml.
-
-Run without a configuration at a terminal, Ortie welcomes you with the commands copying the shipped sample in place, or downloading it when none ships, then the first command to run. Under `--json` or in a script, it fails naming the path it looked at and the sample.
-
-A configuration is loaded from every existing path among the following, each one deep-merged on top of the ones before, so $HOME/.ortierc overrides the others:
+Run without a configuration at a terminal, Ortie shows the commands copying the shipped sample in place, or downloading it; it never writes a configuration itself. A TOML configuration is loaded from every existing path among the following, each one deep-merged on top of the ones before:
 
 - $XDG_CONFIG_HOME/ortie/config.toml
 - $HOME/.config/ortie/config.toml
 - $HOME/.ortierc
 
-Override those paths with `-c <PATH>`. Repeat it to merge several files, such as `-c public.toml -c private.toml`: the first one is the base and the next ones are deep-merged on top. Each `-c` takes one path, never split, and no environment variable is read.
+Override the path with `-c <PATH>`, repeated to merge several files: the first one is the base and the next ones are deep-merged on top.
+
+> [!TIP]
+> See [config.sample.toml](./config.sample.toml) for every field of one example account and a section for an application of your own; for Google, Microsoft or Fastmail, paste the block of its subsection below and adapt the storage commands, written here with `pass`.
+
+### Google
+
+Pimalaya's Google application is not released yet, so fill `client-id` and `client-secret` with a Desktop client of your own.
+
+Its refresh tokens expire after 7 days while its consent screen stays in testing. The People API and CardDAV take distinct scopes, `auth/contacts` and `auth/carddav`.
+
+```toml
+[accounts.google]
+
+client-id = ""
+client-secret.raw = ""
+extras.access_type = "offline"
+endpoints.authorization = "https://accounts.google.com/o/oauth2/v2/auth"
+endpoints.token = "https://oauth2.googleapis.com/token"
+endpoints.revocation = "https://oauth2.googleapis.com/revoke"
+scopes = [
+  "https://mail.google.com/",
+  "https://www.googleapis.com/auth/calendar",
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  "https://www.googleapis.com/auth/contacts",
+  "https://www.googleapis.com/auth/carddav",
+]
+
+storage.read.command = "pass show ortie/google"
+storage.write.command = "pass insert -m -f ortie/google"
+```
+
+### Microsoft
+
+Entra issues a token for one resource, so Microsoft Graph and IMAP and SMTP each take an account of their own. Both run on Pimalaya's application, registered for `http://localhost` on any port, which refuses `127.0.0.1`.
+
+An organisation refusing it needs an application of its own, registering `http://localhost` under the "Mobile and desktop applications" platform.
+
+```toml
+[accounts.microsoft-graph]
+
+client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
+endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+endpoints.redirection = "http://localhost"
+scopes = [
+  "offline_access",
+  "https://graph.microsoft.com/Mail.ReadWrite",
+  "https://graph.microsoft.com/Mail.Send",
+  "https://graph.microsoft.com/Calendars.ReadWrite",
+  "https://graph.microsoft.com/Contacts.ReadWrite",
+]
+
+storage.read.command = "pass show ortie/microsoft-graph"
+storage.write.command = "pass insert -m -f ortie/microsoft-graph"
+```
+
+```toml
+[accounts.microsoft-imap-smtp]
+
+client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
+endpoints.authorization = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+endpoints.token = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+endpoints.redirection = "http://localhost"
+scopes = [
+  "offline_access",
+  "https://outlook.office.com/IMAP.AccessAsUser.All",
+  "https://outlook.office.com/SMTP.Send",
+]
+
+storage.read.command = "pass show ortie/microsoft-imap-smtp"
+storage.write.command = "pass insert -m -f ortie/microsoft-imap-smtp"
+```
+
+### Fastmail
+
+The account runs on Pimalaya's registered client and sends the JMAP session URL as `resources`, without which Fastmail refuses the request before consent. Its strict check refuses every authorization parameter but the standard ones and `login_hint`, so keep `extras` to that one.
+
+```toml
+[accounts.fastmail]
+
+client-id = "df6e41ae"
+endpoints.authorization = "https://api.fastmail.com/oauth/authorize"
+endpoints.token = "https://api.fastmail.com/oauth/refresh"
+endpoints.revocation = "https://api.fastmail.com/oauth/revoke"
+endpoints.redirection = "http://localhost/"
+resources = ["https://api.fastmail.com/jmap/session"]
+scopes = [
+  "offline_access",
+  "urn:ietf:params:oauth:scope:mail",
+  "urn:ietf:params:oauth:scope:contacts",
+  "urn:ietf:params:oauth:scope:calendars",
+]
+
+storage.read.command = "pass show ortie/fastmail"
+storage.write.command = "pass insert -m -f ortie/fastmail"
+```
 
 ## Usage
 
-Every command and flag is documented behind `--help`. A complete flow, from the sample to a token:
+Every command runs on the default account unless `-a` names another, prints JSON under `--json`, and details its flags, exit codes and output in its `--help`. When `auth get` cannot catch the redirection, it prints the `auth listen` or `auth resume` command finishing the flow.
 
 ```sh
-curl -sSL --create-dirs -o ~/.config/ortie/config.toml https://raw.githubusercontent.com/pimalaya/ortie/master/config.sample.toml
-$EDITOR ~/.config/ortie/config.toml # uncomment your provider, set the storage commands
-ortie auth get                      # sign in, then store the first token
-ortie account check                 # check the stored token reads and the endpoints answer
-ortie token show                    # print the access token, refreshed once expired
-ortie token inspect                 # print its type, scopes and expiry
-ortie token revoke                  # revoke it at the server
-```
-
-When the redirection cannot be caught, `auth get` prints the `auth listen` or `auth resume` command finishing the flow.
-
-Ortie exits 0 on success. Exit 1 is a failure, which `--json` prints on stdout as a failure object whose `code` names what to do next (`grant-invalid` to run `auth get` again, `client-invalid` to fix the client, `null` when none applies; `ortie json-schema` lists them all under `ortie-error`). Exit 2 is a command line Ortie refused, which `--json` prints as a failure object coded `usage-invalid`.
-
-### REPL
-
-`ortie repl` holds one account in memory and answers any command of the binary, one per line without the binary name, until `quit`, `exit` or EOF. The secret store is read once for the whole session.
-
-Interactively, it chains commands without unlocking the store each time:
-
-```
-$ ortie repl
-ortie> auth get
-ortie> token show
-ortie> token inspect
-ortie> exit
-```
-
-Non-interactively, a program spawns `ortie repl --json` and talks to it over stdio: it writes one command per line on stdin and reads one JSON value per line on stdout, failures included. A mail client can keep it running and write `token show` whenever it needs a fresh token.
-
-### MCP
-
-`ortie mcp` also talks over stdio, but speaks the [Model Context Protocol](https://modelcontextprotocol.io) so an agent can drive the grants. The agent starts one with `auth_get` and follows it with `auth_status`, while Ortie keeps the state, the PKCE verifier and the device code. No tool returns the token. Without a flag only the tools that read are listed: `auth_get`, `auth_resume` and `token_refresh` need `--allow-write`, and `token_revoke` needs `--allow-revoke` as well.
-
-MCP clients start the servers declared in their configuration, most of them under an `mcpServers` object:
-
-```json
-{
-  "mcpServers": {
-    "ortie": {
-      "command": "ortie",
-      "args": ["mcp", "--allow-write"]
-    }
-  }
-}
+ortie auth get
+ortie account check
+ortie token show
+ortie token inspect --json
+ortie token revoke
+ortie repl --json
+ortie mcp --allow-write
 ```
 
 ## Alternatives
 
-- [pizauth](https://github.com/ltratt/pizauth): daemon-oriented alternative
-- [oama](https://github.com/pdobsan/oama): Haskell alternative
-- [mutt_oauth2.py](https://gitlab.com/muttmua/mutt/-/blob/master/contrib/mutt_oauth2.py): Python script alternative
+- [pizauth](https://github.com/ltratt/pizauth): a daemon holding tokens in memory and refreshing them in the background
+- [oama](https://github.com/pdobsan/oama): a Haskell tool for mail clients, storing tokens in the keyring or GPG-encrypted files
+- [mutt_oauth2.py](https://gitlab.com/muttmua/mutt/-/blob/master/contrib/mutt_oauth2.py): Mutt's Python script, keeping one token in a GPG-encrypted file
 
 ## License
 
