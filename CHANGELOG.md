@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [3.0.0] - 2026-11-21
 
+Ortie 3 aligns on the other Pimalaya CLIs. The configuration wizard and the hooks are gone: provider accounts are pasted from the README, and the storage write command does what a hook did. Every `--json` output is camelCase, described by `json-schema`, and every failure carries a stable `code`. New commands revoke a token, catch a handed-off redirection, list, show and check accounts, and serve the token lifecycle to AI agents over MCP without ever handing out the token.
+
 MIGRATION.md lists what to act on when upgrading from 2.x, and from 1.x.
 
 ### Added
@@ -116,19 +118,6 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from 1.x.
 - Changed a token response to take `expires_in` as a numeric string too, and a missing `token_type` as `Bearer`.
 - Changed the client secret sent as HTTP Basic credentials to be form-encoded first (RFC 6749 section 2.3.1); a secret made of letters, digits and `*-._~` is unchanged on the wire.
 
-### Removed
-
-- **BREAKING**: Removed the `configure` command and its `wizard` alias, with the offer to run it a missing configuration made.
-
-  An account starts from config.sample.toml instead: without a configuration, a terminal gets a welcome with the commands creating one, copied from the shipped sample or downloaded, and a script or `--json` an error naming the path. The `ortie-configure` key leaves `json-schema`.
-
-- **BREAKING**: Removed dynamic client registration (RFC 7591), which only the wizard ran; the README's Fastmail account carries a registered client instead.
-- **BREAKING**: Removed the hooks (`hooks.on-issue` and `hooks.on-refresh`) and the `notify` cargo feature; a `hooks` table is refused as any unknown key.
-
-  `storage.write.command` receives the token JSON on every issue and refresh, so a command chained after it does what a success hook did.
-
-- **BREAKING**: Removed the `ORTIE_CONFIG` environment variable; pass `-c "$ORTIE_CONFIG"` instead.
-
 ### Fixed
 
 - **BREAKING**: Fixed several accounts marked `default = true` taking one at random: they are refused, naming them, with both ways of picking one.
@@ -168,6 +157,19 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from 1.x.
 - Fixed the REPL help describing its commands with internal notes.
 - Fixed install.sh saving an HTTP error page as the archive and letting `tar` fail on it: it stops on the error.
 - Fixed the Nix package calling the hidden `manuals` and `completions` aliases, shipping no JSON Schemas and linking a changelog page that does not exist.
+
+### Removed
+
+- **BREAKING**: Removed the `configure` command and its `wizard` alias, with the offer to run it a missing configuration made.
+
+  An account starts from config.sample.toml instead: without a configuration, a terminal gets a welcome with the commands creating one, copied from the shipped sample or downloaded, and a script or `--json` an error naming the path. The `ortie-configure` key leaves `json-schema`.
+
+- **BREAKING**: Removed dynamic client registration (RFC 7591), which only the wizard ran; the README's Fastmail account carries a registered client instead.
+- **BREAKING**: Removed the hooks (`hooks.on-issue` and `hooks.on-refresh`) and the `notify` cargo feature; a `hooks` table is refused as any unknown key.
+
+  `storage.write.command` receives the token JSON on every issue and refresh, so a command chained after it does what a success hook did.
+
+- **BREAKING**: Removed the `ORTIE_CONFIG` environment variable; pass `-c "$ORTIE_CONFIG"` instead.
 
 ## [2.3.0] - 2026-10-02
 
