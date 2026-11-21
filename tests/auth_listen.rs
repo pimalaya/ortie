@@ -557,22 +557,25 @@ fn without_the_handoff_flag_an_open_stdin_is_left_alone() {
     assert!(std::fs::read_to_string(token).unwrap().contains("at-test"));
 }
 
-/// A listen whose configuration gives no redirection to bind, or one it
-/// cannot bind, is a configuration fault, not a command line one: exit
-/// 1, coded `endpoint-missing` or `redirection-unsupported`.
+/// A listen given no redirection to bind exits 2 coded `usage-invalid`,
+/// the redirect URI `auth get` printed being the fix; one whose
+/// configured redirection cannot be bound is a configuration fault: exit
+/// 1, coded `redirection-unsupported`.
 #[test]
-fn a_redirection_the_config_lacks_or_cannot_listen_on_exits_1_coded() {
+fn a_redirection_the_config_lacks_or_cannot_listen_on_is_refused() {
     let dir = TempDir::new().unwrap();
     let (addr, bodies) = start_mock();
 
-    let cases: &[(&str, &str, &str)] = &[
+    let cases: &[(&str, i32, &str, &str)] = &[
         (
             "",
-            "endpoint-missing",
-            "Missing --redirect-uri, or endpoints.redirection in the account config",
+            2,
+            "usage-invalid",
+            "Missing --redirect-uri, pass the one auth get printed",
         ),
         (
             r#"endpoints.redirection = "https://127.0.0.1:1/cb""#,
+            1,
             "redirection-unsupported",
             "Cannot listen on endpoints.redirection https://127.0.0.1:1/cb, not an \
              http URI on a loopback host, run auth resume with the redirected URI \
@@ -580,6 +583,7 @@ fn a_redirection_the_config_lacks_or_cannot_listen_on_exits_1_coded() {
         ),
         (
             r#"endpoints.redirection = "org.example.app:/cb""#,
+            1,
             "redirection-unsupported",
             "Cannot listen on endpoints.redirection org.example.app:/cb, not an \
              http URI on a loopback host, run auth resume with the redirected URI \
@@ -587,11 +591,11 @@ fn a_redirection_the_config_lacks_or_cannot_listen_on_exits_1_coded() {
         ),
     ];
 
-    for (extra, code, message) in cases {
+    for (extra, status, code, message) in cases {
         let (config, _) = write_code_config(dir.path(), addr, extra);
         let output = ortie(&config, &["--json", "auth", "listen", "--state=abc"]);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert_eq!(output.status.code(), Some(1), "{extra}: {stdout}");
+        assert_eq!(output.status.code(), Some(*status), "{extra}: {stdout}");
 
         let failure: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(failure["code"], *code, "{extra}: {failure}");

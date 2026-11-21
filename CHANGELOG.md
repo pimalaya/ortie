@@ -18,7 +18,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from 1.x.
 
 - Added `auth listen`, catching the redirection of a flow a non-interactive or `--json` `auth get` handed off, then completing it as `auth resume` does.
 
-  The `auth get` handoff object gains `redirectUri`. With neither `--redirect-uri` nor `endpoints.redirection`, `auth listen` fails coded `endpoint-missing`, and on an `endpoints.redirection` that is not an http URI on a loopback host coded `redirection-unsupported`, both exit 1.
+  The `auth get` handoff object gains `redirectUri`. With neither `--redirect-uri` nor `endpoints.redirection`, `auth listen` exits 2 coded `usage-invalid`, pointing at the redirect URI `auth get` printed; on an `endpoints.redirection` that is not an http URI on a loopback host it exits 1 coded `redirection-unsupported`.
 
 - Added `--handoff <PATH>` to `auth listen` and `auth resume`, reading the object `auth get --json` prints from a file, or from stdin for `-`, in place of `--state` and `--pkce`, whose values other local users can read on the command line.
 
@@ -72,7 +72,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from 1.x.
 
 - **BREAKING**: Changed the refusals Ortie makes after parsing the command line to exit 2 coded `usage-invalid`, as clap's own refusals do, instead of exit 1 with no code.
 
-  This covers `auth listen` on a device or client credentials account or on a `--redirect-uri` that is not an http URI on a loopback host (the same fault in `endpoints.redirection` exits 1 coded `redirection-unsupported`), `auth resume` on a client credentials account, `--state`, `--pkce` or `--redirect-uri` on a device account, an empty device code, and a redirected URI that does not parse.
+  This covers `auth listen` on a device or client credentials account or on a `--redirect-uri` that is not an http URI on a loopback host (the same fault in `endpoints.redirection` exits 1 coded `redirection-unsupported`) or given no redirection at all, `auth resume` on a client credentials account, `--state`, `--pkce` or `--redirect-uri` on a device account, an empty device code, and a redirected URI that does not parse.
 
 - **BREAKING**: Changed `ortie repl` to print its errors on stdout, interactive or piped, as `ortie-error` objects under `--json`.
 

@@ -55,7 +55,7 @@ v3 aligns Ortie on the other Pimalaya CLIs. A v2 configuration loads as it is un
 - **Storing a token prints a receipt**, `{"account", "expiresIn", "withRefreshToken"}`, instead of `{"message"}`: check the exit status rather than the sentence.
 - **The `auth get` handoff drops `interactive`**: it was always `false` under `--json` or a pipe.
 - **A failure carries a stable `code`** under `--json`: match on it rather than on the wording of `error`. An OAuth refusal names its code as the server spelled it, `(code invalid_grant)`.
-- **A refused command line exits 2 coded `usage-invalid`**, clap's refusals and the ones Ortie makes after parsing alike, printed on stdout under `--json`. A fault of the configuration exits 1 with its own code, such as `endpoint-missing` or `redirection-unsupported` for an `auth listen` with no `endpoints.redirection` it can bind.
+- **A refused command line exits 2 coded `usage-invalid`**, clap's refusals and the ones Ortie makes after parsing alike, printed on stdout under `--json`. A fault of the configuration exits 1 with its own code, such as `redirection-unsupported` for an `auth listen` whose `endpoints.redirection` it cannot bind.
 - **`ortie repl` prints its errors on stdout**, as `ortie-error` objects under `--json`.
 - **The text output changed**: aligned `Label: value` fields, durations such as `2d 4h`, a newline after `token show`. A script parsing text moves to `--json`.
 

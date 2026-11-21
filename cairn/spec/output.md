@@ -94,7 +94,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `state-mismatch` | the authorization redirect carries no `state`, or another than the request sent |
 | `token-missing` | the account stores no token (its read command prints nothing, exiting 0, or non-zero without a word), or no refresh token where a refresh needs one; run `auth get` |
 | `token-expired` | the `token` row of `account check`: the stored token expired and holds no refresh token, on a grant other than the client credentials ones, which run again by themselves; run `auth get` |
-| `endpoint-missing` | the account configures no endpoint the grant needs (authorization, token, device authorization, revocation), or no redirection an `auth listen` without `--redirect-uri` binds; exit 1 |
+| `endpoint-missing` | the account configures no endpoint the grant needs (authorization, token, device authorization, revocation); exit 1 |
 | `redirection-unsupported` | the `endpoints.redirection` an `auth listen` without `--redirect-uri` would bind is not an http URI on a loopback host; exit 1, `auth resume` with the redirected URI finishing the flow |
 | `account-missing` | no account has the name `-a` gave, `default` included |
 | `account-default-missing` | no account is marked `default = true`, and `-a` named none |

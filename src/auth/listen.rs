@@ -39,10 +39,10 @@ use crate::{
 /// Prints the receipt {account, expiresIn, withRefreshToken} and exits 0.
 /// Exits 2 coded usage-invalid on a command line the account refuses (a
 /// device or client credentials account, a --redirect-uri that is not an
-/// http loopback URI), 1 coded endpoint-missing when neither
-/// --redirect-uri nor endpoints.redirection gives a redirection, 1 coded
-/// redirection-unsupported when endpoints.redirection is not an http
-/// loopback URI, and 1 on any other failure.
+/// http loopback URI, no redirection given by --redirect-uri, --handoff
+/// or endpoints.redirection), 1 coded redirection-unsupported when
+/// endpoints.redirection is not an http loopback URI, and 1 on any other
+/// failure.
 #[derive(Debug, Parser)]
 pub struct AuthListenCommand {
     /// The state generated during the authorization flow initiation.
@@ -109,9 +109,8 @@ impl AuthListenCommand {
             }
             (None, Some(uri)) => uri.clone(),
             (None, None) => {
-                let message =
-                    "Missing --redirect-uri, or endpoints.redirection in the account config";
-                return Err(error::coded(ErrorCode::EndpointMissing, message));
+                let message = "Missing --redirect-uri, pass the one auth get printed";
+                return Err(error::usage(message));
             }
         };
 
