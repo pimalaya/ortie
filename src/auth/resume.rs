@@ -43,6 +43,11 @@ use crate::{
 ///
 /// On the authorization-code grant, --handoff reads the object `auth get
 /// --json` printed, from a file or stdin, in place of --state and --pkce.
+///
+/// Prints the receipt {account, expiresIn, withRefreshToken} and exits 0.
+/// Exits 2 coded usage-invalid on a command line the account refuses (a
+/// client credentials account, a flag its grant has no use for, an empty
+/// device code, a URI that does not parse), and 1 on any other failure.
 #[derive(Debug, Parser)]
 pub struct AuthResumeCommand {
     /// Redirected URI, or device code on the device grant.

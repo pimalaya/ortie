@@ -107,6 +107,7 @@ fn auth_get_json_then_resume_stores_token() {
     assert!(get.status.success(), "{get:?}");
     let v: Value = serde_json::from_slice(&get.stdout).unwrap();
     assert_eq!(v["deviceCode"], "dc-test");
+    assert!(v.get("interactive").is_none(), "{v}");
     assert_eq!(polls.load(Ordering::SeqCst), 0);
 
     let resume = ortie(&config, &["auth", "resume", "dc-test"]);

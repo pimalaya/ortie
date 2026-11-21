@@ -77,6 +77,7 @@ fn a_refresh_another_process_won_takes_the_token_it_stored() {
     let refresh = ortie(&config, &["--json", "token", "refresh"]);
     let stdout = String::from_utf8_lossy(&refresh.stdout);
     assert_eq!(refresh.status.code(), Some(0), "{stdout}");
+    assert!(stdout.starts_with(r#"{"account":"a","#), "{stdout}");
     assert_eq!(stored(&token)["access_token"], "at-rotated");
 }
 

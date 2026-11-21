@@ -17,7 +17,7 @@ An account SHALL declare its OAuth 2.0 grant as a flat `grant` field, one of `au
 - THEN the grant is `authorization-code`
 
 ### Requirement: JWT assertion credentials
-A `client-credentials-jwt` account SHALL declare `client-key`, the path to a PKCS#8 or PKCS#1 PEM private key, and MAY declare `client-certificate`, the path to a PEM or DER certificate whose SHA-1 thumbprint rides as the assertion `x5t` header (required by Microsoft). Every mint SHALL produce a fresh assertion: key re-read from disk, `x5t` recomputed, new `iat` and `exp` on a short validity, unique `jti`, `iss` and `sub` both the client id, `aud` the token endpoint. Assertions are never stored, and `client_secret` never rides along with an assertion.
+A `client-credentials-jwt` account SHALL declare `client-key`, the path to a PKCS#8 or PKCS#1 PEM private key, and MAY declare `client-cert` (`client-certificate` read as its alias), the path to a PEM or DER certificate whose SHA-1 thumbprint rides as the assertion `x5t` header (required by Microsoft). Every mint SHALL produce a fresh assertion: key re-read from disk, `x5t` recomputed, new `iat` and `exp` on a short validity, unique `jti`, `iss` and `sub` both the client id, `aud` the token endpoint. Assertions are never stored, and `client_secret` never rides along with an assertion.
 
 ### Requirement: Late-bound endpoints
 All endpoints (`endpoints.authorization`, `endpoints.token`, `endpoints.revocation`, `endpoints.redirection`) SHALL be optional at parse time. Each command checks only the endpoints it needs and fails with an error naming the missing field: `token show` needs none until it refreshes, `token refresh` needs `token`, `token revoke` needs `revocation`, `auth get` needs the configured grant's endpoints.

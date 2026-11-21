@@ -77,6 +77,13 @@ const SHUTDOWN_POLL: Duration = Duration::from_millis(100);
 /// Interactive shells complete the flow, while non-interactive ones and
 /// `--json` hand off to `auth listen` or `auth resume`. The client
 /// credentials kinds complete headlessly in one shot.
+///
+/// A handoff prints the authorization request {authorizationUri, state,
+/// pkceCodeVerifier, redirectUri} or the device request {deviceCode,
+/// userCode, verificationUri, verificationUriComplete, expiresIn,
+/// interval}; a token issued in-process prints the receipt {account,
+/// expiresIn, withRefreshToken}. Exits 0, 130 when a signal interrupts an
+/// interactive wait, or 1 on a failure.
 #[derive(Debug, Parser)]
 pub struct AuthGetCommand;
 
@@ -410,7 +417,10 @@ pub struct AuthorizationUri<'a> {
     /// exchange repeats.
     #[schemars(with = "String")]
     redirect_uri: &'a Url,
-    /// Whether the flow was initiated from an interactive shell.
+    /// Whether the flow was initiated from an interactive shell, which
+    /// only words the text form.
+    #[serde(skip)]
+    #[schemars(skip)]
     interactive: bool,
 }
 
@@ -741,7 +751,7 @@ pub(crate) fn report_token_issued(
     res: &Oauth20AccessTokenSuccessParams,
 ) -> Result<TokenIssuedOutput> {
     account.write_to_storage(res.clone())?;
-    Ok(TokenIssuedOutput::issued(res))
+    Ok(TokenIssuedOutput::issued(&account.name, res))
 }
 
 /// Printable device authorization response, carrying what a resume
@@ -765,7 +775,10 @@ pub struct DeviceAuthorization {
     /// The delay between two token endpoint polls, in seconds, kept
     /// between 1 and 60.
     interval: u64,
-    /// Whether the flow was initiated from an interactive shell.
+    /// Whether the flow was initiated from an interactive shell, which
+    /// only words the text form.
+    #[serde(skip)]
+    #[schemars(skip)]
     interactive: bool,
 }
 

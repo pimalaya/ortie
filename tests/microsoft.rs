@@ -113,7 +113,7 @@ mod credentialed {
     /// naming `certificate`.
     fn write_jwt_account(dir: &Path, key: &Path, certificate: &Path) -> (PathBuf, PathBuf) {
         let credential = format!(
-            "client-key = \"{}\"\nclient-certificate = \"{}\"",
+            "client-key = \"{}\"\nclient-cert = \"{}\"",
             key.display(),
             certificate.display()
         );

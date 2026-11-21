@@ -1,8 +1,9 @@
 //! # Issued token receipt
 //!
 //! What a grant or a refresh answers once the new access token is stored:
-//! when it expires and whether a refresh token came with it. The token
-//! itself never appears, `token show` being the command that prints it.
+//! the account it was stored for, when it expires and whether a refresh
+//! token came with it. The token itself never appears, `token show` being
+//! the command that prints it.
 
 use std::fmt;
 
@@ -14,11 +15,13 @@ use io_oauth::rfc6749::issue_access_token::Oauth20AccessTokenSuccessParams;
 
 /// The access token a grant or a refresh just stored.
 ///
-/// Printed by `token refresh`, `auth resume`, and `auth get` when its grant
-/// issues the token in-process.
+/// Printed by `token refresh`, `auth listen`, `auth resume`, and `auth get`
+/// when its grant issues the token in-process.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenIssuedOutput {
+    /// The name of the account the token was stored for.
+    pub account: String,
     /// The token's lifetime in seconds as the server stated it, `null`
     /// when it stated none.
     pub expires_in: Option<u64>,
@@ -32,20 +35,21 @@ pub struct TokenIssuedOutput {
 }
 
 impl TokenIssuedOutput {
-    /// The receipt of a token a grant issued.
-    pub fn issued(res: &Oauth20AccessTokenSuccessParams) -> Self {
+    /// The receipt of a token a grant issued for `account`.
+    pub fn issued(account: &str, res: &Oauth20AccessTokenSuccessParams) -> Self {
         Self {
+            account: account.to_owned(),
             expires_in: res.expires_in,
             with_refresh_token: res.refresh_token.is_some(),
             refreshed: false,
         }
     }
 
-    /// The receipt of a token a refresh issued.
-    pub fn refreshed(res: &Oauth20AccessTokenSuccessParams) -> Self {
+    /// The receipt of a token a refresh issued for `account`.
+    pub fn refreshed(account: &str, res: &Oauth20AccessTokenSuccessParams) -> Self {
         Self {
             refreshed: true,
-            ..Self::issued(res)
+            ..Self::issued(account, res)
         }
     }
 }
@@ -57,7 +61,8 @@ impl fmt::Display for TokenIssuedOutput {
         } else {
             "issued"
         };
-        write!(f, "Access token successfully {verb}")?;
+        let account = &self.account;
+        write!(f, "Access token of account {account} successfully {verb}")?;
 
         match self.expires_in {
             None => writeln!(f, " (unknown expiry)"),

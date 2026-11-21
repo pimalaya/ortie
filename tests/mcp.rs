@@ -368,6 +368,7 @@ fn a_code_flow_is_captured_exchanged_and_stored() {
     let status = server.settle();
     assert_eq!(status["status"], "issued", "{status}");
     assert_eq!(status["receipt"]["withRefreshToken"], true, "{status}");
+    assert_eq!(status["receipt"]["account"], "mcp", "{status}");
 
     let inspect = server.call("token_inspect", json!({}))["structuredContent"].clone();
     assert_eq!(inspect["tokenType"], "Bearer", "{inspect}");

@@ -202,7 +202,7 @@ fn jwt_kind_mints_a_fresh_assertion_per_reacquisition() {
         dir.path(),
         addr,
         &format!(
-            "grant = \"client-credentials-jwt\"\nclient-key = \"{}\"\nclient-certificate = \"{}\"",
+            "grant = \"client-credentials-jwt\"\nclient-key = \"{}\"\nclient-cert = \"{}\"",
             key.display(),
             cert.display()
         ),
@@ -210,6 +210,11 @@ fn jwt_kind_mints_a_fresh_assertion_per_reacquisition() {
 
     let refresh1 = ortie(&config, &["token", "refresh"]);
     assert!(refresh1.status.success(), "{refresh1:?}");
+    let stdout = String::from_utf8_lossy(&refresh1.stdout);
+    assert!(
+        stdout.starts_with("Access token of account cc successfully refreshed ("),
+        "{stdout}"
+    );
     let refresh2 = ortie(&config, &["token", "refresh"]);
     assert!(refresh2.status.success(), "{refresh2:?}");
 
@@ -300,7 +305,7 @@ fn invalid_client_on_the_jwt_kind_hints_certificate_renewal() {
         dir.path(),
         addr,
         &format!(
-            "grant = \"client-credentials-jwt\"\nclient-key = \"{}\"\nclient-certificate = \"{}\"",
+            "grant = \"client-credentials-jwt\"\nclient-key = \"{}\"\nclient-cert = \"{}\"",
             key.display(),
             cert.display()
         ),

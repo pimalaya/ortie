@@ -27,12 +27,12 @@ Every command printing a value SHALL carry one key: `ortie-account-list`, `ortie
 A command emitting more than one payload shape SHALL print them through a single type describing the alternatives, told apart by their keys, so its key maps to one schema. `auth get` emits the authorization-code handoff, the device-authorization handoff, or the receipt of a token its grant issued in-process, and all three are variants of that one type.
 
 ### Requirement: A stored token answers a receipt
-A command storing a new access token (`token refresh`, `auth resume`, and `auth get` when its grant issues the token in-process) SHALL print `TokenIssuedOutput`, `{expiresIn, withRefreshToken}`: the token's lifetime in seconds as the server stated it, `null` when it stated none, and whether a refresh token came with it. The token itself SHALL NOT appear. Its text form SHALL read "Access token successfully issued" or "refreshed", with the expiry.
+A command storing a new access token (`token refresh`, `auth listen`, `auth resume`, and `auth get` when its grant issues the token in-process) SHALL print `TokenIssuedOutput`, `{account, expiresIn, withRefreshToken}`: the name of the account the token was stored for, first, as a write names its target; the token's lifetime in seconds as the server stated it, `null` when it stated none; and whether a refresh token came with it. The token itself SHALL NOT appear. Its text form SHALL read "Access token of account <name> successfully issued" or "refreshed", with the expiry.
 
 #### Scenario: A script reads when a refreshed token expires
-- GIVEN an account holding a refresh token
+- GIVEN an account `example` holding a refresh token
 - WHEN `ortie token refresh --json` runs
-- THEN it prints `{"expiresIn": 3599, "withRefreshToken": true}` for a token the server issued for 3599 seconds with a new refresh token
+- THEN it prints `{"account": "example", "expiresIn": 3599, "withRefreshToken": true}` for a token the server issued for 3599 seconds with a new refresh token
 
 ### Requirement: A key names a command that exists
 A test SHALL run pimalaya-cli's registry check over the command tree: every runnable command described, bare `ortie` and `ortie repl` aside, and every key but `ortie-error` naming a command, so renaming or removing a subcommand cannot leave a schema behind describing an invocation nobody can type, nor a new one print an undescribed value.
@@ -83,7 +83,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 
 | Code | Raised when |
 |---|---|
-| `usage-invalid` | the command line, a REPL line or an MCP tool call's arguments do not match the grammar, raised by pimalaya-cli; or Ortie refuses the line after parsing it (a command or a flag the account's grant has no use for, `--handoff` among them, an `auth listen` with no loopback redirection to bind, an empty device code, a redirected URI that does not parse), exiting 2 as well, and the MCP `auth_resume` refusing such a URI as a tool error; nothing ran |
+| `usage-invalid` | the command line, a REPL line or an MCP tool call's arguments do not match the grammar, raised by pimalaya-cli; or Ortie refuses the line after parsing it (a command or a flag the account's grant has no use for, `--handoff` among them, an `auth listen` whose `--redirect-uri` or handoff `redirectUri` is no loopback redirection to bind, an empty device code, a redirected URI that does not parse), exiting 2 as well, and the MCP `auth_resume` refusing such a URI as a tool error; nothing ran |
 | `permission-denied` | the grant was refused to the user or the client: `access_denied` at the authorization redirect or in the device flow, `authorization_declined` (Microsoft Entra), a bare HTTP 403 |
 | `rate-limited` | a bare HTTP 429; Ortie retries nothing |
 | `grant-invalid` | `invalid_grant`: the authorization code, the refresh token or the device code was refused, has expired or was revoked; run `auth get` again |
@@ -94,7 +94,8 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `state-mismatch` | the authorization redirect carries no `state`, or another than the request sent |
 | `token-missing` | the account stores no token (its read command prints nothing, exiting 0, or non-zero without a word), or no refresh token where a refresh needs one; run `auth get` |
 | `token-expired` | the `token` row of `account check`: the stored token expired and holds no refresh token, on a grant other than the client credentials ones, which run again by themselves; run `auth get` |
-| `endpoint-missing` | the account configures no endpoint the grant needs (authorization, token, device authorization, revocation) |
+| `endpoint-missing` | the account configures no endpoint the grant needs (authorization, token, device authorization, revocation), or no redirection an `auth listen` without `--redirect-uri` binds; exit 1 |
+| `redirection-unsupported` | the `endpoints.redirection` an `auth listen` without `--redirect-uri` would bind is not an http URI on a loopback host; exit 1, `auth resume` with the redirected URI finishing the flow |
 | `account-missing` | no account has the name `-a` gave, `default` included |
 | `account-default-missing` | no account is marked `default = true`, and `-a` named none |
 | `account-default-several` | several accounts are marked `default = true`, and `-a` named none |

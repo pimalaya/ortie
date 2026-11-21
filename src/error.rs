@@ -79,6 +79,10 @@ pub enum ErrorCode {
     /// The account configures no endpoint the grant needs: token, device
     /// authorization, authorization or revocation.
     EndpointMissing,
+    /// The account's `endpoints.redirection` is not an http URI on a
+    /// loopback host, which `auth listen` cannot bind; `auth resume` with
+    /// the redirected URI finishes the flow.
+    RedirectionUnsupported,
     /// No account has the name `-a` gave.
     AccountMissing,
     /// No account is marked default, and `-a` named none.

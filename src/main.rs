@@ -77,7 +77,7 @@
 //! "client-credentials-jwt"` (RFC 7523 section 2.2).
 //!
 //! The latter signs a JWT assertion with `client-key` and carries the
-//! `x5t` thumbprint of `client-certificate`. Neither issues a refresh
+//! `x5t` thumbprint of `client-cert`. Neither issues a refresh
 //! token, so auto-refresh silently re-runs the grant instead of
 //! exchanging one.
 //!

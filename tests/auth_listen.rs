@@ -121,6 +121,7 @@ fn a_handed_off_flow_carries_its_redirect_uri() {
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
     let uri = Url::parse(json["authorizationUri"].as_str().unwrap()).unwrap();
     assert_eq!(json["redirectUri"], query(&uri, "redirect_uri"), "{json}");
+    assert!(json.get("interactive").is_none(), "{json}");
 
     let output = ortie(&config, &["auth", "get"]);
     assert!(output.status.success(), "{output:?}");
@@ -198,6 +199,8 @@ fn a_handed_off_flow_is_listened_for_and_stored() {
     let output = listen.wait_with_output().unwrap();
     assert!(output.status.success(), "{output:?}");
 
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.starts_with(r#"{"account":"code","#), "{stdout}");
     let receipt: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(receipt["expiresIn"], 3600, "{receipt}");
 
@@ -242,7 +245,7 @@ fn an_https_loopback_redirect_is_not_listened_for() {
     let (config, _) = write_code_config(dir.path(), addr, redirection);
 
     let output = ortie(&config, &["auth", "listen"]);
-    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("not an http URI"), "{stdout}");
 
@@ -349,12 +352,17 @@ fn a_handoff_on_stdin_is_resumed() {
     let failure: Value = serde_json::from_slice(&refused.stdout).unwrap();
     assert_eq!(failure["code"], "state-mismatch", "{failure}");
 
+    let mut older = handoff.clone();
+    older["interactive"] = Value::Bool(false);
     let redirected = format!("{redirect_uri}?code=the-code&state={state}");
     let flow = dir.path().join("flow.json");
-    std::fs::write(&flow, &output.stdout).unwrap();
+    std::fs::write(&flow, older.to_string()).unwrap();
     let flow = flow.to_str().unwrap();
     let output = ortie(&config, &["auth", "resume", "--handoff", flow, &redirected]);
     assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let issued = "Access token of account code successfully issued (expires in 1h 1s)\n";
+    assert_eq!(stdout, issued);
 
     let bodies = bodies.lock().unwrap();
     assert_eq!(bodies.len(), 1, "{bodies:?}");
@@ -549,22 +557,57 @@ fn without_the_handoff_flag_an_open_stdin_is_left_alone() {
     assert!(std::fs::read_to_string(token).unwrap().contains("at-test"));
 }
 
-/// A listen with no redirection to bind, and a handoff on an account
-/// whose grant takes none, are command lines Ortie refuses after clap
-/// parsed them: coded `usage-invalid`, exit 2, as clap's own refusals.
+/// A listen whose configuration gives no redirection to bind, or one it
+/// cannot bind, is a configuration fault, not a command line one: exit
+/// 1, coded `endpoint-missing` or `redirection-unsupported`.
+#[test]
+fn a_redirection_the_config_lacks_or_cannot_listen_on_exits_1_coded() {
+    let dir = TempDir::new().unwrap();
+    let (addr, bodies) = start_mock();
+
+    let cases: &[(&str, &str, &str)] = &[
+        (
+            "",
+            "endpoint-missing",
+            "Missing --redirect-uri, or endpoints.redirection in the account config",
+        ),
+        (
+            r#"endpoints.redirection = "https://127.0.0.1:1/cb""#,
+            "redirection-unsupported",
+            "Cannot listen on endpoints.redirection https://127.0.0.1:1/cb, not an \
+             http URI on a loopback host, run auth resume with the redirected URI \
+             instead",
+        ),
+        (
+            r#"endpoints.redirection = "org.example.app:/cb""#,
+            "redirection-unsupported",
+            "Cannot listen on endpoints.redirection org.example.app:/cb, not an \
+             http URI on a loopback host, run auth resume with the redirected URI \
+             instead",
+        ),
+    ];
+
+    for (extra, code, message) in cases {
+        let (config, _) = write_code_config(dir.path(), addr, extra);
+        let output = ortie(&config, &["--json", "auth", "listen", "--state=abc"]);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(output.status.code(), Some(1), "{extra}: {stdout}");
+
+        let failure: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(failure["code"], *code, "{extra}: {failure}");
+        assert_eq!(failure["error"], *message, "{extra}: {failure}");
+    }
+
+    assert!(bodies.lock().unwrap().is_empty());
+}
+
+/// A handoff on an account whose grant takes none is a command line
+/// Ortie refuses after clap parsed it: coded `usage-invalid`, exit 2, as
+/// clap's own refusals.
 #[test]
 fn a_command_line_refused_after_parsing_exits_2_coded() {
     let dir = TempDir::new().unwrap();
     let (addr, _) = start_mock();
-
-    let (config, _) = write_code_config(dir.path(), addr, "");
-    let output = ortie(&config, &["--json", "auth", "listen", "--state=abc"]);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert_eq!(output.status.code(), Some(2), "{stdout}");
-    let failure: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(failure["code"], "usage-invalid", "{failure}");
-    let message = "Missing --redirect-uri, or endpoints.redirection in the account config";
-    assert_eq!(failure["error"], message, "{failure}");
 
     let (config, _) = write_code_config(dir.path(), addr, r#"grant = "device""#);
     let args = ["--json", "auth", "resume", "--handoff", "flow.json", "CODE"];

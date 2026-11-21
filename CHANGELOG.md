@@ -16,7 +16,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 - Added `auth listen`, catching the redirection of a flow a non-interactive or `--json` `auth get` handed off, then completing it as `auth resume` does.
 
-  The `auth get` handoff object gains `redirectUri`. With neither `--redirect-uri` nor `endpoints.redirection`, `auth listen` is refused as a command line, coded `usage-invalid`, exit 2.
+  The `auth get` handoff object gains `redirectUri`. With neither `--redirect-uri` nor `endpoints.redirection`, `auth listen` fails coded `endpoint-missing`, and on an `endpoints.redirection` that is not an http URI on a loopback host coded `redirection-unsupported`, both exit 1.
 
 - Added `--handoff <PATH>` to `auth listen` and `auth resume`, reading the object `auth get --json` prints from a file, or from stdin for `-`, in place of `--state` and `--pkce`, whose values other local users can read on the command line.
 
@@ -48,7 +48,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
   The codes are `permission-denied` (`access_denied`, `authorization_declined`, a bare 403), `rate-limited` (a bare 429), `grant-invalid` (`invalid_grant`), `client-invalid` (`invalid_client`), `client-unauthorized` (`unauthorized_client`) and `scope-invalid` (`invalid_scope`).
 
-  Then `device-code-expired`, `state-mismatch`, `token-missing`, `token-expired`, `endpoint-missing`, `account-missing` (no account of the name `-a` gave), `account-default-missing`, `account-default-several`, `stdin-taken` and `usage-invalid`.
+  Then `device-code-expired`, `state-mismatch`, `token-missing`, `token-expired`, `endpoint-missing`, `redirection-unsupported`, `account-missing` (no account of the name `-a` gave), `account-default-missing`, `account-default-several`, `stdin-taken` and `usage-invalid`.
 
   The `ortie-error` schema, the MCP failures and the `error` answers of `auth_status` carry the code too.
 
@@ -57,7 +57,8 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 ### Changed
 
 - **BREAKING**: Changed `--json` keys to camelCase; the configuration keeps its kebab-case keys.
-- **BREAKING**: Changed `token refresh`, `auth resume` and a token-issuing `auth get` to print the receipt `{expiresIn, withRefreshToken}` under `--json`, instead of a `{"message": …}` sentence.
+- **BREAKING**: Changed `token refresh`, `auth resume` and a token-issuing `auth get` to print the receipt `{account, expiresIn, withRefreshToken}` under `--json`, instead of a `{"message": …}` sentence; the text names the account too, `Access token of account example successfully refreshed (expires in 1h)`.
+- **BREAKING**: Changed the `auth get` handoff objects to drop `interactive`, which only told whether stdout was a terminal; a handoff file carrying it is still read.
 - **BREAKING**: Changed `token inspect --json` to print `issuedAt` as an RFC 3339 instant in UTC, and `expiresAt`, the instant the token expires, in place of `expires_in`, the lifetime granted at issue.
 
   `expiresAt` lies in the past once the token expired, and is `null` when the store holds no issue time, the text then reading `Expires: unknown` where it read `in <lifetime>`.
@@ -69,7 +70,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
 - **BREAKING**: Changed the refusals Ortie makes after parsing the command line to exit 2 coded `usage-invalid`, as clap's own refusals do, instead of exit 1 with no code.
 
-  This covers `auth listen` on a device or client credentials account or on a redirection that is not an http URI on a loopback host, `auth resume` on a client credentials account, `--state`, `--pkce` or `--redirect-uri` on a device account, an empty device code, and a redirected URI that does not parse.
+  This covers `auth listen` on a device or client credentials account or on a `--redirect-uri` that is not an http URI on a loopback host (the same fault in `endpoints.redirection` exits 1 coded `redirection-unsupported`), `auth resume` on a client credentials account, `--state`, `--pkce` or `--redirect-uri` on a device account, an empty device code, and a redirected URI that does not parse.
 
 - **BREAKING**: Changed `ortie repl` to print its errors on stdout, interactive or piped, as `ortie-error` objects under `--json`.
 
@@ -89,6 +90,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 - **BREAKING**: Changed `-a default` to take the account named `default`, where it took the account marked `default = true`; omit `-a` to take that one.
 - **BREAKING**: Changed `tls` to the table every Pimalaya CLI reads, `tls.provider` (`rustls`, `native-tls`) and `tls.rustls.crypto` (`ring`, `aws`); the string `tls = "rustls-ring"` is refused as a value of the wrong type.
 - **BREAKING**: Changed every configured URL to take an ASCII host only, an internationalised one written in Punycode (`https://xn--bcher-kva.example` for `bücher.example`).
+- Changed the `client-certificate` account field to `client-cert`, matching `tls.cert` and `tls.client.cert`; `client-certificate` is still read.
 - Changed `token show` to end the token with a newline, like every text output; `$(ortie token show)` and Pimalaya's secret commands strip it.
 - Changed the text output of `token inspect` and `auth get` to aligned `Label: value` fields, one scope per line, and the links and commands to copy to a two-space indent.
 - Changed piped `--json` output to print one value per line.

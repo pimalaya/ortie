@@ -22,7 +22,7 @@ use crate::{
         resume::{AuthResumeCommand, PkceCodeVerifierParser, state_parser, uri_parser},
     },
     config::GrantConfig,
-    error,
+    error::{self, ErrorCode},
 };
 
 /// Wait for the redirection of a handed-off flow, then complete it.
@@ -35,6 +35,14 @@ use crate::{
 ///
 /// Authorization-code grant only. --handoff reads the object `auth get
 /// --json` printed, from a file or stdin, in place of --state and --pkce.
+///
+/// Prints the receipt {account, expiresIn, withRefreshToken} and exits 0.
+/// Exits 2 coded usage-invalid on a command line the account refuses (a
+/// device or client credentials account, a --redirect-uri that is not an
+/// http loopback URI), 1 coded endpoint-missing when neither
+/// --redirect-uri nor endpoints.redirection gives a redirection, 1 coded
+/// redirection-unsupported when endpoints.redirection is not an http
+/// loopback URI, and 1 on any other failure.
 #[derive(Debug, Parser)]
 pub struct AuthListenCommand {
     /// The state generated during the authorization flow initiation.
@@ -81,20 +89,31 @@ impl AuthListenCommand {
             return Err(error::usage(message));
         }
 
-        let Some(redirect_uri) = self
-            .redirect_uri
-            .or_else(|| account.redirection_endpoint.clone())
-        else {
-            let message = "Missing --redirect-uri, or endpoints.redirection in the account config";
-            return Err(error::usage(message));
+        let redirect_uri = match (self.redirect_uri, &account.redirection_endpoint) {
+            (Some(uri), _) if !is_loopback_redirect(&uri) => {
+                return Err(error::usage(format!(
+                    "Cannot listen on {uri}, not an http URI on a loopback host, \
+                     run auth resume with the redirected URI instead"
+                )));
+            }
+            (Some(uri), _) => uri,
+            (None, Some(uri)) if !is_loopback_redirect(uri) => {
+                return Err(error::coded(
+                    ErrorCode::RedirectionUnsupported,
+                    format!(
+                        "Cannot listen on endpoints.redirection {uri}, not an http \
+                         URI on a loopback host, run auth resume with the redirected \
+                         URI instead"
+                    ),
+                ));
+            }
+            (None, Some(uri)) => uri.clone(),
+            (None, None) => {
+                let message =
+                    "Missing --redirect-uri, or endpoints.redirection in the account config";
+                return Err(error::coded(ErrorCode::EndpointMissing, message));
+            }
         };
-
-        if !is_loopback_redirect(&redirect_uri) {
-            return Err(error::usage(format!(
-                "Cannot listen on {redirect_uri}, not an http URI on a loopback host, \
-                 run auth resume with the redirected URI instead"
-            )));
-        }
 
         debug!("wait for redirection on {redirect_uri}");
 

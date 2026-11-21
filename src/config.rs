@@ -380,7 +380,7 @@ storage.write.command = ["tee", "token.json"]
 client-id = "app-id"
 grant = "client-credentials-jwt"
 client-key = "/etc/ortie/key.pem"
-client-certificate = "/etc/ortie/cert.pem"
+client-cert = "/etc/ortie/cert.pem"
 endpoints.token = "https://login.example.com/token"
 scopes = ["https://graph.microsoft.com/.default"]
 storage.read.command = ["cat", "token.json"]
@@ -399,6 +399,18 @@ storage.write.command = ["tee", "token.json"]
             account.client_cert,
             Some(PathBuf::from("/etc/ortie/cert.pem"))
         );
+
+        let alias = parse(
+            r#"
+[accounts.test]
+client-id = "app-id"
+client-certificate = "/etc/ortie/cert.pem"
+storage.read.command = ["cat", "token.json"]
+storage.write.command = ["tee", "token.json"]
+"#,
+        );
+
+        assert_eq!(alias.client_cert, account.client_cert);
     }
 
     #[test]

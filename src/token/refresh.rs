@@ -60,6 +60,9 @@ pub fn refresh_action(grant: GrantConfig, has_refresh_token: bool) -> RefreshAct
 /// `auth get` and a new authorization flow as the way out. A client
 /// credentials account re-runs its grant instead, since it was never
 /// issued a refresh token.
+///
+/// Prints the receipt {account, expiresIn, withRefreshToken} and exits 0,
+/// or 1 on a failure.
 #[derive(Debug, Parser)]
 pub struct TokenRefreshCommand;
 
@@ -83,7 +86,7 @@ impl TokenRefreshCommand {
             }
         };
 
-        printer.out(TokenIssuedOutput::refreshed(&token))
+        printer.out(TokenIssuedOutput::refreshed(&account.name, &token))
     }
 
     /// Re-runs the client credentials grant and persists what it issues.
