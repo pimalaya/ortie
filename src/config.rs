@@ -662,9 +662,10 @@ storage.write.command = ["tee", "token.json"]
         blocks
     }
 
-    /// Checks the provider accounts of README.md: each toml block one
-    /// `[accounts.<name>]` table, parsed through the loader `-c` uses and
-    /// holding that account, the live suites reading them by name.
+    /// Checks the provider accounts of README.md: each toml block one or
+    /// more `[accounts.<name>]` tables, parsed through the loader `-c`
+    /// uses and holding those accounts, the live suites reading them by
+    /// name.
     #[test]
     fn the_readme_provider_accounts_parse() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("README.md");
@@ -672,19 +673,19 @@ storage.write.command = ["tee", "token.json"]
         let mut names = Vec::new();
 
         for (line, block) in toml_blocks(&readme) {
-            let headers: Vec<_> = block.lines().filter(|l| l.starts_with('[')).collect();
-            let [header] = headers[..] else {
-                panic!("README.md:{line}: {} tables", headers.len())
-            };
-            let name = header
-                .strip_prefix("[accounts.")
-                .and_then(|name| name.strip_suffix(']'))
-                .unwrap_or_else(|| panic!("README.md:{line}: {header}"));
-
             let config =
-                try_parse(&block).unwrap_or_else(|err| panic!("README.md:{line}: {name}: {err:?}"));
-            assert!(config.accounts.contains_key(name), "README.md:{line}");
-            names.push(name.to_owned());
+                try_parse(&block).unwrap_or_else(|err| panic!("README.md:{line}: {err:?}"));
+            let headers: Vec<_> = block.lines().filter(|l| l.starts_with('[')).collect();
+            assert!(!headers.is_empty(), "README.md:{line}: no table");
+
+            for header in headers {
+                let name = header
+                    .strip_prefix("[accounts.")
+                    .and_then(|name| name.strip_suffix(']'))
+                    .unwrap_or_else(|| panic!("README.md:{line}: {header}"));
+                assert!(config.accounts.contains_key(name), "README.md:{line}");
+                names.push(name.to_owned());
+            }
         }
 
         let expected = [

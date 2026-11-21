@@ -128,22 +128,20 @@ Ortie follows the [OAuth 2.1](https://datatracker.ietf.org/doc/draft-ietf-oauth-
 
 ## Configuration
 
-Run without a configuration at a terminal, Ortie shows the commands copying the shipped sample in place, or downloading it; it never writes a configuration itself. A TOML configuration is loaded from every existing path among the following, each one deep-merged on top of the ones before:
+A TOML configuration is loaded from every existing path among the following, each one deep-merged on top of the ones before:
 
-- $XDG_CONFIG_HOME/ortie/config.toml
-- $HOME/.config/ortie/config.toml
-- $HOME/.ortierc
+- `$XDG_CONFIG_HOME/ortie/config.toml`
+- `$HOME/.config/ortie/config.toml`
+- `$HOME/.ortierc`
 
-Override the path with `-c <PATH>`, repeated to merge several files: the first one is the base and the next ones are deep-merged on top.
+Override the path with `-c <PATH>`, repeated to merge several files.
 
 > [!TIP]
-> See [config.sample.toml](./config.sample.toml) for every field of one example account and a section for an application of your own; for Google, Microsoft or Fastmail, paste the block of its subsection below and adapt the storage commands, written here with `pass`.
+> See [config.sample.toml](./config.sample.toml) for a complete configuration of one example account with commented fields; rename the account and uncomment what you need, or start from a provider below.
 
 ### Google
 
-Pimalaya's Google application is not released yet, so fill `client-id` and `client-secret` with a Desktop client of your own.
-
-Its refresh tokens expire after 7 days while its consent screen stays in testing. The People API and CardDAV take distinct scopes, `auth/contacts` and `auth/carddav`.
+Pimalaya's Google application is not released yet: fill `client-id` and `client-secret` with a Desktop client of your own, whose refresh tokens expire after 7 days while its consent screen stays in testing.
 
 ```toml
 [accounts.google]
@@ -169,9 +167,7 @@ storage.write.command = "pass insert -m -f ortie/google"
 
 ### Microsoft
 
-Entra issues a token for one resource, so Microsoft Graph and IMAP and SMTP each take an account of their own. Both run on Pimalaya's application, registered for `http://localhost` on any port, which refuses `127.0.0.1`.
-
-An organisation refusing it needs an application of its own, registering `http://localhost` under the "Mobile and desktop applications" platform.
+Both accounts run on Pimalaya's own Entra application. Entra issues a token for one resource, so Graph and IMAP/SMTP take one account each, and the redirection stays `http://localhost` (any port, never `127.0.0.1`).
 
 ```toml
 [accounts.microsoft-graph]
@@ -190,9 +186,7 @@ scopes = [
 
 storage.read.command = "pass show ortie/microsoft-graph"
 storage.write.command = "pass insert -m -f ortie/microsoft-graph"
-```
 
-```toml
 [accounts.microsoft-imap-smtp]
 
 client-id = "ba9b19e1-973e-4d7c-aed9-848bd2fee385"
@@ -211,7 +205,7 @@ storage.write.command = "pass insert -m -f ortie/microsoft-imap-smtp"
 
 ### Fastmail
 
-The account runs on Pimalaya's registered client and sends the JMAP session URL as `resources`, without which Fastmail refuses the request before consent. Its strict check refuses every authorization parameter but the standard ones and `login_hint`, so keep `extras` to that one.
+The account runs on Pimalaya's registered client. Fastmail refuses the request without the JMAP session URL in `resources`, and any `extras` but `login_hint`.
 
 ```toml
 [accounts.fastmail]
@@ -235,16 +229,40 @@ storage.write.command = "pass insert -m -f ortie/fastmail"
 
 ## Usage
 
-Every command runs on the default account unless `-a` names another, prints JSON under `--json`, and details its flags, exit codes and output in its `--help`. When `auth get` cannot catch the redirection, it prints the `auth listen` or `auth resume` command finishing the flow.
+**Step 1**: once your first account is configured, sign in: open the link Ortie prints, it catches the redirection and stores the token:
 
 ```sh
 ortie auth get
-ortie account show
+```
+
+**Step 2**: check that the storage reads, the token is usable and every endpoint answers:
+
+```sh
 ortie account check
+```
+
+**Step 3**: print the token, refreshed when expired, for the secret command of your mail client:
+
+```sh
 ortie token show
-ortie token inspect --json
+```
+
+Every command runs on the default account unless `-a` names another, and its `--help` details its flags, exit codes and JSON output. More use cases:
+
+```sh
+# Inspect the stored token without printing it
+ortie token inspect
+
+# Print an account as loaded, secrets redacted
+ortie account show
+
+# Revoke the token at the server
 ortie token revoke
-ortie repl --json
+
+# Unlock the secret store once for a whole session
+ortie repl
+
+# Serve the token lifecycle to an AI agent, never the token itself
 ortie mcp --allow-write
 ```
 

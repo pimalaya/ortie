@@ -117,7 +117,10 @@ pub fn readme_account(name: &str, overrides: &[(&str, &str)]) -> String {
     let mut lines = readme.lines().skip_while(|line| *line != header).skip(1);
     let mut account = String::new();
 
-    for line in lines.by_ref().take_while(|line| *line != "```") {
+    for line in lines
+        .by_ref()
+        .take_while(|line| *line != "```" && !line.starts_with('['))
+    {
         if line.is_empty() || line.starts_with("storage.") {
             continue;
         }
