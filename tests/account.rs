@@ -243,15 +243,7 @@ fn account_check_reads_the_storage_and_sends_each_endpoint_a_head() {
     assert!(!home.path().join("written.json").exists());
 
     let output = run(home.path(), &toml, &["account", "check"]);
-    let expected = "\
-Account:                  work
-storage:                  OK
-token:                    OK
-endpoints.authorization:  OK
-endpoints.token:          OK
-endpoints.revocation:     OK
-";
-    assert_eq!(printed_text(&output, 0), expected);
+    assert_eq!(printed_text(&output, 0), "All 5 checks of work passed\n");
 }
 
 /// Every row prints whatever the others did, and a failed one exits 3
@@ -283,17 +275,18 @@ fn a_failed_row_exits_3_and_keeps_the_others() {
     let output = run(home.path(), &toml, &["account", "check"]);
     let text = printed_text(&output, 3);
     assert!(
-        text.contains("storage:          FAIL (No access token stored"),
+        text.starts_with("3 of 3 checks of work failed:\n"),
         "{text}"
     );
     assert!(
-        text.contains("token:            FAIL (No access token stored"),
+        text.contains("\nstorage:          No access token stored"),
         "{text}"
     );
     assert!(
-        text.contains("endpoints.token:  FAIL (Cannot reach"),
+        text.contains("\ntoken:            No access token stored"),
         "{text}"
     );
+    assert!(text.contains("\nendpoints.token:  Cannot reach"), "{text}");
 }
 
 /// An endpoint the grant needs fails its row before any request, coded
@@ -465,11 +458,6 @@ fn an_https_endpoint_row_names_the_tls_configured() {
         "clientCert": "/etc/ortie/me.pem",
     });
     assert_eq!(row(&json, "endpoints.token")["tls"], tls, "{json}");
-
-    let output = run(home.path(), &toml, &["account", "check"]);
-    let text = printed_text(&output, 3);
-    let line = ", TLS rustls, cert /etc/ortie/ca.pem, client cert /etc/ortie/me.pem\n";
-    assert!(text.contains(line), "{text}");
 }
 
 /// A storage command failing after it printed the token is reported by

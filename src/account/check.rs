@@ -58,9 +58,10 @@ const STATUS_LINE_MAX: usize = 1024;
 ///
 /// None proves the provider accepts the client: only a grant does.
 ///
-/// Each check prints an event as soon as it finishes, a `<check>: OK` or
-/// `<check>: FAIL (<why>)` line on a terminal (none when stdout is
-/// redirected), then the report: the account and every row, aligned.
+/// Each check prints an event as soon as it finishes, a sentence such as
+/// `Reaching the token endpoint… OK` or `… FAIL (<why>)` on a terminal
+/// (none when stdout is redirected), then a blank line and the report:
+/// how many checks passed or failed, then each failed one and why.
 ///
 /// Exits 0 when every row passes, 3 when one fails, the report being the
 /// output rather than a failure object, and 1 on an account it cannot
@@ -78,6 +79,11 @@ impl AccountCheckCommand {
     /// Checks the storage, the token, then the endpoints of `account`,
     /// printing every outcome whatever the others were.
     pub fn execute(self, printer: &mut impl Printer, account: &Account) -> Result<()> {
+        let total = 2 + endpoints(account)
+            .iter()
+            .filter(|(_, url, needed)| url.is_some() || *needed)
+            .count();
+
         let mut checks = Vec::new();
         let mut finish = |row: AccountCheckRow| -> Result<()> {
             printer.event(AccountCheckEvent::CheckFinished {
@@ -87,6 +93,7 @@ impl AccountCheckCommand {
                 code: row.code,
                 error: row.error.clone(),
                 tls: row.tls.clone(),
+                last: checks.len() + 1 == total,
             })?;
             checks.push(row);
             Ok(())
@@ -262,21 +269,40 @@ impl AccountCheckOutput {
     }
 }
 
-/// The account, then one `<check>: OK` or `<check>: FAIL (<why>)` line
-/// per row, an `https` endpoint naming its TLS.
+/// One sentence counting the checks that passed or failed, then each
+/// failed check and why, aligned, the events having printed every row.
 impl fmt::Display for AccountCheckOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut fields = Fields::default();
-        fields.push("Account", sanitize::text(&self.account));
+        let account = sanitize::text(&self.account);
+        let total = self.checks.len();
+        let failed: Vec<&AccountCheckRow> = self.checks.iter().filter(|c| !c.ok).collect();
 
-        for check in &self.checks {
-            fields.push(
-                check.check,
-                outcome(check.error.as_deref(), check.tls.as_ref()),
-            );
+        if failed.is_empty() {
+            return writeln!(f, "All {total} checks of {account} passed");
+        }
+
+        writeln!(f, "{} of {total} checks of {account} failed:", failed.len())?;
+
+        let mut fields = Fields::default();
+        for check in failed {
+            let why = check.error.as_deref().unwrap_or_default();
+            fields.push(check.check, sanitize::text(why));
         }
 
         write!(f, "{fields}")
+    }
+}
+
+/// What a check does, as its event sentence opens: `Reaching the token
+/// endpoint` for `endpoints.token`.
+fn action(check: &str) -> String {
+    match check {
+        "storage" => String::from("Reading the token storage"),
+        "token" => String::from("Checking the stored token"),
+        check => {
+            let endpoint = check.strip_prefix("endpoints.").unwrap_or(check);
+            format!("Reaching the {} endpoint", endpoint.replace('-', " "))
+        }
     }
 }
 
@@ -328,19 +354,34 @@ pub enum AccountCheckEvent {
         /// The TLS configured for an `https` endpoint, `null` on the other
         /// rows.
         tls: Option<AccountCheckTls>,
+        /// Whether no check follows, its text then ending on a blank line
+        /// before the report.
+        #[serde(skip)]
+        #[schemars(skip)]
+        last: bool,
     },
 }
 
-/// One `<check>: OK` or `<check>: FAIL (<why>)` line, as the result
-/// prints the row.
+/// One sentence, `Reaching the token endpoint… OK` or `… FAIL (<why>)`,
+/// the last one followed by a blank line.
 impl fmt::Display for AccountCheckEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::CheckFinished {
-                check, error, tls, ..
+                check,
+                error,
+                tls,
+                last,
+                ..
             } => {
                 let outcome = outcome(error.as_deref(), tls.as_ref());
-                writeln!(f, "{check}: {outcome}")
+                writeln!(f, "{}… {outcome}", action(check))?;
+
+                if *last {
+                    writeln!(f)?;
+                }
+
+                Ok(())
             }
         }
     }
@@ -428,32 +469,46 @@ impl fmt::Display for AccountCheckTls {
 mod tests {
     use crate::account::check::{AccountCheckEvent, AccountCheckTls};
 
-    /// An event prints as one line, the row its result prints, its error
-    /// defused.
+    /// An event prints as one sentence naming what was checked, its error
+    /// defused, the last one followed by a blank line.
     #[test]
-    fn an_event_prints_one_line() {
-        let event = |error: Option<&str>, tls: Option<AccountCheckTls>| {
+    fn an_event_prints_one_sentence() {
+        let event = |check, error: Option<&str>, tls: Option<AccountCheckTls>, last| {
             AccountCheckEvent::CheckFinished {
                 account: String::from("work"),
-                check: "endpoints.token",
+                check,
                 ok: error.is_none(),
                 code: None,
                 error: error.map(String::from),
                 tls,
+                last,
             }
             .to_string()
         };
 
+        assert_eq!(
+            event("storage", None, None, false),
+            "Reading the token storage… OK\n"
+        );
+        assert_eq!(
+            event("token", None, None, false),
+            "Checking the stored token… OK\n"
+        );
+
         let tls = AccountCheckTls {
             provider: Some(String::from("rustls")),
+            cert: Some(String::from("/etc/ortie/ca.pem")),
             ..AccountCheckTls::default()
         };
-        assert_eq!(event(None, Some(tls)), "endpoints.token: OK, TLS rustls\n");
+        assert_eq!(
+            event("endpoints.device-authorization", None, Some(tls), false),
+            "Reaching the device authorization endpoint… OK, TLS rustls, cert /etc/ortie/ca.pem\n"
+        );
 
         let error = Some("Cannot reach\nendpoints.token\u{202e}");
         assert_eq!(
-            event(error, None),
-            "endpoints.token: FAIL (Cannot reach\u{fffd}endpoints.token\u{fffd})\n"
+            event("endpoints.token", error, None, true),
+            "Reaching the token endpoint… FAIL (Cannot reach\u{fffd}endpoints.token\u{fffd})\n\n"
         );
     }
 }
