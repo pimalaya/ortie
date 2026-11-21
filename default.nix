@@ -16,7 +16,7 @@ in
 pimalaya.mkDefault (
   {
     src = ./.;
-    version = "2.3.0";
+    version = "3.0.0";
     mkPackage = (
       {
         lib,

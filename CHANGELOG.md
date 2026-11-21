@@ -6,7 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier major.
+## [3.0.0] - 2026-11-21
+
+MIGRATION.md lists what to act on when upgrading from 2.x, and from 1.x.
 
 ### Added
 
@@ -457,7 +459,8 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 [#3]: https://github.com/pimalaya/ortie/issues/3
 [#4]: https://github.com/pimalaya/ortie/issues/4
 
-[unreleased]: https://github.com/pimalaya/ortie/compare/v2.3.0...master
+[unreleased]: https://github.com/pimalaya/ortie/compare/v3.0.0...master
+[3.0.0]: https://github.com/pimalaya/ortie/compare/v2.3.0...v3.0.0
 [2.3.0]: https://github.com/pimalaya/ortie/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/pimalaya/ortie/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/pimalaya/ortie/compare/v2.0.0...v2.1.0

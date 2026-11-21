@@ -3,7 +3,7 @@
 CLI to manage OAuth tokens
 
 ```sh
-$ ortie --json token inspect
+$ ortie token inspect --json
 ```
 
 ```json

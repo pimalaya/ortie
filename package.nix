@@ -25,7 +25,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
   inherit buildNoDefaultFeatures;
 
   pname = "ortie";
-  version = "2.3.0";
+  version = "3.0.0";
   cargoHash = "";
 
   src = fetchFromGitHub {
