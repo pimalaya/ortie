@@ -2,6 +2,20 @@
 
 CLI to manage OAuth tokens
 
+```sh
+$ ortie --json token inspect
+```
+
+```json
+{
+  "tokenType": "Bearer",
+  "issuedAt": "2026-11-21T08:00:00Z",
+  "expiresAt": "2026-11-21T09:00:00Z",
+  "withRefreshToken": true,
+  "scope": "https://mail.google.com/ https://www.googleapis.com/auth/calendar"
+}
+```
+
 ## Table of contents
 
 - [Features](#features)
