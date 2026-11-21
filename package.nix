@@ -1,7 +1,5 @@
-# TODO: move this to nixpkgs
-# This file aims to be a replacement for the nixpkgs derivation.
-
 {
+  aws-lc,
   buildFeatures ? [ ],
   buildNoDefaultFeatures ? false,
   buildPackages,
@@ -18,6 +16,7 @@
 
 let
   nativeTls = builtins.elem "native-tls" buildFeatures;
+  rustlsAws = builtins.elem "rustls-aws" buildFeatures;
 in
 rustPlatform.buildRustPackage (finalAttrs: {
   __structuredAttrs = true;
@@ -26,13 +25,13 @@ rustPlatform.buildRustPackage (finalAttrs: {
 
   pname = "ortie";
   version = "3.0.0";
-  cargoHash = "";
+  cargoHash = "sha256-AOKGfH+oCe62cjZhfwr0F2AXRZFq9xrX9OqsZUOB2Cc=";
 
   src = fetchFromGitHub {
     owner = "pimalaya";
-    repo = finalAttrs.pname;
+    repo = "ortie";
     tag = "v${finalAttrs.version}";
-    hash = "";
+    hash = "sha256-AX13jg8wVlDNABDe8IcdCEOEdoNm6Twr2HZ/CHaqOdI=";
   };
 
   env = {
@@ -45,7 +44,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
     installShellFiles
   ];
 
-  buildInputs = lib.optional nativeTls openssl;
+  buildInputs = lib.optional nativeTls openssl ++ lib.optional rustlsAws aws-lc;
 
   inherit buildFeatures;
 
@@ -53,13 +52,13 @@ rustPlatform.buildRustPackage (finalAttrs: {
     let
       exe =
         if stdenv.buildPlatform.canExecute stdenv.hostPlatform then
-          "$out/bin/${finalAttrs.pname}"
+          "$out/bin/ortie"
         else
-          lib.getExe buildPackages.${finalAttrs.pname};
+          lib.getExe buildPackages.ortie;
     in
     ''
       mkdir -p $out/share/{completions,man,schemas}
-      install -Dm644 config.sample.toml "$out"/share/doc/${finalAttrs.pname}/config.sample.toml
+      install -Dm644 config.sample.toml "$out"/share/doc/ortie/config.sample.toml
       ${exe} manual -d "$out"/share/man
       ${exe} completion -d "$out"/share/completions bash elvish fish powershell zsh
       ${exe} json-schema -d "$out"/share/schemas
@@ -68,24 +67,26 @@ rustPlatform.buildRustPackage (finalAttrs: {
       installManPage "$out"/share/man/*
     ''
     + lib.optionalString installShellCompletions ''
-      installShellCompletion --cmd ${finalAttrs.pname} \
-        --bash "$out"/share/completions/${finalAttrs.pname}.bash \
-        --fish "$out"/share/completions/${finalAttrs.pname}.fish \
-        --zsh "$out"/share/completions/_${finalAttrs.pname}
+      installShellCompletion --cmd ortie \
+        --bash "$out"/share/completions/ortie.bash \
+        --fish "$out"/share/completions/ortie.fish \
+        --zsh "$out"/share/completions/_ortie
     '';
 
   # disable impure integration tests: they bind sockets and spawn processes
   cargoTestFlags = [ "--bins" ];
 
   meta = {
-    description = "CLI to manage OAuth 2.0 tokens";
-    mainProgram = finalAttrs.pname;
-    homepage = "https://github.com/pimalaya/${finalAttrs.pname}";
-    changelog = "https://github.com/pimalaya/${finalAttrs.pname}/releases/tag/${finalAttrs.src.tag}";
-    license = with lib.licenses; [
-      asl20
-      mit
-    ];
+    description = "CLI to manage OAuth tokens";
+    mainProgram = "ortie";
+    homepage = "https://github.com/pimalaya/ortie";
+    changelog = "https://github.com/pimalaya/ortie/releases/tag/${finalAttrs.src.tag}";
+    license =
+      with lib.licenses;
+      OR [
+        asl20
+        mit
+      ];
     maintainers = with lib.maintainers; [
       soywod
       bobberb
