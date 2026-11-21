@@ -76,6 +76,9 @@ rustPlatform.buildRustPackage (finalAttrs: {
   # disable impure integration tests: they bind sockets and spawn processes
   cargoTestFlags = [ "--bins" ];
 
+  # two unit tests of 3.0.0 bind a loopback socket
+  __darwinAllowLocalNetworking = true;
+
   meta = {
     description = "CLI to manage OAuth tokens";
     mainProgram = "ortie";
