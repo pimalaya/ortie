@@ -106,7 +106,7 @@ The [CHANGELOG](./CHANGELOG.md) lists every change; these are the ones to act on
 - **Piped `--json` output is one value per line**, and every text output ends with a newline, `token show` included: `$(ortie token show)` strips it, as do the secret commands of the Pimalaya tools.
 - **The text of `token inspect` and `auth get` changed** to aligned `Label: value` fields, one scope per line. A script parsing it moves to `--json`.
 - **Durations print in jiff's friendly form** in the text output, up to days: `2d 4h 30m` where v2 printed `2days 4h 30m`, never years nor months. The JSON carries seconds and instants, unchanged.
-- **`json-schema` stamps an `$id`** naming the contract version on each schema and requires the keys a command always prints. `ortie-configure` is gone; `ortie-token-refresh`, `ortie-auth-resume`, `ortie-token-revoke`, `ortie-auth-listen`, `ortie-account-list`, `ortie-account-show`, `ortie-account-check`, `ortie-completion`, `ortie-manual`, `ortie-json-schema` and `ortie-error` are new.
+- **`json-schema` stamps an `$id`** naming the contract version on each schema and requires the keys a command always prints. `ortie-configure` is gone; `ortie-token-refresh`, `ortie-auth-resume`, `ortie-token-revoke`, `ortie-auth-listen`, `ortie-account-list`, `ortie-account-show`, `ortie-account-check` (with `ortie-account-check.events`), `ortie-completion`, `ortie-manual`, `ortie-json-schema` and `ortie-error` are new.
 
 Reading the new output with jq:
 
@@ -134,7 +134,7 @@ ortie token refresh --json | jq -r 'if .error then "failed: \(.code)" else .expi
 - **`ortie token revoke`** revokes the stored refresh token, or the access token when none is stored (RFC 7009), at the new `endpoints.revocation`, and under `--json` prints which one went, `{"revoked": "refresh-token"}` or `{"revoked": "access-token"}`.
 - **`ortie auth listen`** catches the redirection of a flow a non-interactive or `--json` `auth get` handed off, then completes it as `auth resume` does.
 - **`ortie mcp`** serves the grants of one account to an agent over the Model Context Protocol; no tool returns a token. Started without a flag it lists the tools that read alone, `token_inspect` and `auth_status`: an MCP client configuration driving the grants passes `--allow-write` for `auth_get`, `auth_resume` and `token_refresh`, and `--allow-revoke` on top of it for `token_revoke`.
-- **`ortie account list`** lists the accounts of the configuration with their grant, **`ortie account show`** prints every property of one account as loaded (TOML that pastes back into a configuration, raw secrets redacted), and **`ortie account check`** proves the account's storage reads its token, the token is usable or renewable, and each endpoint its grant uses answers HTTP, one row each, exiting 3 when one fails.
+- **`ortie account list`** lists the accounts of the configuration with their grant, **`ortie account show`** prints every property of one account as loaded (one field per configuration key, raw secrets redacted), and **`ortie account check`** proves the account's storage reads its token, the token is usable or renewable, and each endpoint its grant uses answers HTTP, one row each as an event as soon as it is checked, then the report, exiting 3 when one fails.
 
 ## From v1 to v2
 

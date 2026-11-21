@@ -31,11 +31,11 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 - Added `account list`, listing the accounts of the configuration with their grant, `{"accounts": [{"name", "default", "grant"}]}` under `--json`.
 - Added `account show`, printing every property of one account as the configuration loads it, the `-c` layers merged and the defaults filled in, reaching nothing.
 
-  The text is TOML that pastes back into a configuration; `--json` prints `{"account": {"name", ...}}`. A raw secret is never printed: `client-secret.raw = "<redacted>"`, or `{"raw": null, "redacted": true}`.
+  The text is `Account: <name>` then one aligned field per property, labelled by its configuration key (`client-id`, `endpoints.token`, `storage.read.command`), a list one value per line; `--json` prints `{"account": {"name", ...}}`, `tls` left out when no TLS key is set. A raw secret is never printed: `client-secret.raw: <redacted>`, or `{"raw": null, "redacted": true}`.
 
 - Added `account check`, checking that `storage.read.command` prints a token, that the token is usable, and that each endpoint the grant uses answers, one row each, exiting 3 when one fails.
 
-  `--json` prints `{"account", "checks": [{"check", "ok", "code", "error", "tls"}]}`, the rows `storage`, `token`, then `endpoints.<key>`. The token row fails on an expired token with no way to renew it, coded `token-expired`. Each endpoint is sent a `HEAD` request carrying no credential, the redirection none; an `https` one's row carries `tls`, the TLS configured.
+  Each row prints as soon as it is checked, a `check-finished` event (`{"event", "account", "check", "ok", "code", "error", "tls"}` under `--json`, a line on a terminal), then the report. `--json` ends with `{"account", "checks": [{"check", "ok", "code", "error", "tls"}]}`, the rows `storage`, `token`, then `endpoints.<key>`. The token row fails on an expired token with no way to renew it, coded `token-expired`. Each endpoint is sent a `HEAD` request carrying no credential, the redirection none; an `https` one's row carries `tls`, the TLS configured.
 
 - Added the `tls.cert`, `tls.client.cert` and `tls.client.key` account fields: a PEM certificate to trust beside the platform store, and a PEM client certificate and its key presented to a server asking for one (mutual TLS).
 - Added the `resources` account field, the RFC 8707 resource indicators sent on the authorization request and the code exchange.
@@ -43,7 +43,7 @@ MIGRATION.md lists what to act on when upgrading from 2.x, and from each earlier
 
   A REPL session keeps its behaviour: the signal ends it with 130, no handoff printed.
 
-- Added the `ortie-account-list`, `ortie-account-show`, `ortie-account-check`, `ortie-auth-listen`, `ortie-auth-resume`, `ortie-token-refresh`, `ortie-token-revoke` and `ortie-error` schemas to `json-schema`, and those of `completion`, `manual` and `json-schema` itself.
+- Added the `ortie-account-list`, `ortie-account-show`, `ortie-account-check` (and `ortie-account-check.events`), `ortie-auth-listen`, `ortie-auth-resume`, `ortie-token-refresh`, `ortie-token-revoke` and `ortie-error` schemas to `json-schema`, and those of `completion`, `manual` and `json-schema` itself.
 - Added a stable `code` to the failure object `--json` prints, for the failures a caller acts on; any other failure prints `"code": null`.
 
   The codes are `permission-denied` (`access_denied`, `authorization_declined`, a bare 403), `rate-limited` (a bare 429), `grant-invalid` (`invalid_grant`), `client-invalid` (`invalid_client`), `client-unauthorized` (`unauthorized_client`) and `scope-invalid` (`invalid_scope`).

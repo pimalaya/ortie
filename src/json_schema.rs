@@ -8,7 +8,9 @@
 //! Every command printing a value carries a key. The REPL carries none of
 //! its own: it dispatches the commands of the binary and prints their
 //! payloads unchanged. The one key naming no command is `ortie-error`,
-//! the failure object any command prints instead of its payload.
+//! the failure object any command prints instead of its payload. A
+//! command printing events before its payload (`account check`) carries
+//! their schema too, written as `<key>.events`.
 //!
 //! Every registered type is Ortie's own, so the machine contract stays a
 //! decision of this repository rather than of the libraries below it.
@@ -21,7 +23,11 @@
 use pimalaya_cli::{clap::commands::json_schema::JsonSchemaRegistry, error::ErrorReport};
 
 use crate::{
-    account::{check::AccountCheckOutput, list::AccountListOutput, show::AccountShowOutput},
+    account::{
+        check::{AccountCheckEvent, AccountCheckOutput},
+        list::AccountListOutput,
+        show::AccountShowOutput,
+    },
     auth::get::AuthGetOutput,
     error::ErrorCode,
     token::{
@@ -41,6 +47,7 @@ pub fn registry() -> JsonSchemaRegistry {
     registry.insert::<AccountListOutput>("ortie-account-list");
     registry.insert::<AccountShowOutput>("ortie-account-show");
     registry.insert::<AccountCheckOutput>("ortie-account-check");
+    registry.insert_events::<AccountCheckEvent>("ortie-account-check");
     registry.insert::<AuthGetOutput<'static>>("ortie-auth-get");
     registry.insert::<TokenIssuedOutput>("ortie-auth-listen");
     registry.insert::<TokenIssuedOutput>("ortie-auth-resume");
@@ -124,7 +131,6 @@ mod tests {
             "clientId",
             "grant",
             "endpoints",
-            "tls",
             "alpn",
             "scopes",
             "resources",
@@ -136,6 +142,21 @@ mod tests {
         assert_eq!(required(account), keys, "{show}");
         let redacted = &show["$defs"]["AccountShowRedacted"];
         assert_eq!(required(redacted), json!(["raw", "redacted"]), "{show}");
+    }
+
+    /// `account check` describes its events apart, one per finished row,
+    /// each carrying the account and the keys of the row.
+    #[test]
+    fn the_account_check_events_are_described() {
+        let events = registry().events;
+        let schema = &events["ortie-account-check"];
+        let text = schema.to_string();
+
+        assert!(text.contains("\"check-finished\""), "{schema}");
+
+        for key in ["event", "account", "check", "ok", "code", "error", "tls"] {
+            assert!(text.contains(&format!("\"{key}\"")), "{key}: {schema}");
+        }
     }
 
     #[test]

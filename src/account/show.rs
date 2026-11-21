@@ -1,18 +1,18 @@
 //! # Account show command
 //!
 //! The `account show` subcommand, printing every property of one account
-//! as the configuration loads it, as TOML pasting back into a
-//! configuration, its raw secrets redacted.
+//! as the configuration loads it, one field per configuration key, its
+//! raw secrets redacted.
 
 use std::{
     collections::BTreeMap,
-    fmt::{self, Write as _},
+    fmt,
     path::{Path, PathBuf},
 };
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{fields::Fields, printer::Printer, sanitize};
 use pimalaya_config::{command::CommandConfig, secret::Secret, toml::TomlConfig};
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -24,13 +24,6 @@ use crate::config::{
 /// What a raw secret prints as in the text output.
 const REDACTED: &str = "<redacted>";
 
-/// The bidirectional formatting characters of Unicode UAX #9, escaped in
-/// the text output so none reorders what the terminal shows.
-const BIDI: [char; 12] = [
-    '\u{061C}', '\u{200E}', '\u{200F}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}',
-    '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
-];
-
 /// Show every property of the account.
 ///
 /// Prints the account as the configuration loads it: every `-c` layer
@@ -38,17 +31,19 @@ const BIDI: [char; 12] = [
 /// left out. Nothing is reached: no storage command runs and no request
 /// is sent. Exits 0, or 1 on an account it cannot take.
 ///
-/// The text output is TOML, `[accounts.<name>]` then its keys as the
-/// configuration spells them, so it pastes back into a configuration. A
-/// raw secret is never printed: `client-secret.raw = "<redacted>"`
-/// stands for it, while commands and paths print as loaded.
+/// The text output is `Account: <name>` then one aligned `<key>: <value>`
+/// field per property, labelled by its configuration key
+/// (`client-id`, `endpoints.token`, `storage.read.command`), a list one
+/// value per line, a command as a shell would read it. A raw secret is
+/// never printed: `client-secret.raw: <redacted>` stands for it.
 ///
 /// JSON output: `{"account": {"name", "default", "clientId",
 /// "clientSecret", "clientKey", "clientCert", "grant", "endpoints",
 /// "tls", "alpn", "scopes", "resources", "pkce", "extras", "autoRefresh",
 /// "storage"}}`, the keys camelCase, an optional one left out when
-/// unset, a raw `clientSecret` printing `{"raw": null, "redacted":
-/// true}` and a command one `{"command": ...}`.
+/// unset, `tls` too when no key of it is set, a raw `clientSecret`
+/// printing `{"raw": null, "redacted": true}` and a command one
+/// `{"command": ...}`.
 #[derive(Debug, Parser)]
 pub struct AccountShowCommand;
 
@@ -98,8 +93,10 @@ pub struct AccountShow {
     pub grant: GrantConfig,
     /// The endpoints of the authorization server.
     pub endpoints: AccountShowEndpoints,
-    /// The TLS options of the HTTPS connections.
-    pub tls: AccountShowTls,
+    /// The TLS options of the HTTPS connections, left out when the account
+    /// sets none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls: Option<AccountShowTls>,
     /// The ALPN identifiers offered during the TLS handshake.
     pub alpn: Vec<String>,
     /// The scopes requested for the access token.
@@ -146,7 +143,7 @@ impl AccountShow {
                 revocation: url(&endpoints.revocation),
                 redirection: url(&endpoints.redirection),
             },
-            tls: AccountShowTls {
+            tls: Some(AccountShowTls {
                 provider: config.tls.provider,
                 rustls: AccountShowRustls {
                     crypto: config.tls.rustls.crypto,
@@ -160,7 +157,13 @@ impl AccountShow {
                         cert: path(&client.cert),
                         key: path(&client.key),
                     }),
-            },
+            })
+            .filter(|tls| {
+                tls.provider.is_some()
+                    || tls.rustls.crypto.is_some()
+                    || tls.cert.is_some()
+                    || tls.client.is_some()
+            }),
             alpn: config.alpn.clone(),
             scopes: config.scopes.clone(),
             resources: config.resources.iter().map(ToString::to_string).collect(),
@@ -322,38 +325,32 @@ pub struct AccountShowStorage {
     pub command: AccountShowCommandLine,
 }
 
-/// The account as TOML: its table header, a blank line, its keys as the
-/// configuration spells them, a blank line, its storage commands.
+/// The account as fields: `Account` then one per property, labelled by
+/// its configuration key, a list one value per line, every value
+/// sanitized.
 impl fmt::Display for AccountShowOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let account = &self.account;
         let endpoints = &account.endpoints;
-        let tls = &account.tls;
-        let mut lines: Vec<(&str, String)> = Vec::new();
+        let mut rows: Vec<(String, String)> = Vec::new();
+        let mut push = |label: &str, value: &str| rows.push((label.into(), text(value)));
 
-        lines.push(("default", account.default.to_string()));
-        lines.push(("client-id", string(&account.client_id)));
+        push("Account", &account.name);
+        push("default", &account.default.to_string());
+        push("client-id", &account.client_id);
 
         match &account.client_secret {
-            Some(AccountShowSecret::Raw(_)) => lines.push(("client-secret.raw", string(REDACTED))),
+            Some(AccountShowSecret::Raw(_)) => push("client-secret.raw", REDACTED),
             Some(AccountShowSecret::Command { command }) => {
-                lines.push(("client-secret.command", command_value(command)))
+                push("client-secret.command", &command.to_string())
             }
             None => (),
         }
 
-        let paths = [
+        let optionals = [
             ("client-key", &account.client_key),
             ("client-cert", &account.client_cert),
-        ];
-        lines.extend(
-            paths
-                .into_iter()
-                .filter_map(|(k, v)| Some((k, string(v.as_ref()?)))),
-        );
-        lines.push(("grant", string(account.grant.as_str())));
-
-        let endpoints = [
+            ("grant", &Some(account.grant.as_str().into())),
             ("endpoints.authorization", &endpoints.authorization),
             (
                 "endpoints.device-authorization",
@@ -363,71 +360,97 @@ impl fmt::Display for AccountShowOutput {
             ("endpoints.revocation", &endpoints.revocation),
             ("endpoints.redirection", &endpoints.redirection),
         ];
-        lines.extend(
-            endpoints
-                .into_iter()
-                .filter_map(|(k, v)| Some((k, string(v.as_ref()?)))),
-        );
 
-        if let Some(provider) = tls.provider {
-            let provider = match provider {
-                TlsProviderConfig::Rustls => "rustls",
-                TlsProviderConfig::NativeTls => "native-tls",
-            };
-            lines.push(("tls.provider", string(provider)));
+        for (label, value) in optionals {
+            if let Some(value) = value {
+                push(label, value);
+            }
         }
 
-        if let Some(crypto) = tls.rustls.crypto {
-            let crypto = match crypto {
-                RustlsCryptoConfig::Aws => "aws",
-                RustlsCryptoConfig::Ring => "ring",
-            };
-            lines.push(("tls.rustls.crypto", string(crypto)));
+        if let Some(tls) = &account.tls {
+            if let Some(provider) = tls.provider {
+                let provider = match provider {
+                    TlsProviderConfig::Rustls => "rustls",
+                    TlsProviderConfig::NativeTls => "native-tls",
+                };
+                push("tls.provider", provider);
+            }
+
+            if let Some(crypto) = tls.rustls.crypto {
+                let crypto = match crypto {
+                    RustlsCryptoConfig::Aws => "aws",
+                    RustlsCryptoConfig::Ring => "ring",
+                };
+                push("tls.rustls.crypto", crypto);
+            }
+
+            if let Some(cert) = &tls.cert {
+                push("tls.cert", cert);
+            }
+
+            if let Some(client) = &tls.client {
+                push("tls.client.cert", &client.cert);
+                push("tls.client.key", &client.key);
+            }
         }
 
-        if let Some(cert) = &tls.cert {
-            lines.push(("tls.cert", string(cert)));
+        let lists = [
+            ("alpn", &account.alpn),
+            ("scopes", &account.scopes),
+            ("resources", &account.resources),
+        ];
+
+        for (label, items) in lists {
+            let items: Vec<String> = items.iter().map(|item| text(item)).collect();
+            rows.push((label.into(), items.join("\n")));
         }
 
-        if let Some(client) = &tls.client {
-            lines.push(("tls.client.cert", string(&client.cert)));
-            lines.push(("tls.client.key", string(&client.key)));
-        }
-
-        lines.push(("alpn", list(&account.alpn)));
-        lines.push(("scopes", list(&account.scopes)));
-        lines.push(("resources", list(&account.resources)));
+        let mut push = |label: &str, value: &str| rows.push((label.into(), text(value)));
 
         let pkce = match account.pkce {
-            AccountShowPkce::Method(AccountShowPkceMethod::S256) => string("s256"),
-            AccountShowPkce::Method(AccountShowPkceMethod::Plain) => string("plain"),
-            AccountShowPkce::Off(_) => String::from("false"),
+            AccountShowPkce::Method(AccountShowPkceMethod::S256) => "s256",
+            AccountShowPkce::Method(AccountShowPkceMethod::Plain) => "plain",
+            AccountShowPkce::Off(_) => "false",
         };
-        lines.push(("pkce", pkce));
-
-        writeln!(f, "[accounts.{}]", key(&account.name))?;
-        writeln!(f)?;
-
-        for (k, v) in lines {
-            writeln!(f, "{k} = {v}")?;
-        }
+        push("pkce", pkce);
 
         if account.extras.is_empty() {
-            writeln!(f, "extras = {{}}")?;
+            push("extras", "");
         }
 
-        for (k, v) in &account.extras {
-            writeln!(f, "extras.{} = {}", key(k), string(v))?;
+        for (key, value) in &account.extras {
+            push(&format!("extras.{}", extra_key(key)), value);
         }
 
-        writeln!(f, "auto-refresh = {}", account.auto_refresh)?;
-        writeln!(f)?;
+        push("auto-refresh", &account.auto_refresh.to_string());
 
         let storage = &account.storage;
-        let read = command_value(&storage.read.command);
-        writeln!(f, "storage.read.command = {read}")?;
-        let write = command_value(&storage.write.command);
-        writeln!(f, "storage.write.command = {write}")
+        push("storage.read.command", &storage.read.command.to_string());
+        push("storage.write.command", &storage.write.command.to_string());
+
+        let mut fields = Fields::default();
+
+        for (label, value) in &rows {
+            fields.push(label, value);
+        }
+
+        write!(f, "{fields}")
+    }
+}
+
+/// The command as a shell would read it, as pimalaya-config writes a
+/// [`CommandConfig`].
+impl fmt::Display for AccountShowCommandLine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let command = match self {
+            Self::Shell(line) => CommandConfig::Shell(line.clone()),
+            Self::Argv(argv) => CommandConfig::Argv {
+                program: argv.first().cloned().unwrap_or_default(),
+                args: argv.iter().skip(1).cloned().collect(),
+            },
+        };
+
+        write!(f, "{command}")
     }
 }
 
@@ -436,64 +459,21 @@ fn path(path: &Path) -> String {
     path.display().to_string()
 }
 
-/// `key` as a TOML key: bare when it can be, quoted otherwise.
-fn key(key: &str) -> String {
+/// `s` with its control and bidi characters replaced, as the kit's text
+/// outputs print a value.
+fn text(s: &str) -> String {
+    sanitize::text(s).into_owned()
+}
+
+/// An `extras` key as the configuration spells it: bare when TOML takes
+/// it bare, quoted otherwise, sanitized either way.
+fn extra_key(key: &str) -> String {
     let bare = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_';
 
     if !key.is_empty() && key.chars().all(bare) {
         String::from(key)
     } else {
-        string(key)
-    }
-}
-
-/// `s` as a TOML basic string, every control and bidi character escaped.
-fn string(s: &str) -> String {
-    let mut out = String::from("\"");
-
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\t' => out.push_str("\\t"),
-            '\r' => out.push_str("\\r"),
-            c if c.is_control() || BIDI.contains(&c) => {
-                let _ = write!(out, "\\u{:04X}", c as u32);
-            }
-            c => out.push(c),
-        }
-    }
-
-    out.push('"');
-    out
-}
-
-/// `items` as a TOML array, one item per line.
-fn list(items: &[String]) -> String {
-    if items.is_empty() {
-        return String::from("[]");
-    }
-
-    let mut out = String::from("[\n");
-
-    for item in items {
-        let _ = writeln!(out, "  {},", string(item));
-    }
-
-    out.push(']');
-    out
-}
-
-/// `command` as the configuration writes it: a string, or an inline
-/// array of the program and its arguments.
-fn command_value(command: &AccountShowCommandLine) -> String {
-    match command {
-        AccountShowCommandLine::Shell(line) => string(line),
-        AccountShowCommandLine::Argv(argv) => {
-            let words: Vec<String> = argv.iter().map(|word| string(word)).collect();
-            format!("[{}]", words.join(", "))
-        }
+        format!("\"{}\"", text(key))
     }
 }
 
@@ -519,10 +499,11 @@ mod tests {
         config.take_named_account(name).unwrap().1
     }
 
-    /// The text output, `<redacted>` swapped back for the secret, loads
-    /// an account equal to the original, the secret value included.
+    /// The text output prints one field per property, labelled by its
+    /// configuration key: no raw secret, and no value, a line feed
+    /// included, that breaks a line or drives the terminal.
     #[test]
-    fn the_text_output_loads_back_the_account() {
+    fn the_text_output_is_one_field_per_key() {
         let toml = r#"
 [accounts."my work"]
 default = true
@@ -542,7 +523,7 @@ tls.cert = "/etc/ortie/ca.pem"
 tls.client.cert = "/etc/ortie/me.pem"
 tls.client.key = "/etc/ortie/me.key.pem"
 alpn = ["http/1.1"]
-scopes = ["openid", "a \"quoted\\\" \u202E\u0007 scope"]
+scopes = ["openid", "a \"quoted\\\" \u202E\u0007 scope\nalpn: forged"]
 resources = ["https://example.com/jmap"]
 pkce = "plain"
 extras.access_type = "offline"
@@ -562,11 +543,49 @@ storage.write.command = "tee /tmp/token.json"
         assert!(!text.contains("s3cret"), "{text}");
         assert!(!text.contains('\u{202e}'), "{text}");
         assert!(!text.contains('\u{7}'), "{text}");
+        assert!(!text.contains("\nalpn: forged"), "{text}");
 
-        let pasted = load(&text.replace("<redacted>", "s3cret"), "my work");
-        assert_eq!(AccountShow::new(String::from("my work"), &pasted), shown);
+        let labels: Vec<&str> = text
+            .lines()
+            .filter_map(|line| line.split_once(": ").map(|(label, _)| label))
+            .filter(|label| !label.starts_with(' '))
+            .collect();
+        let expected = [
+            "Account",
+            "default",
+            "client-id",
+            "client-secret.raw",
+            "client-key",
+            "client-cert",
+            "grant",
+            "endpoints.authorization",
+            "endpoints.device-authorization",
+            "endpoints.token",
+            "endpoints.revocation",
+            "endpoints.redirection",
+            "tls.provider",
+            "tls.rustls.crypto",
+            "tls.cert",
+            "tls.client.cert",
+            "tls.client.key",
+            "alpn",
+            "scopes",
+            "resources",
+            "pkce",
+            "extras.access_type",
+            "extras.\"odd key\"",
+            "auto-refresh",
+            "storage.read.command",
+            "storage.write.command",
+        ];
+        assert_eq!(labels, expected, "{text}");
 
-        match pasted.client_secret {
+        let line = "\nclient-secret.raw:               <redacted>\n";
+        assert!(text.contains(line), "{text}");
+        let line = "\nstorage.read.command:            cat /tmp/token.json\n";
+        assert!(text.contains(line), "{text}");
+
+        match original.client_secret {
             Some(Secret::Raw(secret)) => assert_eq!(secret.expose_secret(), "s3cret"),
             secret => panic!("{secret:?}"),
         }
@@ -589,5 +608,32 @@ storage.write.command = "true"
         let redacted = serde_json::json!({ "raw": null, "redacted": true });
         assert_eq!(json["account"]["clientSecret"], redacted);
         assert!(!json.to_string().contains("s3cret"), "{json}");
+    }
+
+    /// The JSON output leaves `tls` out when the account sets no key of
+    /// it, and prints it once one is set.
+    #[test]
+    fn the_json_output_leaves_out_an_unset_tls() {
+        let toml = r#"
+[accounts.a]
+client-id = "c"
+storage.read.command = "true"
+storage.write.command = "true"
+
+[accounts.b]
+client-id = "c"
+tls.cert = "/etc/ortie/ca.pem"
+storage.read.command = "true"
+storage.write.command = "true"
+"#;
+
+        let account = AccountShow::new(String::from("a"), &load(toml, "a"));
+        let json = serde_json::to_value(AccountShowOutput { account }).unwrap();
+        assert_eq!(json["account"].get("tls"), None, "{json}");
+
+        let account = AccountShow::new(String::from("b"), &load(toml, "b"));
+        let json = serde_json::to_value(AccountShowOutput { account }).unwrap();
+        let tls = serde_json::json!({ "rustls": {}, "cert": "/etc/ortie/ca.pem" });
+        assert_eq!(json["account"]["tls"], tls, "{json}");
     }
 }

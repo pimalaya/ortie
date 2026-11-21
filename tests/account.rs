@@ -67,6 +67,38 @@ fn printed(output: &Output, status: i32) -> Value {
     serde_json::from_str(&stdout).unwrap()
 }
 
+/// What a `--json` `account check` printed, once it exited with `status`:
+/// one `check-finished` event per row, in the order of the rows, each
+/// carrying the account and that row, then the result.
+fn checked(output: &Output, status: i32) -> Value {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(status), "{stdout}");
+
+    let mut lines: Vec<Value> = stdout
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap_or_else(|err| panic!("{err}: {line}")))
+        .collect();
+    let result = lines.pop().unwrap();
+    assert_eq!(result.get("event"), None, "{stdout}");
+
+    let events: Vec<Value> = result["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            let mut event = json!({ "event": "check-finished", "account": result["account"] });
+            event
+                .as_object_mut()
+                .unwrap()
+                .extend(row.as_object().unwrap().clone());
+            event
+        })
+        .collect();
+    assert_eq!(lines, events, "{stdout}");
+
+    result
+}
+
 /// What `output` printed as text, once it exited with `status`.
 fn printed_text(output: &Output, status: i32) -> String {
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
@@ -192,7 +224,12 @@ fn account_check_reads_the_storage_and_sends_each_endpoint_a_head() {
             ok("endpoints.revocation"),
         ]
     });
-    assert_eq!(printed(&output, 0), expected);
+    assert_eq!(checked(&output, 0), expected);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let first = r#"{"event":"check-finished","account":"work","check":"storage","ok":true,"code":null,"error":null,"tls":null}"#;
+    assert_eq!(stdout.lines().next(), Some(first), "{stdout}");
+    assert_eq!(stdout.lines().count(), 6, "{stdout}");
 
     let head = |target: &str| {
         format!("HEAD {target} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n")
@@ -227,7 +264,7 @@ fn a_failed_row_exits_3_and_keeps_the_others() {
     let toml = account(home.path(), "work", lines, "");
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
-    let json = printed(&output, 3);
+    let json = checked(&output, 3);
     assert_eq!(rows(&json), ["storage", "token", "endpoints.token"]);
 
     for name in ["storage", "token"] {
@@ -274,7 +311,7 @@ fn an_endpoint_the_grant_needs_is_coded_endpoint_missing() {
     let toml = account(home.path(), "work", &lines, TOKEN);
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
-    let json = printed(&output, 3);
+    let json = checked(&output, 3);
     let names = [
         "storage",
         "token",
@@ -304,7 +341,7 @@ fn an_answer_that_is_no_http_fails_the_endpoint() {
     let toml = account(home.path(), "work", &lines, TOKEN);
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
-    let json = printed(&output, 3);
+    let json = checked(&output, 3);
     let error = row(&json, "endpoints.token")["error"].as_str().unwrap();
     assert!(
         error.ends_with("The answer is no HTTP status line"),
@@ -328,7 +365,7 @@ fn the_token_row_tells_an_expired_token_apart() {
     for (lines, token, ok) in cases {
         let toml = account(home.path(), "work", lines, token);
         let output = run(home.path(), &toml, &["--json", "account", "check"]);
-        let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+        let json = checked(&output, 3);
         let row = row(&json, "token");
 
         assert_eq!(row["ok"], ok, "{lines} {token}: {json}");
@@ -356,7 +393,7 @@ fn a_failed_storage_fails_the_token_row_uncoded() {
                 storage.write.command = \"true\"\n";
 
     let output = run(home.path(), toml, &["--json", "account", "check"]);
-    let json = printed(&output, 3);
+    let json = checked(&output, 3);
     let storage = row(&json, "storage");
     let token = row(&json, "token");
 
@@ -415,7 +452,7 @@ fn an_https_endpoint_row_names_the_tls_configured() {
     let toml = account(home.path(), "work", lines, TOKEN);
 
     let output = run(home.path(), &toml, &["--json", "account", "check"]);
-    let json = printed(&output, 3);
+    let json = checked(&output, 3);
 
     for name in ["storage", "token", "endpoints.revocation"] {
         assert_eq!(row(&json, name)["tls"], Value::Null, "{name}: {json}");
@@ -473,7 +510,8 @@ fn a_failing_read_command_never_reports_its_stdout() {
 }
 
 /// `account show` fills the defaults of every property the account
-/// leaves out, and leaves out the optional ones it does not set.
+/// leaves out, and leaves out the optional ones it does not set, `tls`
+/// included when no key of it is set.
 #[test]
 fn account_show_fills_the_defaults() {
     let home = TempDir::new().unwrap();
@@ -499,7 +537,6 @@ fn account_show_fills_the_defaults() {
             "clientId": "c",
             "grant": "authorization-code",
             "endpoints": {},
-            "tls": { "rustls": {} },
             "alpn": [],
             "scopes": [],
             "resources": [],
@@ -517,20 +554,18 @@ fn account_show_fills_the_defaults() {
     let output = run(home.path(), &toml, &["-a", "work", "account", "show"]);
     let expected = format!(
         "\
-[accounts.work]
-
-default = false
-client-id = \"c\"
-grant = \"authorization-code\"
-alpn = []
-scopes = []
-resources = []
-pkce = \"s256\"
-extras = {{}}
-auto-refresh = true
-
-storage.read.command = [\"cat\", \"{token}\"]
-storage.write.command = \"tee {written}\"
+Account:                work
+default:                false
+client-id:              c
+grant:                  authorization-code
+alpn:
+scopes:
+resources:
+pkce:                   s256
+extras:
+auto-refresh:           true
+storage.read.command:   cat {token}
+storage.write.command:  tee {written}
 "
     );
     assert_eq!(printed_text(&output, 0), expected);
@@ -561,18 +596,30 @@ fn account_show_prints_the_merged_layers() {
     let endpoints = json!({ "token": "https://example.com/token" });
     assert_eq!(account["endpoints"], endpoints, "{json}");
     assert_eq!(account["default"], true, "{json}");
+
+    let output = run_layers(home.path(), &[&base, overlay], &["account", "show"]);
+    let text = printed_text(&output, 0);
+    let lines = [
+        "\ngrant:                  device\n",
+        "\nendpoints.token:        https://example.com/token\n",
+        "\nscopes:                 a\n                        b\n                        c\n",
+    ];
+
+    for line in lines {
+        assert!(text.contains(line), "{line:?}: {text}");
+    }
 }
 
 /// No raw secret is ever printed: the text writes it `<redacted>` and the
 /// JSON `{"raw": null, "redacted": true}`, while a secret command prints
-/// as written.
+/// as written, as a shell would read it in the text.
 #[test]
 fn account_show_never_prints_a_raw_secret() {
     let home = TempDir::new().unwrap();
     let secret = "s3cret-never-printed";
     let toml = account(home.path(), "work", "", TOKEN).replace("s3cret", secret)
         + "[accounts.home]\nclient-id = \"c\"\n\
-           client-secret.command = [\"pass\", \"show\", \"ortie/home\"]\n\
+           client-secret.command = [\"pass\", \"show\", \"ortie/my home\"]\n\
            storage.read.command = \"true\"\nstorage.write.command = \"true\"\n";
 
     let output = run(home.path(), &toml, &["--json", "account", "show"]);
@@ -584,26 +631,28 @@ fn account_show_never_prints_a_raw_secret() {
     let output = run(home.path(), &toml, &["account", "show"]);
     let text = printed_text(&output, 0);
     assert!(
-        text.contains("\nclient-secret.raw = \"<redacted>\"\n"),
+        text.contains("\nclient-secret.raw:      <redacted>\n"),
         "{text}"
     );
     assert!(!text.contains(secret), "{text}");
 
     let args = ["--json", "-a", "home", "account", "show"];
     let json = printed(&run(home.path(), &toml, &args), 0);
-    let command = json!({ "command": ["pass", "show", "ortie/home"] });
+    let command = json!({ "command": ["pass", "show", "ortie/my home"] });
     assert_eq!(json["account"]["clientSecret"], command, "{json}");
 
     let output = run(home.path(), &toml, &["-a", "home", "account", "show"]);
     let text = printed_text(&output, 0);
-    let line = "\nclient-secret.command = [\"pass\", \"show\", \"ortie/home\"]\n";
+    let line = "\nclient-secret.command:  pass show 'ortie/my home'\n";
     assert!(text.contains(line), "{text}");
 }
 
-/// The text of `account show`, its `<redacted>` swapped back for a value,
-/// is a configuration loading the account it shows.
+/// The text of `account show` is one `<key>: <value>` field per property,
+/// labelled by its configuration key and aligned, a list one value per
+/// line, every value defused of control and bidi characters; the JSON
+/// carries `tls` once a key of it is set.
 #[test]
-fn account_show_text_pastes_back_into_a_configuration() {
+fn account_show_text_labels_each_property_by_its_key() {
     let home = TempDir::new().unwrap();
     let lines = "grant = \"client-credentials-jwt\"\n\
                  client-key = \"/etc/ortie/key.pem\"\n\
@@ -619,7 +668,7 @@ fn account_show_text_pastes_back_into_a_configuration() {
                  tls.client.cert = \"/etc/ortie/me.pem\"\n\
                  tls.client.key = \"/etc/ortie/me.key.pem\"\n\
                  alpn = [\"http/1.1\"]\n\
-                 scopes = [\"openid\", \"quote\\\"d \\u202e bidi\"]\n\
+                 scopes = [\"openid\", \"quote\\\"d \\u202e\\u0007 bidi\"]\n\
                  resources = [\"https://example.com/jmap\"]\n\
                  pkce = false\n\
                  extras.access_type = \"offline\"\n\
@@ -629,15 +678,51 @@ fn account_show_text_pastes_back_into_a_configuration() {
         .replace("[accounts.my.work]", "[accounts.\"my.work\"]");
 
     let shown = printed(&run(home.path(), &toml, &["--json", "account", "show"]), 0);
-    let text = printed_text(&run(home.path(), &toml, &["account", "show"]), 0);
-    assert!(!text.contains('\u{202e}'), "{text}");
-
-    let pasted = text.replace("<redacted>", "s3cret");
-    let again = printed(
-        &run(home.path(), &pasted, &["--json", "account", "show"]),
-        0,
-    );
-    assert_eq!(again, shown);
     assert_eq!(shown["account"]["name"], "my.work", "{shown}");
     assert_eq!(shown["account"]["pkce"], false, "{shown}");
+    let tls = json!({
+        "provider": "rustls",
+        "rustls": { "crypto": "aws" },
+        "cert": "/etc/ortie/ca.pem",
+        "client": { "cert": "/etc/ortie/me.pem", "key": "/etc/ortie/me.key.pem" },
+    });
+    assert_eq!(shown["account"]["tls"], tls, "{shown}");
+
+    let text = printed_text(&run(home.path(), &toml, &["account", "show"]), 0);
+    let token = home.path().join("token.json");
+    let token = token.display();
+    let written = home.path().join("written.json");
+    let written = written.display();
+    let expected = format!(
+        "\
+Account:                         my.work
+default:                         true
+client-id:                       c
+client-secret.raw:               <redacted>
+client-key:                      /etc/ortie/key.pem
+client-cert:                     /etc/ortie/cert.pem
+grant:                           client-credentials-jwt
+endpoints.authorization:         https://example.com/authorize
+endpoints.device-authorization:  https://example.com/device
+endpoints.token:                 https://example.com/token?tenant=x
+endpoints.revocation:            https://example.com/revoke
+endpoints.redirection:           http://localhost/
+tls.provider:                    rustls
+tls.rustls.crypto:               aws
+tls.cert:                        /etc/ortie/ca.pem
+tls.client.cert:                 /etc/ortie/me.pem
+tls.client.key:                  /etc/ortie/me.key.pem
+alpn:                            http/1.1
+scopes:                          openid
+                                 quote\"d \u{fffd}\u{fffd} bidi
+resources:                       https://example.com/jmap
+pkce:                            false
+extras.access_type:              offline
+extras.\"odd key\":                tab\u{fffd}here
+auto-refresh:                    false
+storage.read.command:            cat {token}
+storage.write.command:           tee {written}
+"
+    );
+    assert_eq!(text, expected);
 }

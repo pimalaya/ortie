@@ -303,7 +303,8 @@ fn the_help_goes_to_stderr_in_a_json_session() {
 }
 
 /// A line is any command of the binary, the account ones included, run
-/// over the session's account: `account check` reads the storage again.
+/// over the session's account: `account check` reads the storage again,
+/// printing its events then its result.
 #[test]
 fn a_line_takes_the_whole_grammar() {
     let dir = TempDir::new().unwrap();
@@ -314,8 +315,22 @@ fn a_line_takes_the_whole_grammar() {
 
     assert!(out.status.success(), "{out:?}");
 
-    let lines = json_lines(&out.stdout);
+    let mut lines = json_lines(&out.stdout);
+    let n = lines
+        .iter()
+        .filter(|line| line.get("event").is_some())
+        .count();
+    let events: Vec<Value> = lines.drain(1..1 + n).collect();
     assert_eq!(lines.len(), 5, "{lines:?}");
+
+    let checks = lines[1]["checks"].as_array().unwrap();
+    assert_eq!(events.len(), checks.len(), "{events:?}");
+    for (event, check) in events.iter().zip(checks) {
+        assert_eq!(event["event"], "check-finished", "{events:?}");
+        assert_eq!(event["account"], "device", "{events:?}");
+        assert_eq!(event["check"], check["check"], "{events:?}");
+    }
+
     assert_eq!(lines[0]["accounts"][0]["name"], "device", "{lines:?}");
     assert_eq!(lines[1]["account"], "device", "{lines:?}");
     assert_eq!(lines[1]["checks"][0]["check"], "storage", "{lines:?}");
