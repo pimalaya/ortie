@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed two unit tests binding a loopback socket, which failed in a build sandbox without network, such as the Nix one on macOS: the redirection port rule is now tested without I/O.
+
 ## [3.0.0] - 2026-11-21
 
 Ortie 3 aligns on the other Pimalaya CLIs. The configuration wizard and the hooks are gone: provider accounts are pasted from the README, and the storage write command does what a hook did. Every `--json` output is camelCase, described by `json-schema`, and every failure carries a stable `code`. New commands revoke a token, catch a handed-off redirection, list, show and check accounts, and serve the token lifecycle to AI agents over MCP without ever handing out the token.

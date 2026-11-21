@@ -293,13 +293,7 @@ impl Account {
 /// port when an http `uri` names none (RFC 8252 section 7.3), and
 /// returns `uri` carrying the bound port.
 pub fn bind_loopback(uri: &Url) -> Result<(Url, TcpListener)> {
-    let port = match uri.port() {
-        Some(port) => port,
-        None if uri.scheme() == "http" => 0,
-        None => uri
-            .port_or_known_default()
-            .ok_or_else(|| anyhow!("Missing port in redirection {uri}"))?,
-    };
+    let port = loopback_port(uri)?;
 
     let listener = match uri.host() {
         Some(Host::Domain(domain)) => TcpListener::bind((domain, port)),
@@ -309,16 +303,36 @@ pub fn bind_loopback(uri: &Url) -> Result<(Url, TcpListener)> {
     }
     .with_context(|| format!("Bind the redirection listener {uri}"))?;
 
+    let bound = listener.local_addr()?.port();
+    let uri = with_bound_port(uri, port, bound)?;
+
+    Ok((uri, listener))
+}
+
+/// The port to bind for the loopback redirection `uri`: the one it
+/// names, 0 for an ephemeral one when an http `uri` names none (RFC 8252
+/// section 7.3), else its scheme's known default.
+fn loopback_port(uri: &Url) -> Result<u16> {
+    match uri.port() {
+        Some(port) => Ok(port),
+        None if uri.scheme() == "http" => Ok(0),
+        None => uri
+            .port_or_known_default()
+            .ok_or_else(|| anyhow!("Missing port in redirection {uri}")),
+    }
+}
+
+/// `uri` carrying the `bound` port when `port` asked for an ephemeral
+/// one, `uri` unchanged otherwise.
+fn with_bound_port(uri: &Url, port: u16, bound: u16) -> Result<Url> {
     let mut uri = uri.clone();
 
     if port == 0 {
-        let port = listener.local_addr()?.port();
-
-        uri.set_port(Some(port))
-            .map_err(|()| anyhow!("Cannot set port {port} on redirection {uri}"))?;
+        uri.set_port(Some(bound))
+            .map_err(|()| anyhow!("Cannot set port {bound} on redirection {uri}"))?;
     }
 
-    Ok((uri, listener))
+    Ok(uri)
 }
 
 /// Why the storage `command` failed: its trimmed stderr, or its program
@@ -347,28 +361,43 @@ fn now_secs() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use std::net::TcpListener;
+    use url::Url;
 
-    use crate::account::bind_loopback;
+    use crate::account::{loopback_port, with_bound_port};
+
+    fn url(uri: &str) -> Url {
+        uri.parse().unwrap()
+    }
 
     #[test]
-    fn a_port_less_http_loopback_binds_an_ephemeral_port() {
-        let (uri, listener) = bind_loopback(&"http://localhost".parse().unwrap()).unwrap();
-        let port = listener.local_addr().unwrap().port();
-
-        assert_ne!(port, 80);
-        assert_eq!(uri.as_str(), format!("http://localhost:{port}/"));
+    fn a_port_less_http_loopback_asks_for_an_ephemeral_port() {
+        assert_eq!(loopback_port(&url("http://localhost")).unwrap(), 0);
+        assert_eq!(loopback_port(&url("http://127.0.0.1/cb")).unwrap(), 0);
     }
 
     #[test]
     fn a_loopback_naming_its_port_keeps_it() {
-        let free = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = free.local_addr().unwrap().port();
-        drop(free);
+        assert_eq!(
+            loopback_port(&url("http://127.0.0.1:8080/cb")).unwrap(),
+            8080
+        );
+    }
 
-        let uri = format!("http://127.0.0.1:{port}/cb").parse().unwrap();
-        let (bound, _) = bind_loopback(&uri).unwrap();
+    #[test]
+    fn another_scheme_takes_its_known_default_port() {
+        assert_eq!(loopback_port(&url("https://localhost/cb")).unwrap(), 443);
+        assert!(loopback_port(&url("org.example.app:/cb")).is_err());
+    }
 
-        assert_eq!(bound, uri);
+    #[test]
+    fn an_ephemeral_port_is_written_into_the_redirection() {
+        let uri = with_bound_port(&url("http://localhost"), 0, 49152).unwrap();
+        assert_eq!(uri.as_str(), "http://localhost:49152/");
+    }
+
+    #[test]
+    fn a_named_port_leaves_the_redirection_as_it_is() {
+        let uri = url("http://127.0.0.1:8080/cb");
+        assert_eq!(with_bound_port(&uri, 8080, 8080).unwrap(), uri);
     }
 }
