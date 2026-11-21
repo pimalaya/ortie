@@ -361,7 +361,7 @@ fn a_handoff_on_stdin_is_resumed() {
     let output = ortie(&config, &["auth", "resume", "--handoff", flow, &redirected]);
     assert!(output.status.success(), "{output:?}");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let issued = "Access token of account code successfully issued (expires in 1h 1s)\n";
+    let issued = "Access token of account code successfully issued (expires in 1h)\n";
     assert_eq!(stdout, issued);
 
     let bodies = bodies.lock().unwrap();

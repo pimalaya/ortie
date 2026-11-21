@@ -66,9 +66,7 @@ impl fmt::Display for TokenIssuedOutput {
 
         match self.expires_in {
             None => writeln!(f, " (unknown expiry)"),
-            Some(exp) => {
-                writeln!(f, " (expires in {})", friendly(exp.saturating_add(1)))
-            }
+            Some(exp) => writeln!(f, " (expires in {})", friendly(exp)),
         }
     }
 }
