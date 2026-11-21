@@ -70,10 +70,54 @@ Ortie follows the [OAuth 2.1](https://datatracker.ietf.org/doc/draft-ietf-oauth-
 
 ## Installation
 
+Ortie ships to the signed APT and DNF repositories and the Homebrew tap of [pkg.pimalaya.org](https://pkg.pimalaya.org), each package holding the static binary of the latest release with its man pages and shell completions.
+
+<details>
+  <summary>Debian, Ubuntu</summary>
+
+  Add the repository once:
+
+  ```sh
+  sudo install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL https://pkg.pimalaya.org/pimalaya.asc | sudo tee /etc/apt/keyrings/pimalaya.asc >/dev/null
+  sudo tee /etc/apt/sources.list.d/pimalaya.sources >/dev/null <<EOF
+  Types: deb
+  URIs: https://pkg.pimalaya.org/apt
+  Suites: stable
+  Components: main
+  Signed-By: /etc/apt/keyrings/pimalaya.asc
+  EOF
+  sudo apt update
+  ```
+
+  Then install Ortie:
+
+  ```sh
+  sudo apt install ortie
+  ```
+</details>
+
+<details>
+  <summary>Fedora, RHEL, Rocky Linux, AlmaLinux</summary>
+
+  ```sh
+  sudo curl -fsSL -o /etc/yum.repos.d/pimalaya.repo https://pkg.pimalaya.org/pimalaya.repo
+  sudo dnf install ortie
+  ```
+</details>
+
+<details>
+  <summary>Homebrew (macOS, Linux)</summary>
+
+  ```sh
+  brew install pimalaya/tap/ortie
+  ```
+</details>
+
 <details>
   <summary>Pre-built binary</summary>
 
-  Ortie can be installed with the installer:
+  For other systems, Ortie can be installed with the installer:
 
   *As root:*
 
