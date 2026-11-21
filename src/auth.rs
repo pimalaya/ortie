@@ -9,11 +9,8 @@ pub mod listen;
 pub mod resume;
 
 use anyhow::Result;
-use clap::{
-    Subcommand,
-    error::{Error as ClapError, ErrorKind},
-};
-use pimalaya_cli::{error::usage_error, printer::Printer};
+use clap::Subcommand;
+use pimalaya_cli::printer::Printer;
 
 use crate::{
     account::Account,
@@ -22,6 +19,7 @@ use crate::{
         resume::AuthResumeCommand,
     },
     config::GrantConfig,
+    error,
 };
 
 /// Get a fresh access token by running the account's OAuth grant.
@@ -79,8 +77,7 @@ impl AuthCommand {
 fn read_handoff(account: &Account, source: &str) -> Result<AuthHandoff> {
     if account.grant != GrantConfig::AuthorizationCode {
         let message = "The --handoff flag is only valid for the authorization-code grant";
-        let err = ClapError::raw(ErrorKind::ArgumentConflict, message);
-        return Err(usage_error(&err));
+        return Err(error::usage(message));
     }
 
     AuthHandoff::read(source)

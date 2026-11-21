@@ -5,7 +5,7 @@
 
 use std::{borrow::Cow, ffi::OsStr};
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use clap::{Arg, Command, Parser, builder::TypedValueParser, error::ErrorKind};
 use pimalaya_cli::printer::Printer;
 use secrecy::SecretString;
@@ -87,7 +87,9 @@ impl AuthResumeCommand {
     /// Completes the account's configured grant into a stored token.
     pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         if account.grant.is_client_credentials() {
-            bail!("The client credentials grants complete in a single auth get, nothing to resume");
+            let message =
+                "The client credentials grants complete in a single auth get, nothing to resume";
+            return Err(error::usage(message));
         }
 
         if account.grant == GrantConfig::Device {
@@ -101,7 +103,7 @@ impl AuthResumeCommand {
         // NOTE: the URI is never echoed back, since a pasted one still
         // carries the authorization code.
         let redirected_uri = Url::parse(self.input.trim())
-            .map_err(|err| anyhow!("Invalid redirected URI: {err}"))?;
+            .map_err(|err| error::usage(format!("Invalid redirected URI: {err}")))?;
 
         // NOTE: an account names no issuer, so the `iss` of the response
         // (RFC 9207) has nothing to be compared with.
@@ -172,15 +174,14 @@ impl AuthResumeCommand {
     /// Takes `input` as the device code and polls the token endpoint.
     fn execute_device(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         if self.state.is_some() || self.pkce.is_some() || self.redirect_uri.is_some() {
-            bail!(
-                "The --state, --pkce and --redirect-uri flags are only valid \
-                 for the authorization-code grant"
-            );
+            let message = "The --state, --pkce and --redirect-uri flags are only valid \
+                           for the authorization-code grant";
+            return Err(error::usage(message));
         }
 
         let device_code = self.input.trim();
         if device_code.is_empty() {
-            bail!("Missing device code");
+            return Err(error::usage("Missing device code"));
         }
 
         let Some(token_endpoint) = account.token_endpoint.clone() else {

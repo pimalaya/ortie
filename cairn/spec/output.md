@@ -83,7 +83,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 
 | Code | Raised when |
 |---|---|
-| `usage-invalid` | the command line, a REPL line or an MCP tool call's arguments do not match the grammar, raised by pimalaya-cli; or Ortie refuses the line after parsing it (a `--handoff` on a grant without one, an `auth listen` with no redirection to bind), exiting 2 as well; nothing ran |
+| `usage-invalid` | the command line, a REPL line or an MCP tool call's arguments do not match the grammar, raised by pimalaya-cli; or Ortie refuses the line after parsing it (a command or a flag the account's grant has no use for, `--handoff` among them, an `auth listen` with no loopback redirection to bind, an empty device code, a redirected URI that does not parse), exiting 2 as well, and the MCP `auth_resume` refusing such a URI as a tool error; nothing ran |
 | `permission-denied` | the grant was refused to the user or the client: `access_denied` at the authorization redirect or in the device flow, `authorization_declined` (Microsoft Entra), a bare HTTP 403 |
 | `rate-limited` | a bare HTTP 429; Ortie retries nothing |
 | `grant-invalid` | `invalid_grant`: the authorization code, the refresh token or the device code was refused, has expired or was revoked; run `auth get` again |

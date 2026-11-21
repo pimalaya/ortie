@@ -220,13 +220,13 @@ fn listen_is_refused_without_a_loopback_redirect_or_on_a_device_account() {
         &config,
         &["auth", "listen", "--redirect-uri=org.example.app:/cb"],
     );
-    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("loopback"), "{stdout}");
 
     let (config, _) = write_code_config(dir.path(), addr, r#"grant = "device""#);
     let output = ortie(&config, &["auth", "listen"]);
-    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("device grant"), "{stdout}");
 }
@@ -242,7 +242,7 @@ fn an_https_loopback_redirect_is_not_listened_for() {
     let (config, _) = write_code_config(dir.path(), addr, redirection);
 
     let output = ortie(&config, &["auth", "listen"]);
-    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("not an http URI"), "{stdout}");
 
@@ -575,6 +575,70 @@ fn a_command_line_refused_after_parsing_exits_2_coded() {
     assert_eq!(failure["code"], "usage-invalid", "{failure}");
     let message = "The --handoff flag is only valid for the authorization-code grant";
     assert_eq!(failure["error"], message, "{failure}");
+}
+
+/// A command or a flag the account's grant has no use for, an empty
+/// device code and a redirected URI that does not parse are command lines
+/// too, refused after parsing: coded `usage-invalid`, exit 2, nothing
+/// sent.
+#[test]
+fn a_command_line_the_grant_refuses_exits_2_coded() {
+    let dir = TempDir::new().unwrap();
+    let (addr, bodies) = start_mock();
+
+    let cases: &[(&str, &[&str], &str)] = &[
+        (
+            r#"grant = "device""#,
+            &["auth", "listen"],
+            "The device grant has no redirection to listen for, run auth resume instead",
+        ),
+        (
+            r#"grant = "device""#,
+            &["auth", "resume", "--state=abc", "CODE"],
+            "The --state, --pkce and --redirect-uri flags are only valid for the \
+             authorization-code grant",
+        ),
+        (
+            r#"grant = "device""#,
+            &["auth", "resume", "--", " "],
+            "Missing device code",
+        ),
+        (
+            r#"grant = "client-credentials""#,
+            &["auth", "listen"],
+            "The client credentials grants complete in a single auth get, nothing to listen for",
+        ),
+        (
+            r#"grant = "client-credentials""#,
+            &["auth", "resume", "x"],
+            "The client credentials grants complete in a single auth get, nothing to resume",
+        ),
+        (
+            "",
+            &["auth", "listen", "--redirect-uri=https://127.0.0.1:1/cb"],
+            "Cannot listen on https://127.0.0.1:1/cb, not an http URI on a loopback host, \
+             run auth resume with the redirected URI instead",
+        ),
+        (
+            "",
+            &["auth", "resume", "not a uri"],
+            "Invalid redirected URI: relative URL without a base",
+        ),
+    ];
+
+    for (extra, args, message) in cases {
+        let (config, _) = write_code_config(dir.path(), addr, extra);
+        let args: Vec<_> = ["--json"].iter().chain(*args).copied().collect();
+        let output = ortie(&config, &args);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(output.status.code(), Some(2), "{args:?}: {stdout}");
+
+        let failure: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(failure["code"], "usage-invalid", "{args:?}: {failure}");
+        assert_eq!(failure["error"], *message, "{args:?}: {failure}");
+    }
+
+    assert!(bodies.lock().unwrap().is_empty());
 }
 
 /// The handoff gives the state and the verifier, so `--handoff` beside

@@ -6,16 +6,13 @@
 
 use std::io::{IsTerminal, stdout};
 
-use anyhow::{Result, bail};
-use clap::{
-    Parser,
-    error::{Error as ClapError, ErrorKind},
-};
+use anyhow::Result;
+use clap::Parser;
 use io_oauth::{
     client::await_redirect, rfc6749::state::Oauth20State, rfc7636::pkce::Oauth20PkceCodeVerifier,
 };
 use log::debug;
-use pimalaya_cli::{error::usage_error, printer::Printer};
+use pimalaya_cli::printer::Printer;
 use url::Url;
 
 use crate::{
@@ -25,6 +22,7 @@ use crate::{
         resume::{AuthResumeCommand, PkceCodeVerifierParser, state_parser, uri_parser},
     },
     config::GrantConfig,
+    error,
 };
 
 /// Wait for the redirection of a handed-off flow, then complete it.
@@ -73,13 +71,14 @@ impl AuthListenCommand {
     /// completes the flow into a stored token.
     pub fn execute(self, printer: &mut impl Printer, account: &mut Account) -> Result<()> {
         if account.grant == GrantConfig::Device {
-            bail!("The device grant has no redirection to listen for, run auth resume instead");
+            let message =
+                "The device grant has no redirection to listen for, run auth resume instead";
+            return Err(error::usage(message));
         }
 
         if account.grant.is_client_credentials() {
-            bail!(
-                "The client credentials grants complete in a single auth get, nothing to listen for"
-            );
+            let message = "The client credentials grants complete in a single auth get, nothing to listen for";
+            return Err(error::usage(message));
         }
 
         let Some(redirect_uri) = self
@@ -87,15 +86,14 @@ impl AuthListenCommand {
             .or_else(|| account.redirection_endpoint.clone())
         else {
             let message = "Missing --redirect-uri, or endpoints.redirection in the account config";
-            let err = ClapError::raw(ErrorKind::MissingRequiredArgument, message);
-            return Err(usage_error(&err));
+            return Err(error::usage(message));
         };
 
         if !is_loopback_redirect(&redirect_uri) {
-            bail!(
+            return Err(error::usage(format!(
                 "Cannot listen on {redirect_uri}, not an http URI on a loopback host, \
                  run auth resume with the redirected URI instead"
-            );
+            )));
         }
 
         debug!("wait for redirection on {redirect_uri}");

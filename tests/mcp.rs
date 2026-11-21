@@ -660,6 +660,7 @@ fn a_mis_pasted_uri_leaves_the_flow_pending() {
 
     let garbled = failure(&server.call("auth_resume", json!({ "uri": "not a uri" })));
     assert!(garbled.to_string().contains("still pending"), "{garbled}");
+    assert_eq!(garbled["code"], "usage-invalid", "{garbled}");
 
     let other = "org.example.app:/cb?code=c1&state=another-state";
     let other = failure(&server.call("auth_resume", json!({ "uri": other })));

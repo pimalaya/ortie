@@ -37,7 +37,7 @@ use io_oauth::{
     rfc7591::register::Oauth20ClientRegisterError,
     rfc8628::{auth::Oauth20DeviceAuthRequestError, token::Oauth20DeviceAccessTokenRequestError},
 };
-use pimalaya_cli::error::{CodedError, code_of};
+use pimalaya_cli::error::{CodedError, CommonCode, code_of};
 use pimalaya_config::toml::AccountError;
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -218,6 +218,12 @@ pub fn oauth_error(
 /// A failure carrying `code`, with its own message.
 pub fn coded(code: ErrorCode, message: impl Into<String>) -> Error {
     CodedError::new(code, message).into()
+}
+
+/// A command line Ortie refuses after clap parsed it, with `message`:
+/// coded `usage-invalid`, so it exits 2 as one clap refused.
+pub fn usage(message: impl Into<String>) -> Error {
+    CodedError::new(CommonCode::UsageInvalid, message).into()
 }
 
 /// The failure of an account configuring no `key` endpoint, named as

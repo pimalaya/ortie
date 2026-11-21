@@ -42,7 +42,7 @@ use io_oauth::{
 };
 use pimalaya_cli::{
     clap::commands::json_schema::output_schema,
-    error::{CodedError, CommonCode, ErrorReport, with_code},
+    error::{ErrorReport, with_code},
     mcp::{
         Input, ServerInfo, ToolCall, ToolResult, answer, error_object, send, spawn_stdin_reader,
         tool_output_schema,
@@ -596,8 +596,8 @@ impl McpServer {
         let redirected = match Url::parse(uri.trim()) {
             Ok(redirected) => redirected,
             Err(err) => {
-                let err = anyhow!("Invalid redirected URI: {err}, the flow is still pending");
-                return tool_result(Err(err));
+                let message = format!("Invalid redirected URI: {err}, the flow is still pending");
+                return tool_result(Err(error::usage(message)));
             }
         };
 
@@ -816,7 +816,7 @@ impl McpTool {
             Some(_) => format!("Argument `{name}` must be a string"),
         };
 
-        Err(CodedError::new(CommonCode::UsageInvalid, message).into())
+        Err(error::usage(message))
     }
 }
 
