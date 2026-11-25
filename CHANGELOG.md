@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Changed config.sample.toml to Himalaya's shape: one commented key per line, alternative values in brackets, `tls.client` as flat keys, the custom section folded into commented keys with notes; only `default`, `client-id` and the storage commands stay active.
+
 ### Fixed
 
 - Fixed two unit tests binding a loopback socket, which failed in a build sandbox without network, such as the Nix one on macOS: the redirection port rule is now tested without I/O.

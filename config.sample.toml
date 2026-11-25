@@ -1,41 +1,31 @@
 [accounts.example]
-default = true				# make this account the default one used
-auto-refresh = true			# let token show refresh an expired token
-#auto-refresh = false			# let token show print it expired
-#resources = []				# RFC 8707 resource indicators
-#extras.login_hint = "user@example.com"	# an extra authorization request parameter
-#alpn = ["http/1.1"]			# for a middlebox refusing a handshake without ALPN
+default = true				# the account commands run on without -a
 
-grant = "authorization-code"		# sign in through a browser redirection
-#grant = "device"			# sign in elsewhere with a user code
-#grant = "client-credentials"		# headless, authenticated by the secret
-#grant = "client-credentials-jwt"	# headless, authenticated by a signed JWT
+# Google, Microsoft and Fastmail: paste the README's ready-made account instead, https://github.com/pimalaya/ortie#configuration
+client-id = "example"			# the client registered with the provider
+#client-secret.command = "exit 127"	# prints the client secret, left out by a PKCE-only public client
+#client-key = "/path/to/key.pem"	# the PKCS#8 or PKCS#1 PEM key signing the JWT of client-credentials-jwt
+#client-cert = "/path/to/cert.pem"	# the certificate whose SHA-1 thumbprint that JWT carries as x5t
 
-pkce = "s256"				# PKCE with the SHA-256 challenge
-#pkce = "plain"				# PKCE with the plain challenge
+#grant = "authorization-code"		# sign in through a browser, elsewhere with a user code, or headless [device, client-credentials, client-credentials-jwt]
+#pkce = "s256"				# the challenge of authorization-code, false for none [plain]
+#scopes = ["example"]			# the scopes the token is asked for
+#resources = []				# RFC 8707 resource indicators the token is meant for
+#extras.login_hint = "user@example.com"	# an extra authorization request parameter, its name sent as written
+#auto-refresh = true			# token show refreshes an expired token, false printing it expired
 
-#tls.provider = "rustls"		# rustls; omitted, the first TLS the build carries
-#tls.provider = "native-tls"		# the platform's TLS
-#tls.rustls.crypto = "ring"		# rustls on ring; omitted, the first the build carries
-#tls.rustls.crypto = "aws"		# rustls on aws-lc-rs
-#tls.cert = "/path/to/cert.pem"		# a PEM certificate to trust beside the platform's
-#tls.client = { cert = "/path/to/client.pem", key = "/path/to/client.key.pem" }	# a PEM client certificate and its key, for mutual TLS
+#endpoints.authorization = "https://example.com/authorize"	# where authorization-code sends the browser
+#endpoints.device-authorization = "https://example.com/device"	# where device asks for a user code
+#endpoints.token = "https://example.com/token"			# where every grant and refresh gets its token
+#endpoints.revocation = "https://example.com/revoke"		# where token revoke revokes it
+#endpoints.redirection = "http://127.0.0.1"			# where the browser comes back, a random http://127.0.0.1:<port> otherwise
+
+#tls.provider = "rustls"			# the build's first otherwise [native-tls]
+#tls.rustls.crypto = "ring"			# the build's first otherwise [aws]
+#tls.cert = "/path/to/cert.pem"			# a PEM certificate to trust beside the platform's
+#tls.client.cert = "/path/to/client.pem"	# a PEM client certificate, for mutual TLS
+#tls.client.key = "/path/to/client.key.pem"	# its PEM private key, PKCS#8 under native-tls
+#alpn = ["http/1.1"]				# none otherwise, for a middlebox refusing a handshake without ALPN; rustls only
 
 storage.read.command = "exit 127"	# prints the stored token JSON
 storage.write.command = "exit 127"	# receives the token JSON on stdin
-
-# Google, Microsoft and Fastmail: paste the ready-made account of the
-# README instead, https://github.com/pimalaya/ortie#configuration
-
-# Custom
-#
-#client-id = "example"
-#client-secret.command = "exit 127"
-#client-key = "/path/to/key.pem"
-#client-cert = "/path/to/cert.pem"
-#endpoints.authorization = "https://example.com/authorize"
-#endpoints.device-authorization = "https://example.com/device"
-#endpoints.token = "https://example.com/token"
-#endpoints.revocation = "https://example.com/revoke"
-#endpoints.redirection = "http://127.0.0.1"
-#scopes = ["example"]
