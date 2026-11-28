@@ -359,6 +359,7 @@ fn a_code_flow_is_captured_exchanged_and_stored() {
     let get = server.call("auth_get", json!({}))["structuredContent"].clone();
     assert_eq!(get["kind"], "authorization", "{get}");
     assert_eq!(get["redirectCaptured"], true, "{get}");
+    assert_eq!(get["disclosure"], Value::Null, "{get}");
 
     let uri = Url::parse(get["authorizationUri"].as_str().unwrap()).unwrap();
     let redirect_uri = query(&uri, "redirect_uri");
@@ -386,6 +387,43 @@ fn a_code_flow_is_captured_exchanged_and_stored() {
     for secret in ["at-test", "rt-test", verifier.as_str()] {
         assert!(!printed.contains(secret), "{secret} printed: {printed}");
     }
+}
+
+/// On Pimalaya's Google application, `auth_get` needs the server's
+/// `--agree-data-use`, the pending flow kept without it, and its answer
+/// carries the disclosure with it.
+#[test]
+fn the_google_data_disclosure_is_agreed_by_the_server_flag() {
+    let dir = TempDir::new().unwrap();
+    let (addr, _) = start_mock(0);
+    let lines = format!(
+        "client-id = \"803561575535-41415ghqi04uibrl6t5umg3p27stdhqr.apps.googleusercontent.com\"\nendpoints.authorization = \"http://127.0.0.1:1/authorize\"\nendpoints.token = \"http://{addr}/token\"\nscopes = [\"https://mail.google.com/\"]"
+    );
+    let (config, _) = write_config(dir.path(), "google", &lines, "");
+
+    let mut server = Server::start(&config, &["--allow-write"]);
+    let refused = failure(&server.call("auth_get", json!({})));
+    assert_eq!(refused["code"], "agreement-missing", "{refused}");
+    let error = refused["error"].as_str().unwrap();
+    assert!(error.contains("your Gmail messages"), "{error}");
+    assert!(
+        error.ends_with("restarts the server with --agree-data-use"),
+        "{error}"
+    );
+    assert_eq!(server.settle()["status"], "none");
+    server.finish();
+
+    let mut server = Server::start(&config, &["--allow-write", "--agree-data-use"]);
+    let get = server.call("auth_get", json!({}))["structuredContent"].clone();
+    assert_eq!(get["kind"], "authorization", "{get}");
+    let disclosure = get["disclosure"].as_str().unwrap();
+    assert!(
+        disclosure.contains("https://pimalaya.org/privacy/"),
+        "{disclosure}"
+    );
+    let status = server.call("auth_status", json!({}))["structuredContent"].clone();
+    assert_eq!(status["status"], "pending", "{status}");
+    server.finish();
 }
 
 #[test]

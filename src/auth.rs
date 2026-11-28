@@ -3,6 +3,7 @@
 //! The `auth` subcommand tree, obtaining OAuth 2.0 access tokens by
 //! running the grant configured on the account.
 
+pub mod disclosure;
 pub mod get;
 pub mod handoff;
 pub mod listen;

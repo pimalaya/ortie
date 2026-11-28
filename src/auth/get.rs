@@ -59,7 +59,7 @@ use io_oauth::{
 
 use crate::{
     account::{Account, bind_loopback},
-    auth::resume::AuthResumeCommand,
+    auth::{disclosure::AuthDisclosure, resume::AuthResumeCommand},
     config::{GrantConfig, PkceConfig},
     error,
     token::issued::TokenIssuedOutput,
@@ -82,10 +82,27 @@ const SHUTDOWN_POLL: Duration = Duration::from_millis(100);
 /// pkceCodeVerifier, redirectUri} or the device request {deviceCode,
 /// userCode, verificationUri, verificationUriComplete, expiresIn,
 /// interval}; a token issued in-process prints the receipt {account,
-/// expiresIn, withRefreshToken}. Exits 0, 130 when a signal interrupts an
-/// interactive wait, or 1 on a failure.
+/// expiresIn, withRefreshToken}.
+///
+/// An account on Pimalaya's Google application first shows what Google
+/// data it reaches and asks to agree, which --agree-data-use gives
+/// beforehand. Exits 0, 130 when a signal interrupts an interactive wait,
+/// or 1 on a failure, coded agreement-missing when the disclosure was not
+/// agreed to.
 #[derive(Debug, Parser)]
-pub struct AuthGetCommand;
+pub struct AuthGetCommand {
+    /// Agree to the Google data disclosure of Pimalaya's application.
+    ///
+    /// Pimalaya's Google application gives the token access to your Gmail
+    /// messages, labels and sending addresses, your Google calendars and
+    /// events, your Google contacts and labels, and your Google task lists
+    /// and tasks, used only to carry out your own actions on this device,
+    /// with no Pimalaya server (https://pimalaya.org/privacy/). Without
+    /// this flag, a terminal is asked, and any other run fails coded
+    /// agreement-missing. Other accounts ignore it.
+    #[arg(long)]
+    pub agree_data_use: bool,
+}
 
 impl AuthGetCommand {
     /// Runs the account's grant and completes it into a stored access
@@ -107,6 +124,12 @@ impl AuthGetCommand {
         invocation: &str,
         interrupt_handoff: bool,
     ) -> Result<()> {
+        let disclosure = AuthDisclosure::of(&account.client_id, account.grant, &account.scopes);
+
+        if let Some(disclosure) = disclosure {
+            disclosure.obtain(self.agree_data_use, printer.is_json())?;
+        }
+
         if account.grant == GrantConfig::Device {
             return execute_device(printer, account, invocation);
         }

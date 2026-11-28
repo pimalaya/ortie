@@ -58,6 +58,7 @@ use url::{Position, Url};
 use crate::{
     account::{Account, DEFAULT_REDIRECTION, bind_loopback},
     auth::{
+        disclosure::AuthDisclosure,
         get::{
             AuthGetCommand, AuthorizationRequest, authorization_request, is_loopback_redirect,
             report_token_issued, request_device_authorization,
@@ -79,8 +80,9 @@ account. token_inspect shows the metadata of the stored token and \
 auth_status the flow auth_get started. The tools that change the stored \
 token (auth_get, auth_resume, token_refresh) are listed only when the server \
 runs with --allow-write, token_revoke only with --allow-revoke as well. Call \
-auth_get, then show the user the authorizationUri to open, or the userCode to \
-enter at the verificationUri, and call auth_status until the flow is issued \
+auth_get, then show the user the disclosure when it is not null, and the \
+authorizationUri to open, or the userCode to enter at the verificationUri, \
+and call auth_status until the flow is issued \
 or failed. When redirectCaptured is false, ask the user for the URL their \
 browser was redirected to and pass it to auth_resume. A failed call answers \
 isError with an ortie-error object, its `code` naming the failure when it has \
@@ -179,6 +181,14 @@ pub struct McpCommand {
     /// so it is never on by default.
     #[arg(long, requires = "allow_write")]
     pub allow_revoke: bool,
+    /// Agree to the Google data disclosure of Pimalaya's application.
+    ///
+    /// The agreement `auth get --agree-data-use` gives, written in the
+    /// agent's server configuration so no tool call can give it. Without
+    /// it, `auth_get` on an account using that application fails coded
+    /// agreement-missing, the disclosure in its message.
+    #[arg(long)]
+    pub agree_data_use: bool,
 }
 
 impl McpCommand {
@@ -192,6 +202,7 @@ impl McpCommand {
             account,
             allow_write: self.allow_write,
             allow_revoke: self.allow_revoke,
+            agree_data_use: self.agree_data_use,
             events,
             flow: McpFlow::None,
             flows: 0,
@@ -338,6 +349,7 @@ struct McpServer {
     account: Account,
     allow_write: bool,
     allow_revoke: bool,
+    agree_data_use: bool,
     events: Sender<McpEvent>,
     flow: McpFlow,
     flows: u64,
@@ -456,7 +468,21 @@ impl McpServer {
     }
 
     /// Starts the account's grant, replacing the pending flow.
+    ///
+    /// An account owing the Google data disclosure is refused without
+    /// `--agree-data-use`, the pending flow kept.
     fn auth_get(&mut self) -> Result<Value> {
+        let account = &self.account;
+        let disclosure = AuthDisclosure::of(&account.client_id, account.grant, &account.scopes);
+
+        let disclosure = match disclosure {
+            Some(disclosure) if !self.agree_data_use => {
+                let how = "to agree to it, the user restarts the server with --agree-data-use";
+                return Err(disclosure.refusal(how));
+            }
+            disclosure => disclosure.map(|disclosure| disclosure.sentence()),
+        };
+
         self.cancel_flow();
 
         if self.account.grant == GrantConfig::Device {
@@ -466,6 +492,7 @@ impl McpServer {
                 user_code: Some(device.user_code.clone()),
                 verification_uri: Some(device.verification_uri.clone()),
                 verification_uri_complete: device.verification_uri_complete.clone(),
+                disclosure,
                 ..McpAuthGetOutput::default()
             };
 
@@ -484,7 +511,10 @@ impl McpServer {
         }
 
         if self.account.grant.is_client_credentials() {
-            let receipt = self.capture(|p, a| AuthGetCommand.execute(p, a, "", false))?;
+            let cmd = AuthGetCommand {
+                agree_data_use: false,
+            };
+            let receipt = self.capture(|p, a| cmd.execute(p, a, "", false))?;
             self.flow = McpFlow::Issued(receipt.clone());
 
             let output = McpAuthGetOutput {
@@ -496,13 +526,13 @@ impl McpServer {
             return to_value(output);
         }
 
-        self.auth_get_code()
+        self.auth_get_code(disclosure)
     }
 
     /// Starts an authorization code flow, binding the loopback listener
     /// before the authorization URI goes out so no other process can
-    /// take its port.
-    fn auth_get_code(&mut self) -> Result<Value> {
+    /// take its port, its answer carrying `disclosure`.
+    fn auth_get_code(&mut self, disclosure: Option<String>) -> Result<Value> {
         let (redirect_uri, listener) = match self.account.redirection_endpoint.clone() {
             Some(uri) if is_loopback_redirect(&uri) => {
                 let (uri, listener) = bind_loopback(&uri)?;
@@ -555,6 +585,7 @@ impl McpServer {
             kind: McpAuthGetKind::Authorization,
             authorization_uri: Some(uri.to_string()),
             redirect_captured: Some(redirect_captured),
+            disclosure,
             ..McpAuthGetOutput::default()
         };
 
@@ -852,6 +883,9 @@ pub struct McpAuthGetOutput {
     /// account.
     #[schemars(with = "Option<TokenIssuedOutput>")]
     pub receipt: Option<Value>,
+    /// The Google data disclosure of Pimalaya's application, to show the
+    /// user with the URI or the code, `null` on any other account.
+    pub disclosure: Option<String>,
 }
 
 /// The kind of flow `auth_get` started.

@@ -6,7 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added the Google data disclosure of Pimalaya's Google application, which `auth get` shows before the sign-in on an account using its client id, asking `Agree and continue? [y/N]` in a terminal.
+
+  It lists the Google data the account's scopes reach and how it is used, with the privacy policy's link, before anything is sent.
+
+- Added `--agree-data-use` to `auth get`, agreeing to that disclosure beforehand.
+
+  Without it, a run that cannot ask (`--json`, piped, a REPL line) fails coded `agreement-missing`, its message holding the disclosure.
+
+- Added `--agree-data-use` to `ortie mcp`, without which `auth_get` on Pimalaya's Google application fails coded `agreement-missing`.
+
+  The `auth_get` answer gains `disclosure`, the text to show the user with the link or the code, `null` on any other account.
+
+- Added the `agreement-missing` failure code.
+
 ### Changed
+
+- Changed the README's Google account to Pimalaya's Google application, its client id and secret filled in, with the `mail.google.com`, `calendar`, `contacts` and `tasks` scopes.
+
+  The application is in production pending Google's verification: an unverified-app warning and a 100-user cap until then.
 
 - Changed config.sample.toml to Himalaya's shape: one commented key per line, alternative values in brackets, `tls.client` as flat keys, the custom section folded into commented keys with notes; only `default`, `client-id` and the storage commands stay active.
 

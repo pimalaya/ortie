@@ -187,13 +187,15 @@ Override the path with `-c <PATH>`, repeated to merge several files.
 
 ### Google
 
-Pimalaya's Google application is not released yet: fill `client-id` and `client-secret` with a Desktop client of your own, whose refresh tokens expire after 7 days while its consent screen stays in testing.
+The account runs on Pimalaya's Google application, a Desktop client whose secret is not confidential. It is in production and pending Google's verification: until it is verified, Google shows an unverified-app warning at consent and caps it at 100 users. It serves Gmail (API, IMAP and SMTP), Google Calendar (API and CalDAV), Google Contacts (People API) and Google Tasks; CardDAV needs a Desktop client of your own with the `https://www.googleapis.com/auth/carddav` scope.
+
+Before the sign-in, `auth get` shows which Google data the application accesses and how it is used, then asks you to agree; outside a terminal, or with `--json`, pass `--agree-data-use` once you have read it (see the [privacy policy](https://pimalaya.org/privacy/)).
 
 ```toml
 [accounts.google]
 
-client-id = ""
-client-secret.raw = ""
+client-id = "803561575535-41415ghqi04uibrl6t5umg3p27stdhqr.apps.googleusercontent.com"
+client-secret.raw = "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"
 extras.access_type = "offline"
 endpoints.authorization = "https://accounts.google.com/o/oauth2/v2/auth"
 endpoints.token = "https://oauth2.googleapis.com/token"
@@ -201,10 +203,8 @@ endpoints.revocation = "https://oauth2.googleapis.com/revoke"
 scopes = [
   "https://mail.google.com/",
   "https://www.googleapis.com/auth/calendar",
-  "https://www.googleapis.com/auth/calendar.events",
-  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   "https://www.googleapis.com/auth/contacts",
-  "https://www.googleapis.com/auth/carddav",
+  "https://www.googleapis.com/auth/tasks",
 ]
 
 storage.read.command = "pass show ortie/google"

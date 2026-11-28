@@ -35,3 +35,6 @@ Started without a flag, the server SHALL list only the tools that read, `token_i
 - GIVEN an account
 - WHEN `ortie mcp` starts without a flag and is asked `tools/list`, then to call `auth_get`
 - THEN it lists `token_inspect` and `auth_status` alone, and answers the call -32602
+
+### Requirement: The MCP agreement is the server's flag
+`ortie mcp` SHALL take `--agree-data-use`, the user's agreement, written in the agent's server configuration, to the disclosure `auth get` shows on Pimalaya's Google application (see the auth capability); no tool argument SHALL give it. Without it, `auth_get` on such an account SHALL answer the failure object coded `agreement-missing`, its message holding the disclosure in one sentence and naming the server flag, before the pending flow is replaced. The `auth_get` answer SHALL carry `disclosure`, that sentence, on such an account, and `null` on any other; the server's instructions SHALL tell the agent to show it to the user with the authorization URI or the user code.

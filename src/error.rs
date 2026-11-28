@@ -83,6 +83,9 @@ pub enum ErrorCode {
     /// loopback host, which `auth listen` cannot bind; `auth resume` with
     /// the redirected URI finishes the flow.
     RedirectionUnsupported,
+    /// The user did not agree to the Google data disclosure of Pimalaya's
+    /// application, at the prompt or by `--agree-data-use`.
+    AgreementMissing,
     /// No account has the name `-a` gave.
     AccountMissing,
     /// No account is marked default, and `-a` named none.
